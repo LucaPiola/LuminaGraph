@@ -437,6 +437,7 @@ function expressionDocMap() {
     setProperty: { kind: "property", signature: "setProperty(name, value)", description: t("expr.help.setProperty"), insertText: "setProperty()", cursorOffset: 12 },
     getModelProperty: { kind: "property", signature: "getModelProperty(name, fallback)", description: t("expr.help.getModelProperty"), insertText: "getModelProperty()", cursorOffset: 17 },
     setModelProperty: { kind: "property", signature: "setModelProperty(name, value)", description: t("expr.help.setModelProperty"), insertText: "setModelProperty()", cursorOffset: 17 },
+    range: { kind: "function", signature: "range(stop) | range(start, stop[, step])", description: t("expr.help.range"), insertText: "range()", cursorOffset: 6 },
     gaussian: { kind: "function", signature: "gaussian([params], x, mode)", description: t("expr.help.gaussian"), insertText: "gaussian()", cursorOffset: 9 },
     uniform: { kind: "function", signature: "uniform([params], x, mode)", description: t("expr.help.uniform"), insertText: "uniform()", cursorOffset: 8 },
     exponential: { kind: "function", signature: "exponential([params], x, mode)", description: t("expr.help.exponential"), insertText: "exponential()", cursorOffset: 12 },

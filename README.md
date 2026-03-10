@@ -2,7 +2,7 @@
 
 Un esperimento: di reimplementazione "moderna" di STGraph (da Java a JavaScript), realizzata interamente in "vibe coding" (con GPT-Codex-5.3).
 
-__Luca Mari, versione 2 marzo 2026__
+__Luca Mari, versione 10 marzo 2026__
 
 (si può provare <a href="https://lmari.github.io/STGraphX" target="_blank" rel="noopener noreferrer">qui</a>)
 
@@ -12,7 +12,7 @@ Al momento implementati (senza librerie esterne!):
 * gestione dei testi in italiano e inglese in file di configurazione e scelta in extraURL;
 * gestione dei nodi algebrici, di stato, parametri, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale) a valori scalari; controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo del numero di cifre decimali visualizzate;
 * varie funzioni definite; mapping da valori booleani a valori numerici e funzione `if`; funzione `integral`, per ora solo per algoritmo di integrazione di Eulero; alcune funzioni per distribuzioni di probabilità;
-* generazione di vettori con la sintassi `[inizio:fine]` e `[inizio:passo:fine]`; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari, per esempio `[1:5]*2`;
+* generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione di vettori con la sintassi di Python, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari, per esempio `[1:5]*2`;
 * gestione di proprietà custom per il modello e i singoli nodi e funzioni `getModelProperty`/`getProperty` e `setModelProperty`/`setProperty`;
 * gestione di nodi di output e di widget di output: grafici e tabelle; pannello di configurazione aggiornato dinamicamente;
 * gestione di nodi di input e di widget di input, anche per parametri: slider; pannello di configurazione aggiornato dinamicamente;

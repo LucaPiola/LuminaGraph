@@ -96,6 +96,18 @@
     sign: vectorizeFunction(Math.sign),
     rand: Math.random,
     random: Math.random,
+    range: (...args) => {
+      if (args.length === 1) {
+        return buildNumericRange(0, args[0], 1);
+      }
+      if (args.length === 2) {
+        return buildNumericRange(args[0], args[1], null);
+      }
+      if (args.length === 3) {
+        return buildNumericRange(args[0], args[1], args[2]);
+      }
+      throw new Error("range expects 1, 2, or 3 arguments");
+    },
     gaussian: typeof probability.gaussian === "function" ? probability.gaussian : unavailableDistribution("gaussian"),
     uniform: typeof probability.uniform === "function" ? probability.uniform : unavailableDistribution("uniform"),
     exponential: typeof probability.exponential === "function" ? probability.exponential : unavailableDistribution("exponential"),
@@ -448,6 +460,20 @@
     return scalarFn(value);
   }
 
+  function normalizeSliceIndex(value, size, fallback) {
+    if (value == null) {
+      return fallback;
+    }
+    let idx = Number(value);
+    if (!Number.isInteger(idx)) {
+      throw new Error("slice bounds must be integers");
+    }
+    if (idx < 0) {
+      idx += size;
+    }
+    return idx;
+  }
+
   function buildNumericRange(startValue, endValue, stepValue = null) {
     const start = Number(startValue);
     const end = Number(endValue);
@@ -465,14 +491,14 @@
     const epsilon = Math.abs(step) * 1e-9;
     const maxItems = 100000;
     if (step > 0) {
-      for (let value = start; value <= end + epsilon; value += step) {
+      for (let value = start; value < end - epsilon; value += step) {
         out.push(Number(value.toFixed(12)));
         if (out.length > maxItems) {
           throw new Error("range is too large");
         }
       }
     } else {
-      for (let value = start; value >= end - epsilon; value += step) {
+      for (let value = start; value > end + epsilon; value += step) {
         out.push(Number(value.toFixed(12)));
         if (out.length > maxItems) {
           throw new Error("range is too large");
@@ -596,6 +622,61 @@
       return token;
     };
 
+    function parseBracketAccessor(target) {
+      if (match("]")) {
+        throw new SyntaxError("Empty index");
+      }
+
+      let start = null;
+      let end = null;
+      let step = null;
+
+      if (match(":")) {
+        if (!match("]")) {
+          if (!match(":")) {
+            end = parseLogicalOr();
+            if (match(":")) {
+              if (!match("]")) {
+                step = parseLogicalOr();
+                expect("]");
+              }
+            } else {
+              expect("]");
+            }
+          } else if (!match("]")) {
+            step = parseLogicalOr();
+            expect("]");
+          }
+        }
+        return { type: "slice", target, start, end, step };
+      }
+
+      const first = parseLogicalOr();
+      if (!match(":")) {
+        expect("]");
+        return { type: "index", target, index: first };
+      }
+
+      start = first;
+      if (!match("]")) {
+        if (!match(":")) {
+          end = parseLogicalOr();
+          if (match(":")) {
+            if (!match("]")) {
+              step = parseLogicalOr();
+              expect("]");
+            }
+          } else {
+            expect("]");
+          }
+        } else if (!match("]")) {
+          step = parseLogicalOr();
+          expect("]");
+        }
+      }
+      return { type: "slice", target, start, end, step };
+    }
+
     function parsePrimary() {
       const token = peek();
       if (!token) {
@@ -610,18 +691,7 @@
         if (match("]")) {
           return { type: "array", elements: [] };
         }
-        const first = parseLogicalOr();
-        if (match(":")) {
-          const second = parseLogicalOr();
-          if (match(":")) {
-            const third = parseLogicalOr();
-            expect("]");
-            return { type: "range", start: first, step: second, end: third };
-          }
-          expect("]");
-          return { type: "range", start: first, step: null, end: second };
-        }
-        const elements = [first];
+        const elements = [parseLogicalOr()];
         while (match(",")) {
           elements.push(parseLogicalOr());
         }
@@ -663,13 +733,24 @@
       throw new SyntaxError(`Unexpected token ${token.value}`);
     }
 
+    function parsePostfix() {
+      let expr = parsePrimary();
+      while (true) {
+        if (match("[")) {
+          expr = parseBracketAccessor(expr);
+          continue;
+        }
+        return expr;
+      }
+    }
+
     function parseUnary() {
       const token = peek();
       if (token && token.type === "op" && ["+", "-", "!"].includes(token.value)) {
         next();
         return { type: "unary", op: token.value, argument: parseUnary() };
       }
-      return parsePrimary();
+      return parsePostfix();
     }
 
     function parsePower() {
@@ -753,17 +834,56 @@
         return node.value;
       case "array":
         return node.elements.map((item) => evaluateAstNode(item, scope));
-      case "range":
-        return buildNumericRange(
-          evaluateAstNode(node.start, scope),
-          evaluateAstNode(node.end, scope),
-          node.step == null ? null : evaluateAstNode(node.step, scope),
-        );
       case "identifier":
         if (!Object.prototype.hasOwnProperty.call(scope, node.name)) {
           throw new ReferenceError(`${node.name} is not defined`);
         }
         return scope[node.name];
+      case "index": {
+        const target = evaluateAstNode(node.target, scope);
+        if (!Array.isArray(target)) {
+          throw new Error("indexing requires an array or matrix");
+        }
+        let idx = Number(evaluateAstNode(node.index, scope));
+        if (!Number.isInteger(idx)) {
+          throw new Error("array index must be an integer");
+        }
+        if (idx < 0) {
+          idx += target.length;
+        }
+        if (idx < 0 || idx >= target.length) {
+          throw new Error("array index out of range");
+        }
+        return target[idx];
+      }
+      case "slice": {
+        const target = evaluateAstNode(node.target, scope);
+        if (!Array.isArray(target)) {
+          throw new Error("slicing requires an array or matrix");
+        }
+        const step = node.step == null ? 1 : Number(evaluateAstNode(node.step, scope));
+        if (!Number.isInteger(step) || step === 0) {
+          throw new Error("slice step must be a non-zero integer");
+        }
+        const size = target.length;
+        const start = step > 0
+          ? normalizeSliceIndex(node.start == null ? null : evaluateAstNode(node.start, scope), size, 0)
+          : normalizeSliceIndex(node.start == null ? null : evaluateAstNode(node.start, scope), size, size - 1);
+        const end = step > 0
+          ? normalizeSliceIndex(node.end == null ? null : evaluateAstNode(node.end, scope), size, size)
+          : normalizeSliceIndex(node.end == null ? null : evaluateAstNode(node.end, scope), size, -1);
+        const out = [];
+        if (step > 0) {
+          for (let idx = Math.max(0, start); idx < Math.min(size, end); idx += step) {
+            out.push(target[idx]);
+          }
+        } else {
+          for (let idx = Math.min(size - 1, start); idx > Math.max(-1, end); idx += step) {
+            out.push(target[idx]);
+          }
+        }
+        return out;
+      }
       case "call": {
         if (!Object.prototype.hasOwnProperty.call(scope, node.name)) {
           throw new ReferenceError(`${node.name} is not defined`);
