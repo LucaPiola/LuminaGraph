@@ -9,6 +9,8 @@
     "t0", "t1", "dt",
   ]);
   const probability = global.GraphProbability || {};
+  const EXPRESSION_CACHE_LIMIT = 1000;
+  const expressionCache = new Map();
 
   function unavailablePropertyGetter() {
     throw new Error("getProperty is only available in node expressions");
@@ -459,6 +461,48 @@
 
   function rewriteConditionalIfCalls(expression) {
     return String(expression ?? "").replace(/(^|[^A-Za-z0-9_$])if\s*\(/g, "$1__if(");
+  }
+
+  function rememberCompiledExpression(source, entry) {
+    if (expressionCache.has(source)) {
+      expressionCache.delete(source);
+    }
+    expressionCache.set(source, entry);
+    if (expressionCache.size > EXPRESSION_CACHE_LIMIT) {
+      const oldestKey = expressionCache.keys().next().value;
+      expressionCache.delete(oldestKey);
+    }
+    return entry;
+  }
+
+  function getCompiledExpression(source) {
+    const key = String(source ?? "");
+    const cached = expressionCache.get(key);
+    if (cached) {
+      expressionCache.delete(key);
+      expressionCache.set(key, cached);
+      return cached;
+    }
+
+    const compiled = {
+      hasThisAlias: containsThisAlias(key),
+      hasIntegral: containsIdentifierToken(key, "integral"),
+      ast: null,
+      syntaxErrorMessage: null,
+    };
+
+    try {
+      const normalizedSource = rewriteThisAlias(rewriteConditionalIfCalls(key));
+      compiled.ast = parseExpressionAst(normalizedSource);
+    } catch (err) {
+      if (err && err.name === "SyntaxError") {
+        compiled.syntaxErrorMessage = String(err.message || "");
+      } else {
+        throw err;
+      }
+    }
+
+    return rememberCompiledExpression(key, compiled);
   }
 
   function vectorizedBinaryOperation(left, right, scalarFn) {
@@ -1018,18 +1062,20 @@
     if (!source) {
       return { ok: true, kind: "empty", value: null };
     }
-    if (!options.allowThisAlias && containsThisAlias(source)) {
+    const compiled = getCompiledExpression(source);
+    if (!options.allowThisAlias && compiled.hasThisAlias) {
       return { ok: false, reason: "runtime", message: "'this' is only available in state transitions" };
     }
-    if (!options.allowIntegral && containsIdentifierToken(source, "integral")) {
+    if (!options.allowIntegral && compiled.hasIntegral) {
       return { ok: false, reason: "runtime", message: "'integral' is only available in state transitions" };
+    }
+    if (compiled.syntaxErrorMessage) {
+      return { ok: false, reason: "syntax", message: compiled.syntaxErrorMessage };
     }
 
     let raw;
     try {
-      const normalizedSource = rewriteThisAlias(rewriteConditionalIfCalls(source));
-      const ast = parseExpressionAst(normalizedSource);
-      raw = evaluateAstNode(ast, { ...MATH_SCOPE, ...context });
+      raw = evaluateAstNode(compiled.ast, { ...MATH_SCOPE, ...context });
     } catch (err) {
       if (err && err.name === "ReferenceError") {
         return { ok: false, reason: "reference", message: String(err.message || "") };
@@ -1053,10 +1099,11 @@
     if (!source) {
       return { ok: true };
     }
-    if (!options.allowThisAlias && containsThisAlias(source)) {
+    const compiled = getCompiledExpression(source);
+    if (!options.allowThisAlias && compiled.hasThisAlias) {
       return { ok: false, reason: "runtime", message: "'this' is only available in state transitions" };
     }
-    if (!options.allowIntegral && containsIdentifierToken(source, "integral")) {
+    if (!options.allowIntegral && compiled.hasIntegral) {
       return { ok: false, reason: "runtime", message: "'integral' is only available in state transitions" };
     }
     const scopeNames = [
@@ -1064,16 +1111,10 @@
       ...extraNames.map((name) => String(name ?? "").trim()).filter(Boolean),
     ];
     void scopeNames;
-    try {
-      const normalizedSource = rewriteThisAlias(rewriteConditionalIfCalls(source));
-      parseExpressionAst(normalizedSource);
-      return { ok: true };
-    } catch (err) {
-      if (err && err.name === "SyntaxError") {
-        return { ok: false, reason: "syntax", message: String(err.message || "") };
-      }
-      return { ok: true };
+    if (compiled.syntaxErrorMessage) {
+      return { ok: false, reason: "syntax", message: compiled.syntaxErrorMessage };
     }
+    return { ok: true };
   }
 
   function formatComputedValue(value) {
@@ -1218,7 +1259,7 @@
     return Boolean(node?.externalValueEnabled);
   }
 
-  function evaluateStatefulGraphStep(nodes, edges, globals = {}) {
+  function prepareStatefulExecutionPlan(nodes, edges) {
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
     const incoming = new Map();
     nodes.forEach((node) => incoming.set(node.id, []));
@@ -1227,12 +1268,22 @@
         incoming.get(edge.to).push(edge.from);
       }
     });
+    return {
+      nodeById,
+      incoming,
+      stateNodes: nodes.filter((node) => isStateNode(node)),
+    };
+  }
 
+  function evaluateStatefulGraphStep(nodes, edges, globals = {}, plan = null) {
+    const runtimePlan = plan || prepareStatefulExecutionPlan(nodes, edges);
+    const nodeById = runtimePlan.nodeById;
+    const incoming = runtimePlan.incoming;
     const fixedNodes = nodes.filter((node) => !isStateNode(node) && hasExternalValue(node));
     const parameterNodes = nodes.filter((node) => isParameterNode(node) && !hasExternalValue(node));
     const algebraicNodes = nodes.filter((node) => !isStateNode(node) && !isParameterNode(node) && !hasExternalValue(node));
     const fixedResults = new Map();
-    const stateNodes = nodes.filter((node) => isStateNode(node));
+    const stateNodes = runtimePlan.stateNodes;
     const parameterResults = new Map();
     const algebraicResults = new Map();
 
@@ -1415,6 +1466,7 @@
     formatComputedValue,
     replaceIdentifierInExpression,
     evaluateGraphExpressions,
+    prepareStatefulExecutionPlan,
     evaluateStatefulGraphStep,
   };
 })(window);

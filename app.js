@@ -3,6 +3,7 @@ const graphViewport = document.getElementById("graphViewport");
 const sidebar = document.getElementById("sidebar");
 const statusText = document.getElementById("statusText");
 const fileStatusText = document.getElementById("fileStatusText");
+const menuTimeText = document.getElementById("menuTimeText");
 const topMenuBar = document.getElementById("topMenuBar");
 const menuRoots = Array.from(document.querySelectorAll(".menu-root"));
 const menuTitles = Array.from(document.querySelectorAll(".menu-title"));
@@ -164,6 +165,7 @@ const ui = {
   tooltipTarget: null,
   tooltipShowTimer: null,
   tooltipHideTimer: null,
+  executionPlan: null,
 };
 
 const history = {
@@ -2034,6 +2036,7 @@ function applyGraphData(data) {
   ui.marquee = null;
   ui.widgetDrag = null;
   ui.widgetResize = null;
+  invalidateExecutionPlan();
   clearAllSelection();
 }
 
@@ -2042,6 +2045,10 @@ function pushUndoState(state) {
   if (history.undo.length > MAX_HISTORY) {
     history.undo.shift();
   }
+}
+
+function invalidateExecutionPlan() {
+  ui.executionPlan = null;
 }
 
 function beginTransaction() {
@@ -2062,6 +2069,7 @@ function commitTransaction() {
     pushUndoState(history.transactionStart);
     history.redo = [];
     dirtySinceLastSave = true;
+    invalidateExecutionPlan();
     updateFileStatusLabel(true);
   }
   history.transactionStart = null;
@@ -2465,6 +2473,10 @@ function getNodeByName(name) {
   return graph.nodes.find((n) => n.name === name);
 }
 
+function buildNodeNameMap() {
+  return new Map(graph.nodes.map((node) => [String(node.name ?? ""), node]));
+}
+
 function defaultChartSeriesColor(index = 0) {
   return CHART_SERIES_PALETTE[Math.abs(Number(index) || 0) % CHART_SERIES_PALETTE.length];
 }
@@ -2668,6 +2680,21 @@ function drawXYChart(canvas, seriesList = [], options = null) {
 
   const sx = (x) => pad + ((x - minX) / (maxX - minX)) * plotW;
   const sy = (y) => pad + plotH - ((y - minY) / (maxY - minY)) * plotH;
+  const chartPointBudget = Math.max(200, Math.floor(plotW * 2));
+  const sampleSeriesPoints = (points) => {
+    if (!Array.isArray(points) || points.length <= chartPointBudget) {
+      return points;
+    }
+    const stride = Math.max(1, Math.ceil(points.length / chartPointBudget));
+    const sampled = [];
+    for (let i = 0; i < points.length; i += stride) {
+      sampled.push(points[i]);
+    }
+    if (sampled[sampled.length - 1] !== points[points.length - 1]) {
+      sampled.push(points[points.length - 1]);
+    }
+    return sampled;
+  };
 
   if (cfg.showGrid) {
     const steps = 10;
@@ -2689,12 +2716,13 @@ function drawXYChart(canvas, seriesList = [], options = null) {
 
   activeSeries.forEach((series, s) => {
     const color = series.color || defaultChartSeriesColor(s);
+    const chartPoints = sampleSeriesPoints(series.points);
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     if (series.showLine) {
       ctx.beginPath();
       let moved = false;
-      series.points.forEach((p) => {
+      chartPoints.forEach((p) => {
         const x = sx(p.x);
         const y = sy(p.y);
         if (!moved) {
@@ -2710,7 +2738,7 @@ function drawXYChart(canvas, seriesList = [], options = null) {
     }
     if (series.showPoints) {
       ctx.fillStyle = color;
-      series.points.forEach((p) => {
+      chartPoints.forEach((p) => {
         const x = sx(p.x);
         const y = sy(p.y);
         ctx.beginPath();
@@ -2735,7 +2763,7 @@ function drawXYChart(canvas, seriesList = [], options = null) {
   });
 }
 
-function updateXYWidgetsFromComputedValues(timeValue = null) {
+function updateXYWidgetsFromComputedValues(timeValue = null, nodeMap = buildNodeNameMap()) {
   const currentTime = Number(
     Number.isFinite(Number(timeValue)) ? timeValue : graph.execution.currentTime,
   );
@@ -2746,29 +2774,29 @@ function updateXYWidgetsFromComputedValues(timeValue = null) {
     sanitizeWidgetXYPairs(widget);
     widget.xyPairs.forEach((pair) => {
       if (widget.outputOnly) {
-        const xAllowed = pair.xSource === "time" || getNodeByName(pair.xSource)?.output;
-        const yAllowed = pair.ySource === "time" || getNodeByName(pair.ySource)?.output;
+        const xAllowed = pair.xSource === "time" || nodeMap.get(pair.xSource)?.output;
+        const yAllowed = pair.ySource === "time" || nodeMap.get(pair.ySource)?.output;
         if (!xAllowed || !yAllowed) {
           return;
         }
       }
       const xVal = pair.xSource === "time"
         ? currentTime
-        : Number(getNodeByName(pair.xSource)?.computedValue);
+        : Number(nodeMap.get(pair.xSource)?.computedValue);
       const yVal = pair.ySource === "time"
         ? currentTime
-        : Number(getNodeByName(pair.ySource)?.computedValue);
+        : Number(nodeMap.get(pair.ySource)?.computedValue);
       if (!Number.isFinite(xVal) || !Number.isFinite(yVal)) {
         return;
       }
       if (pair.xSource !== "time") {
-        const xNode = getNodeByName(pair.xSource);
+        const xNode = nodeMap.get(pair.xSource);
         if (!xNode || xNode.computedError) {
           return;
         }
       }
       if (pair.ySource !== "time") {
-        const yNode = getNodeByName(pair.ySource);
+        const yNode = nodeMap.get(pair.ySource);
         if (!yNode || yNode.computedError) {
           return;
         }
@@ -2778,7 +2806,7 @@ function updateXYWidgetsFromComputedValues(timeValue = null) {
   });
 }
 
-function updateTableWidgetsFromComputedValues(timeValue = null) {
+function updateTableWidgetsFromComputedValues(timeValue = null, nodeMap = buildNodeNameMap()) {
   const currentTime = Number(
     Number.isFinite(Number(timeValue)) ? timeValue : graph.execution.currentTime,
   );
@@ -2792,7 +2820,7 @@ function updateTableWidgetsFromComputedValues(timeValue = null) {
       return;
     }
     const displayedCols = widget.outputOnly
-      ? widget.columns.filter((name) => name === "time" || getNodeByName(name)?.output)
+      ? widget.columns.filter((name) => name === "time" || nodeMap.get(name)?.output)
       : widget.columns.slice();
     const values = {};
     displayedCols.forEach((colName) => {
@@ -2800,7 +2828,7 @@ function updateTableWidgetsFromComputedValues(timeValue = null) {
         values.time = { value: currentTime };
         return;
       }
-      const node = getNodeByName(colName);
+      const node = nodeMap.get(colName);
       if (!node) {
         values[colName] = { value: null };
         return;
@@ -2848,6 +2876,211 @@ function widgetDefaultTitle(widget) {
 function widgetDisplayTitle(widget) {
   const custom = String(widget.customTitle ?? "").trim();
   return custom || widgetDefaultTitle(widget);
+}
+
+function widgetDisplayedTableColumns(widget, nodeMap = buildNodeNameMap()) {
+  return widget.outputOnly
+    ? widget.columns.filter((name) => name === "time" || nodeMap.get(name)?.output)
+    : widget.columns.slice();
+}
+
+function buildTableRowElement(displayedCols, entry) {
+  const row = document.createElement("tr");
+  displayedCols.forEach((colName) => {
+    const td = document.createElement("td");
+    const cell = entry?.values?.[colName];
+    if (cell?.error) {
+      td.textContent = t("text.valueError", { reason: evalReasonText(cell.error) });
+    } else if (Object.prototype.hasOwnProperty.call(entry?.values || {}, colName)) {
+      td.textContent = formatComputedValue(cell?.value ?? null);
+    } else {
+      td.textContent = "-";
+    }
+    row.appendChild(td);
+  });
+  return row;
+}
+
+function renderTableWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
+  body.innerHTML = "";
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  const displayedCols = widgetDisplayedTableColumns(widget, nodeMap);
+  displayedCols.forEach((colName) => {
+    const th = document.createElement("th");
+    th.textContent = colName || t("widget.columnEmpty");
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  table.dataset.columns = JSON.stringify(displayedCols);
+  if (widget.showHistory) {
+    sanitizeTableWidgetOptions(widget);
+    widget.rows.forEach((entry) => {
+      tbody.appendChild(buildTableRowElement(displayedCols, entry));
+    });
+    table.dataset.rowCount = String(widget.rows.length);
+  } else {
+    const row = document.createElement("tr");
+    displayedCols.forEach((colName) => {
+      const td = document.createElement("td");
+      if (colName === "time") {
+        const tVal = graph.execution.currentTime == null ? graph.execution.t0 : graph.execution.currentTime;
+        td.textContent = formatNumberValue(Number(tVal));
+      } else {
+        const node = nodeMap.get(colName);
+        if (!node) {
+          td.textContent = "-";
+        } else if (node.computedError) {
+          td.textContent = t("text.valueError", { reason: evalReasonText(node.computedError) });
+        } else {
+          td.textContent = formatComputedValue(node.computedValue);
+        }
+      }
+      row.appendChild(td);
+    });
+    tbody.appendChild(row);
+    table.dataset.rowCount = "1";
+  }
+  table.appendChild(tbody);
+  body.appendChild(table);
+  if (widget.showHistory) {
+    window.requestAnimationFrame(() => {
+      body.scrollTop = body.scrollHeight;
+    });
+  }
+}
+
+function refreshTableWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap()) {
+  const body = root.querySelector(".value-widget-body");
+  const table = body?.querySelector("table");
+  const displayedCols = widgetDisplayedTableColumns(widget, nodeMap);
+  const columnsKey = JSON.stringify(displayedCols);
+  if (!body || !table || table.dataset.columns !== columnsKey) {
+    renderTableWidgetBody(body || root.querySelector(".value-widget-body"), widget, nodeMap);
+    return;
+  }
+  const tbody = table.querySelector("tbody");
+  if (!tbody) {
+    renderTableWidgetBody(body, widget, nodeMap);
+    return;
+  }
+  if (widget.showHistory) {
+    sanitizeTableWidgetOptions(widget);
+    const renderedRows = Number(table.dataset.rowCount || 0);
+    if (renderedRows > widget.rows.length) {
+      renderTableWidgetBody(body, widget, nodeMap);
+      return;
+    }
+    for (let i = renderedRows; i < widget.rows.length; i += 1) {
+      tbody.appendChild(buildTableRowElement(displayedCols, widget.rows[i]));
+    }
+    table.dataset.rowCount = String(widget.rows.length);
+    window.requestAnimationFrame(() => {
+      body.scrollTop = body.scrollHeight;
+    });
+    return;
+  }
+  renderTableWidgetBody(body, widget, nodeMap);
+}
+
+function refreshChartWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap()) {
+  const canvas = root.querySelector("canvas.xy-chart-canvas");
+  if (!canvas) {
+    renderWidgets();
+    return;
+  }
+  const displayedPairs = widget.outputOnly
+    ? widget.xyPairs.filter((pair) => {
+      const xAllowed = pair.xSource === "time" || nodeMap.get(pair.xSource)?.output;
+      const yAllowed = pair.ySource === "time" || nodeMap.get(pair.ySource)?.output;
+      return xAllowed && yAllowed;
+    })
+    : widget.xyPairs;
+  const seriesList = displayedPairs.map((pair) => ({
+    label: `${pair.xSource} -> ${pair.ySource}`,
+    color: pair.color,
+    showLine: pair.showLine,
+    showPoints: pair.showPoints,
+    points: pair.points || [],
+  }));
+  drawXYChart(canvas, seriesList, widget);
+}
+
+function refreshSliderWidgetRuntimeBody(root, widget) {
+  const rangeInput = root.querySelector("input[type='range']");
+  const valueInput = root.querySelector(".slider-widget-number");
+  const sourceLine = root.querySelector(".slider-widget-source");
+  const minLabel = root.querySelector(".slider-bound-min");
+  const maxLabel = root.querySelector(".slider-bound-max");
+  const sourceNode = getNodeByName(widget.source);
+  const lockedForRun = sourceNode?.shape === "diamond" && graph.execution.currentTime != null;
+  if (sourceLine) {
+    sourceLine.textContent = widget.source || t("text.unnamed");
+  }
+  if (rangeInput) {
+    rangeInput.min = String(widget.min);
+    rangeInput.max = String(widget.max);
+    rangeInput.step = String(widget.step);
+    rangeInput.value = String(widget.value);
+    rangeInput.disabled = lockedForRun;
+  }
+  if (valueInput) {
+    valueInput.min = String(widget.min);
+    valueInput.max = String(widget.max);
+    valueInput.step = String(widget.step);
+    valueInput.value = String(widget.value);
+    valueInput.disabled = lockedForRun;
+  }
+  if (minLabel) {
+    minLabel.textContent = formatNumberValue(Number(widget.min));
+  }
+  if (maxLabel) {
+    maxLabel.textContent = formatNumberValue(Number(widget.max));
+  }
+}
+
+function refreshRuntimeWidgetContents() {
+  const roots = [...widgetLayer.querySelectorAll(".value-widget[data-widget-id]")];
+  if (roots.length !== graph.widgets.length) {
+    renderWidgets();
+    return;
+  }
+  const rootMap = new Map(roots.map((root) => [Number(root.dataset.widgetId), root]));
+  const nodeMap = buildNodeNameMap();
+  for (const widget of graph.widgets) {
+    const root = rootMap.get(widget.id);
+    if (!root) {
+      renderWidgets();
+      return;
+    }
+    if (widget.type === "table") {
+      refreshTableWidgetRuntimeBody(root, widget, nodeMap);
+    } else if (widget.type === "xychart") {
+      refreshChartWidgetRuntimeBody(root, widget, nodeMap);
+    } else if (widget.type === "slider") {
+      refreshSliderWidgetRuntimeBody(root, widget);
+    } else {
+      renderWidgets();
+      return;
+    }
+  }
+}
+
+function refreshRuntimeView() {
+  clearStrictInvalidNodeValues();
+  updateModelRunButtons();
+  updateMenuTimeLabel();
+  if (ui.sliderInteraction == null) {
+    applyWidgetDrivenNodeValues();
+    refreshRuntimeWidgetContents();
+  } else {
+    applyWidgetDrivenNodeValues();
+  }
+  refreshSidebar();
 }
 
 function renderWidgets() {
@@ -2963,67 +3196,7 @@ function renderWidgets() {
     const body = document.createElement("div");
     body.className = "value-widget-body";
     if (widget.type === "table") {
-      const table = document.createElement("table");
-      const thead = document.createElement("thead");
-      const headRow = document.createElement("tr");
-      const displayedCols = widget.outputOnly
-        ? widget.columns.filter((name) => name === "time" || getNodeByName(name)?.output)
-        : widget.columns;
-      displayedCols.forEach((colName) => {
-        const th = document.createElement("th");
-        th.textContent = colName || t("widget.columnEmpty");
-        headRow.appendChild(th);
-      });
-      thead.appendChild(headRow);
-      table.appendChild(thead);
-
-      const tbody = document.createElement("tbody");
-      if (widget.showHistory) {
-        sanitizeTableWidgetOptions(widget);
-        widget.rows.forEach((entry) => {
-          const row = document.createElement("tr");
-          displayedCols.forEach((colName) => {
-            const td = document.createElement("td");
-            const cell = entry?.values?.[colName];
-            if (cell?.error) {
-              td.textContent = t("text.valueError", { reason: evalReasonText(cell.error) });
-            } else if (Object.prototype.hasOwnProperty.call(entry?.values || {}, colName)) {
-              td.textContent = formatComputedValue(cell?.value ?? null);
-            } else {
-              td.textContent = "-";
-            }
-            row.appendChild(td);
-          });
-          tbody.appendChild(row);
-        });
-      } else {
-        const row = document.createElement("tr");
-        displayedCols.forEach((colName) => {
-          const td = document.createElement("td");
-          if (colName === "time") {
-            const tVal = graph.execution.currentTime == null ? graph.execution.t0 : graph.execution.currentTime;
-            td.textContent = formatNumberValue(Number(tVal));
-          } else {
-            const node = getNodeByName(colName);
-            if (!node) {
-              td.textContent = "-";
-            } else if (node.computedError) {
-              td.textContent = t("text.valueError", { reason: evalReasonText(node.computedError) });
-            } else {
-              td.textContent = formatComputedValue(node.computedValue);
-            }
-          }
-          row.appendChild(td);
-        });
-        tbody.appendChild(row);
-      }
-      table.appendChild(tbody);
-      body.appendChild(table);
-      if (widget.showHistory) {
-        window.requestAnimationFrame(() => {
-          body.scrollTop = body.scrollHeight;
-        });
-      }
+      renderTableWidgetBody(body, widget);
     } else if (widget.type === "xychart") {
       const canvasWrap = document.createElement("div");
       canvasWrap.className = "xy-chart-canvas-wrap";
@@ -4243,6 +4416,7 @@ function refreshSidebar() {
 function render() {
   clearStrictInvalidNodeValues();
   updateModelRunButtons();
+  updateMenuTimeLabel();
   updateDeleteActionLabel();
   edgesLayer.innerHTML = "";
   nodesLayer.innerHTML = "";
@@ -4572,7 +4746,6 @@ function render() {
   }
   refreshSidebar();
   updateHistoryButtons();
-  scheduleFileStatusRefresh();
 }
 
 function isValidPoint(p) {
@@ -4958,8 +5131,17 @@ async function createNewGraph() {
   graph.nodes = [];
   graph.edges = [];
   graph.widgets = [];
+  invalidateExecutionPlan();
   stopTimedExecution(false);
-  graph.execution = { t0: 0, dt: 1, t1: 10, delayMs: 1000, decimals: 3, strictDefinitions: false, currentTime: null };
+  graph.execution = {
+    t0: 0,
+    dt: 1,
+    t1: 10,
+    delayMs: 1000,
+    decimals: 3,
+    strictDefinitions: false,
+    currentTime: null,
+  };
   nodeCounter = 1;
   edgeCounter = 1;
   widgetCounter = 1;
@@ -5081,6 +5263,26 @@ function buildExecutionGlobals(timeValue) {
   };
 }
 
+function currentDisplayTimeValue() {
+  return graph.execution.currentTime == null
+    ? Number(graph.execution.t0)
+    : Number(graph.execution.currentTime);
+}
+
+function updateMenuTimeLabel() {
+  if (!menuTimeText) {
+    return;
+  }
+  menuTimeText.textContent = t("menu.time", { time: formatNumberValue(currentDisplayTimeValue()) });
+}
+
+function ensureExecutionPlan() {
+  if (!ui.executionPlan) {
+    ui.executionPlan = semantics.prepareStatefulExecutionPlan(graph.nodes, graph.edges);
+  }
+  return ui.executionPlan;
+}
+
 function initializeStateNodes(timeValue) {
   graph.nodes.forEach((node) => {
     if (!isStateNode(node)) {
@@ -5131,7 +5333,9 @@ function evaluateAtTime(timeValue) {
     graph.nodes,
     graph.edges,
     buildExecutionGlobals(timeValue),
+    ensureExecutionPlan(),
   );
+  const nodeMap = buildNodeNameMap();
   let successCount = 0;
   let errorCount = 0;
   let firstErrorNode = null;
@@ -5177,8 +5381,8 @@ function evaluateAtTime(timeValue) {
     }
   });
 
-  updateTableWidgetsFromComputedValues(timeValue);
-  updateXYWidgetsFromComputedValues(timeValue);
+  updateTableWidgetsFromComputedValues(timeValue, nodeMap);
+  updateXYWidgetsFromComputedValues(timeValue, nodeMap);
 
   return { successCount, errorCount, firstErrorNode, firstErrorReason };
 }
@@ -5225,19 +5429,18 @@ function executeOneStep(restartIfEnded = true) {
   const nextTime = graph.execution.currentTime == null ? cfg.t0 : graph.execution.currentTime + cfg.dt;
 
   let stepResult = null;
-  runAction(() => {
-    if (restarted) {
-      clearAllXYChartPoints();
-      clearAllTableWidgetRows();
-    }
-    if (graph.execution.currentTime == null) {
-      initializeStateNodes(nextTime);
-    } else {
-      promotePendingStateNodes();
-    }
-    stepResult = evaluateAtTime(nextTime);
-    graph.execution.currentTime = nextTime;
-  });
+  if (restarted) {
+    clearAllXYChartPoints();
+    clearAllTableWidgetRows();
+  }
+  if (graph.execution.currentTime == null) {
+    initializeStateNodes(nextTime);
+  } else {
+    promotePendingStateNodes();
+  }
+  stepResult = evaluateAtTime(nextTime);
+  graph.execution.currentTime = nextTime;
+  refreshRuntimeView();
 
   if (restarted && stepResult.errorCount === 0) {
     setStatusKey("status.executionRestarted", {
@@ -5275,11 +5478,9 @@ function executeNodeExpressions() {
   }
 
   if (!continuing) {
-    runAction(() => {
-      graph.execution.currentTime = null;
-      clearAllXYChartPoints();
-      clearAllTableWidgetRows();
-    });
+    graph.execution.currentTime = null;
+    clearAllXYChartPoints();
+    clearAllTableWidgetRows();
   }
 
   const maxSteps = 100000;
@@ -5311,25 +5512,24 @@ function executeNodeExpressions() {
   let firstErrorTime = null;
   let lastTime = timeValues[timeValues.length - 1];
 
-  runAction(() => {
-    timeValues.forEach((timeValue, idx) => {
-      if (!continuing && idx === 0) {
-        initializeStateNodes(timeValue);
-      } else {
-        promotePendingStateNodes();
-      }
-      const stepResult = evaluateAtTime(timeValue);
-      successCount = stepResult.successCount;
-      errorCount = stepResult.errorCount;
-      totalErrorCount += stepResult.errorCount;
-      if (!firstErrorNode && stepResult.firstErrorNode) {
-        firstErrorNode = stepResult.firstErrorNode;
-        firstErrorReason = stepResult.firstErrorReason;
-        firstErrorTime = timeValue;
-      }
-    });
-    graph.execution.currentTime = lastTime;
+  timeValues.forEach((timeValue, idx) => {
+    if (!continuing && idx === 0) {
+      initializeStateNodes(timeValue);
+    } else {
+      promotePendingStateNodes();
+    }
+    const stepResult = evaluateAtTime(timeValue);
+    successCount = stepResult.successCount;
+    errorCount = stepResult.errorCount;
+    totalErrorCount += stepResult.errorCount;
+    if (!firstErrorNode && stepResult.firstErrorNode) {
+      firstErrorNode = stepResult.firstErrorNode;
+      firstErrorReason = stepResult.firstErrorReason;
+      firstErrorTime = timeValue;
+    }
   });
+  graph.execution.currentTime = lastTime;
+  refreshRuntimeView();
 
   if (firstErrorNode) {
     setStatusKey("error.evalFailedDetailedTime", {
@@ -5361,12 +5561,11 @@ function resetExecution() {
   if (!cfg) {
     return;
   }
-  runAction(() => {
-    graph.execution.currentTime = null;
-    clearAllXYChartPoints();
-    clearAllTableWidgetRows();
-    initializeStateNodes(cfg.t0);
-  });
+  graph.execution.currentTime = null;
+  clearAllXYChartPoints();
+  clearAllTableWidgetRows();
+  initializeStateNodes(cfg.t0);
+  refreshRuntimeView();
   setStatusKey("status.executionReset", { time: formatNumberValue(Number(cfg.t0)) });
 }
 
@@ -5392,13 +5591,12 @@ function toggleTimedExecution() {
   const ended = isExecutionEnded(cfg);
   const isFreshStart = graph.execution.currentTime == null || ended;
   if (isFreshStart) {
-    runAction(() => {
-      clearAllXYChartPoints();
-      clearAllTableWidgetRows();
-      if (ended) {
-        graph.execution.currentTime = null;
-      }
-    });
+    clearAllXYChartPoints();
+    clearAllTableWidgetRows();
+    if (ended) {
+      graph.execution.currentTime = null;
+    }
+    refreshRuntimeView();
   }
 
   ui.timedRunHandle = window.setInterval(() => {

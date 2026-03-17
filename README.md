@@ -42,9 +42,10 @@ Al momento non implementati:
 Qualche riflessione sull'esperienza
 
 * Comprende le richieste molto bene e la qualità del codice prodotto è quasi sempre eccellente
-* Controlla sempre il lavoro svolto e a volte lo corregge da sé
-* Nel caso di estensioni a parti già realizzate, si fa carico da sé di mantenere la coerenza
+* Controlla sempre il lavoro svolto e quasi sempre lo corregge da sé se trova degli errori
+* Nel caso di estensioni a parti già realizzate, si fa carico automaticamente di mantenere la coerenza
 * Le spiegazioni del lavoro compiuto sono chiare e corrette
 * A volte prende iniziative implementando estensioni a quanto richiesto
+* È in grado di fare refactoring e ottimizzazione
 * Si possono chiedere pareri o comunque indicazioni su come si potrebbero risolvere problemi
 * ...

@@ -53,6 +53,13 @@ body {
   text-overflow: ellipsis;
 }
 
+.menu-time {
+  margin-left: 12px;
+  color: #3d556b;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
 .menu-root {
   position: relative;
 }
