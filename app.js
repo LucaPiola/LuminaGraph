@@ -25,12 +25,14 @@ const runEvalBtn = document.getElementById("runEvalBtn");
 const runStepBtn = document.getElementById("runStepBtn");
 const runTimedToggleBtn = document.getElementById("runTimedToggleBtn");
 const runResetBtn = document.getElementById("runResetBtn");
+const runStrictDefinitionsInput = document.getElementById("runStrictDefinitionsInput");
 const cutBtn = document.getElementById("cutBtn");
 const copyBtn = document.getElementById("copyBtn");
 const pasteBtn = document.getElementById("pasteBtn");
 const undoBtn = document.getElementById("undoBtn");
 const redoBtn = document.getElementById("redoBtn");
 const deleteBtn = document.getElementById("deleteBtn");
+const deleteBtnLabel = deleteBtn?.querySelector("[data-i18n='menu.edit.delete']") || deleteBtn?.querySelector("span");
 const newGraphBtn = document.getElementById("newGraphBtn");
 const saveJsonBtn = document.getElementById("saveJsonBtn");
 const saveAsJsonBtn = document.getElementById("saveAsJsonBtn");
@@ -51,6 +53,7 @@ const timeStepInput = document.getElementById("timeStepInput");
 const timeEndInput = document.getElementById("timeEndInput");
 const timeDelayInput = document.getElementById("timeDelayInput");
 const decimalDigitsInput = document.getElementById("decimalDigitsInput");
+const strictDefinitionsInput = document.getElementById("strictDefinitionsInput");
 const timeCurrentOutput = document.getElementById("timeCurrentOutput");
 const modelPropsList = document.getElementById("modelPropsList");
 const addModelPropBtn = document.getElementById("addModelPropBtn");
@@ -91,6 +94,12 @@ const expressionEditorStatus = document.getElementById("expressionEditorStatus")
 const expressionEditorCloseBtn = document.getElementById("expressionEditorCloseBtn");
 const expressionEditorCancelBtn = document.getElementById("expressionEditorCancelBtn");
 const expressionEditorApplyBtn = document.getElementById("expressionEditorApplyBtn");
+const functionsHelpBtn = document.getElementById("functionsHelpBtn");
+const functionsHelpModal = document.getElementById("functionsHelpModal");
+const functionsHelpCloseBtn = document.getElementById("functionsHelpCloseBtn");
+const functionsHelpDismissBtn = document.getElementById("functionsHelpDismissBtn");
+const functionsHelpContent = document.getElementById("functionsHelpContent");
+const appTooltip = document.getElementById("appTooltip");
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MAX_HISTORY = 100;
@@ -124,6 +133,7 @@ const graph = {
     t1: 10,
     delayMs: 1000,
     decimals: 3,
+    strictDefinitions: false,
     currentTime: null,
   },
 };
@@ -151,6 +161,9 @@ const ui = {
   showGraph: true,
   showWidgets: true,
   expressionEditor: null,
+  tooltipTarget: null,
+  tooltipShowTimer: null,
+  tooltipHideTimer: null,
 };
 
 const history = {
@@ -208,6 +221,17 @@ function svgPointFromClient(clientX, clientY) {
   pt.x = clientX;
   pt.y = clientY;
   return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+function isTypingTarget(target = document.activeElement) {
+  if (!target || !(target instanceof HTMLElement)) {
+    return false;
+  }
+  if (target.isContentEditable) {
+    return true;
+  }
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
 
 function snap(value) {
@@ -270,6 +294,133 @@ function fillTemplate(template, vars = {}) {
 function t(key, vars = null) {
   const value = i18n[key] ?? key;
   return vars ? fillTemplate(value, vars) : value;
+}
+
+function setTooltipText(el, text) {
+  if (!el) {
+    return;
+  }
+  const value = String(text ?? "").trim();
+  if (!value) {
+    delete el.dataset.tooltip;
+    el.removeAttribute("title");
+    return;
+  }
+  el.dataset.tooltip = value;
+  el.removeAttribute("title");
+}
+
+function cancelTooltipTimers() {
+  if (ui.tooltipShowTimer != null) {
+    window.clearTimeout(ui.tooltipShowTimer);
+    ui.tooltipShowTimer = null;
+  }
+  if (ui.tooltipHideTimer != null) {
+    window.clearTimeout(ui.tooltipHideTimer);
+    ui.tooltipHideTimer = null;
+  }
+}
+
+function activeTooltipTarget(target) {
+  if (!target || !(target instanceof Element)) {
+    return null;
+  }
+  return target.closest("[data-tooltip]");
+}
+
+function hideAppTooltip() {
+  cancelTooltipTimers();
+  if (!appTooltip) {
+    return;
+  }
+  appTooltip.classList.add("hidden");
+  appTooltip.setAttribute("aria-hidden", "true");
+  ui.tooltipTarget = null;
+}
+
+function scheduleHideAppTooltip(delay = 90) {
+  if (!appTooltip) {
+    return;
+  }
+  if (ui.tooltipHideTimer != null) {
+    window.clearTimeout(ui.tooltipHideTimer);
+  }
+  ui.tooltipHideTimer = window.setTimeout(() => {
+    ui.tooltipHideTimer = null;
+    hideAppTooltip();
+  }, delay);
+}
+
+function positionAppTooltip(clientX, clientY) {
+  if (!appTooltip || appTooltip.classList.contains("hidden")) {
+    return;
+  }
+  const margin = 12;
+  const rect = appTooltip.getBoundingClientRect();
+  let left = clientX + 14;
+  let top = clientY + 18;
+  if (left + rect.width > window.innerWidth - margin) {
+    left = window.innerWidth - rect.width - margin;
+  }
+  if (top + rect.height > window.innerHeight - margin) {
+    top = clientY - rect.height - 14;
+  }
+  if (left < margin) {
+    left = margin;
+  }
+  if (top < margin) {
+    top = margin;
+  }
+  appTooltip.style.left = `${Math.round(left)}px`;
+  appTooltip.style.top = `${Math.round(top)}px`;
+}
+
+function showAppTooltip(target, clientX, clientY) {
+  cancelTooltipTimers();
+  if (!appTooltip || !target) {
+    return;
+  }
+  const text = String(target.dataset.tooltip || "").trim();
+  if (!text) {
+    hideAppTooltip();
+    return;
+  }
+  appTooltip.textContent = text;
+  appTooltip.classList.remove("hidden");
+  appTooltip.setAttribute("aria-hidden", "false");
+  ui.tooltipTarget = target;
+  positionAppTooltip(clientX, clientY);
+}
+
+function scheduleShowAppTooltip(target, clientX, clientY, delay = 280) {
+  cancelTooltipTimers();
+  if (!target) {
+    return;
+  }
+  ui.tooltipShowTimer = window.setTimeout(() => {
+    ui.tooltipShowTimer = null;
+    showAppTooltip(target, clientX, clientY);
+  }, delay);
+}
+
+function nodeExpressionTooltipKey(node) {
+  if (!node) {
+    return "tooltip.node.expressionBehavior";
+  }
+  if (node.shape === "diamond") {
+    return "tooltip.node.expressionValue";
+  }
+  if (isStateNode(node)) {
+    return "tooltip.node.expressionState";
+  }
+  return "tooltip.node.expressionBehavior";
+}
+
+function updateNodeExpressionTooltips(node = selectedNodeForSidebar()) {
+  const key = nodeExpressionTooltipKey(node);
+  const text = t(key);
+  setTooltipText(nodeValueExprLabel, text);
+  setTooltipText(nodeValueExprInput, text);
 }
 
 function hideExpressionStatus(statusEl) {
@@ -346,14 +497,30 @@ function localizeExpressionErrorMessage(message) {
 
 function validateExpressionDraft(value, fieldKey = null) {
   const text = String(value ?? "");
-  if (!text.trim()) {
-    return { ok: true, empty: true };
-  }
   const modalMeta = ui.expressionEditor ? expressionEditorMeta() : null;
   const meta = modalMeta || (fieldKey ? expressionFieldMeta(fieldKey) : null);
   const node = modalMeta
     ? getNodeById(ui.expressionEditor.nodeId)
     : selectedNodeForSidebar();
+  if (!text.trim()) {
+    if (graph.execution.strictDefinitions && meta && node) {
+      if (meta.key === "initial" && isStateNode(node)) {
+        return { ok: false, empty: true, message: nodeDefinitionIssueText({ reason: "missingInitialState" }) };
+      }
+      if (meta.key === "value") {
+        if (isStateNode(node)) {
+          return { ok: false, empty: true, message: nodeDefinitionIssueText({ reason: "missingTransition" }) };
+        }
+        if (node.shape === "diamond") {
+          return { ok: false, empty: true, message: nodeDefinitionIssueText({ reason: "missingValue" }) };
+        }
+        if (!(canBindSliderToNode(node) && hasSliderBinding(node))) {
+          return { ok: false, empty: true, message: nodeDefinitionIssueText({ reason: "missingBehavior" }) };
+        }
+      }
+    }
+    return { ok: true, empty: true };
+  }
   const allowStateTransitionOnly = Boolean(meta && meta.key === "value" && node && isStateNode(node));
   const result = semantics.validateExpressionSyntax(text, [], {
     allowThisAlias: allowStateTransitionOnly,
@@ -372,6 +539,122 @@ function updateExpressionFieldState(inputEl, statusEl, value, showOk = false, fi
   inputEl.classList.toggle("invalid", !syntaxResult.ok);
   showExpressionStatus(statusEl, syntaxResult, showOk);
   return syntaxResult;
+}
+
+function validateNodeDefinition(node) {
+  if (!node) {
+    return { ok: true };
+  }
+  const validateExpr = (value, options = {}) => semantics.validateExpressionSyntax(String(value ?? ""), [], options);
+  const valueExpr = String(node.valueExpression ?? "");
+  const initialExpr = String(node.initialStateExpression ?? "");
+
+  if (isStateNode(node)) {
+    if (!valueExpr.trim()) {
+      return { ok: false, reason: "missingTransition" };
+    }
+    const transitionResult = validateExpr(valueExpr, { allowThisAlias: true, allowIntegral: true });
+    if (!transitionResult.ok) {
+      return { ok: false, reason: "invalidTransition", message: transitionResult.message || "" };
+    }
+    if (!initialExpr.trim()) {
+      return { ok: false, reason: "missingInitialState" };
+    }
+    const initialResult = validateExpr(initialExpr);
+    if (!initialResult.ok) {
+      return { ok: false, reason: "invalidInitialState", message: initialResult.message || "" };
+    }
+    return { ok: true };
+  }
+
+  if (canBindSliderToNode(node) && hasSliderBinding(node)) {
+    return { ok: true };
+  }
+  if (!valueExpr.trim()) {
+    return { ok: false, reason: node.shape === "diamond" ? "missingValue" : "missingBehavior" };
+  }
+  const result = validateExpr(valueExpr);
+  if (!result.ok) {
+    return { ok: false, reason: node.shape === "diamond" ? "invalidValue" : "invalidBehavior", message: result.message || "" };
+  }
+  return { ok: true };
+}
+
+function invalidDefinedNodes() {
+  return graph.nodes
+    .map((node) => ({ node, issue: validateNodeDefinition(node) }))
+    .filter((entry) => !entry.issue.ok);
+}
+
+function nodeDefinitionIssueText(issue) {
+  if (!issue || issue.ok) {
+    return "";
+  }
+  if (issue.reason === "missingBehavior") {
+    return t("error.nodeDefinition.missingBehavior");
+  }
+  if (issue.reason === "invalidBehavior") {
+    return t("error.nodeDefinition.invalidBehavior", { reason: localizeExpressionErrorMessage(issue.message || "") });
+  }
+  if (issue.reason === "missingValue") {
+    return t("error.nodeDefinition.missingValue");
+  }
+  if (issue.reason === "invalidValue") {
+    return t("error.nodeDefinition.invalidValue", { reason: localizeExpressionErrorMessage(issue.message || "") });
+  }
+  if (issue.reason === "missingTransition") {
+    return t("error.nodeDefinition.missingTransition");
+  }
+  if (issue.reason === "invalidTransition") {
+    return t("error.nodeDefinition.invalidTransition", { reason: localizeExpressionErrorMessage(issue.message || "") });
+  }
+  if (issue.reason === "missingInitialState") {
+    return t("error.nodeDefinition.missingInitialState");
+  }
+  if (issue.reason === "invalidInitialState") {
+    return t("error.nodeDefinition.invalidInitialState", { reason: localizeExpressionErrorMessage(issue.message || "") });
+  }
+  return t("error.evalReason.runtime");
+}
+
+function enforceStrictDefinitionsIfNeeded() {
+  if (!graph.execution.strictDefinitions) {
+    return true;
+  }
+  const invalidNodes = invalidDefinedNodes();
+  if (!invalidNodes.length) {
+    return true;
+  }
+  invalidNodes.forEach(({ node }) => {
+    node.computedValue = null;
+    node.computedError = "";
+    node.pendingStateValue = null;
+    node.pendingStateError = "";
+  });
+  const first = invalidNodes[0];
+  setStatusKey("error.strictDefinitionsBlocked", {
+    count: invalidNodes.length,
+    node: first.node.name,
+    reason: nodeDefinitionIssueText(first.issue),
+  });
+  render();
+  return false;
+}
+
+function clearStrictInvalidNodeValues() {
+  if (!graph.execution.strictDefinitions) {
+    return;
+  }
+  invalidDefinedNodes().forEach(({ node }) => {
+    node.computedValue = null;
+    node.computedError = "";
+    node.pendingStateValue = null;
+    node.pendingStateError = "";
+  });
+}
+
+function hasStrictExecutionBlock() {
+  return Boolean(graph.execution.strictDefinitions && invalidDefinedNodes().length > 0);
 }
 
 function selectedNodeForSidebar() {
@@ -405,7 +688,7 @@ function expressionFieldMeta(fieldKey, node = selectedNodeForSidebar()) {
     return {
       key: "initial",
       title: t("label.initialState"),
-      value: String(node.initialStateExpression ?? "0"),
+      value: String(node.initialStateExpression ?? ""),
       setValue: (nextValue) => {
         node.initialStateExpression = String(nextValue ?? "");
       },
@@ -433,16 +716,16 @@ function expressionDocMap() {
     dt: { kind: "variable", signature: "dt", description: t("expr.help.dt") },
     if: { kind: "function", signature: "if(condition, whenTrue, whenFalse)", description: t("expr.help.if"), insertText: "if()", cursorOffset: 3 },
     integral: { kind: "function", signature: "integral(x)", description: t("expr.help.integral"), insertText: "integral()", cursorOffset: 9 },
-    getProperty: { kind: "property", signature: "getProperty(name, fallback)", description: t("expr.help.getProperty"), insertText: "getProperty()", cursorOffset: 12 },
-    setProperty: { kind: "property", signature: "setProperty(name, value)", description: t("expr.help.setProperty"), insertText: "setProperty()", cursorOffset: 12 },
-    getModelProperty: { kind: "property", signature: "getModelProperty(name, fallback)", description: t("expr.help.getModelProperty"), insertText: "getModelProperty()", cursorOffset: 17 },
-    setModelProperty: { kind: "property", signature: "setModelProperty(name, value)", description: t("expr.help.setModelProperty"), insertText: "setModelProperty()", cursorOffset: 17 },
+    getProperty: { kind: "function", signature: "getProperty(name, fallback)", description: t("expr.help.getProperty"), insertText: "getProperty()", cursorOffset: 12 },
+    setProperty: { kind: "function", signature: "setProperty(name, value)", description: t("expr.help.setProperty"), insertText: "setProperty()", cursorOffset: 12 },
+    getModelProperty: { kind: "function", signature: "getModelProperty(name, fallback)", description: t("expr.help.getModelProperty"), insertText: "getModelProperty()", cursorOffset: 17 },
+    setModelProperty: { kind: "function", signature: "setModelProperty(name, value)", description: t("expr.help.setModelProperty"), insertText: "setModelProperty()", cursorOffset: 17 },
+    array: { kind: "function", signature: "array(dim | [d0,d1,...], expr)", description: t("expr.help.array"), insertText: "array()", cursorOffset: 6 },
     range: { kind: "function", signature: "range(stop) | range(start, stop[, step])", description: t("expr.help.range"), insertText: "range()", cursorOffset: 6 },
-    gaussian: { kind: "function", signature: "gaussian([params], x, mode)", description: t("expr.help.gaussian"), insertText: "gaussian()", cursorOffset: 9 },
-    uniform: { kind: "function", signature: "uniform([params], x, mode)", description: t("expr.help.uniform"), insertText: "uniform()", cursorOffset: 8 },
-    exponential: { kind: "function", signature: "exponential([params], x, mode)", description: t("expr.help.exponential"), insertText: "exponential()", cursorOffset: 12 },
-    rand: { kind: "function", signature: "rand()", description: t("expr.help.rand"), insertText: "rand()", cursorOffset: 4 },
-    random: { kind: "function", signature: "random()", description: t("expr.help.rand"), insertText: "random()", cursorOffset: 6 },
+    gaussian: { kind: "probability", signature: "gaussian([params], x, mode)", description: t("expr.help.gaussian"), insertText: "gaussian()", cursorOffset: 9 },
+    uniform: { kind: "probability", signature: "uniform([params], x, mode)", description: t("expr.help.uniform"), insertText: "uniform()", cursorOffset: 8 },
+    exponential: { kind: "probability", signature: "exponential([params], x, mode)", description: t("expr.help.exponential"), insertText: "exponential()", cursorOffset: 12 },
+    rand: { kind: "probability", signature: "rand()", description: t("expr.help.rand"), insertText: "rand()", cursorOffset: 4 },
     sin: { kind: "math", signature: "sin(x)", description: t("expr.help.sin"), insertText: "sin()", cursorOffset: 4 },
     cos: { kind: "math", signature: "cos(x)", description: t("expr.help.cos"), insertText: "cos()", cursorOffset: 4 },
     tan: { kind: "math", signature: "tan(x)", description: t("expr.help.tan"), insertText: "tan()", cursorOffset: 4 },
@@ -469,6 +752,86 @@ function expressionDocMap() {
     int: { kind: "math", signature: "int(x)", description: t("expr.help.int"), insertText: "int()", cursorOffset: 4 },
     sign: { kind: "math", signature: "sign(x)", description: t("expr.help.sign"), insertText: "sign()", cursorOffset: 5 },
   };
+}
+
+function globalHelpEntries() {
+  const docs = expressionDocMap();
+  return Object.keys(docs).map((name) => ({ name, ...docs[name] }));
+}
+
+function helpGroupLabel(kind) {
+  if (kind === "variable") {
+    return t("help.group.variables");
+  }
+  if (kind === "probability") {
+    return t("help.group.probability");
+  }
+  if (kind === "math") {
+    return t("help.group.math");
+  }
+  return t("help.group.functions");
+}
+
+function renderFunctionsHelp() {
+  if (!functionsHelpContent) {
+    return;
+  }
+  functionsHelpContent.innerHTML = "";
+  const groups = new Map();
+  globalHelpEntries().forEach((entry) => {
+    const key = entry.kind || "function";
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(entry);
+  });
+
+  ["variable", "function", "probability", "math"].forEach((kind) => {
+    const entries = (groups.get(kind) || []).slice().sort((left, right) => left.name.localeCompare(right.name));
+    if (!entries || !entries.length) {
+      return;
+    }
+    const group = document.createElement("section");
+    group.className = "help-group";
+    const title = document.createElement("h4");
+    title.className = "help-group-title";
+    title.textContent = helpGroupLabel(kind);
+    group.appendChild(title);
+
+    entries.forEach((entry) => {
+      const item = document.createElement("div");
+      item.className = "help-item";
+      const name = document.createElement("div");
+      name.className = "help-item-name";
+      name.textContent = entry.name;
+      const signature = document.createElement("div");
+      signature.className = "help-item-signature";
+      signature.textContent = entry.signature || entry.name;
+      const desc = document.createElement("div");
+      desc.className = "help-item-desc";
+      desc.textContent = entry.description || "";
+      item.appendChild(name);
+      item.appendChild(signature);
+      item.appendChild(desc);
+      group.appendChild(item);
+    });
+    functionsHelpContent.appendChild(group);
+  });
+}
+
+function openFunctionsHelp() {
+  if (!functionsHelpModal) {
+    return;
+  }
+  renderFunctionsHelp();
+  functionsHelpModal.classList.remove("hidden");
+}
+
+function closeFunctionsHelp() {
+  if (!functionsHelpModal) {
+    return;
+  }
+  functionsHelpModal.classList.add("hidden");
 }
 
 function expressionCatalogForEditor() {
@@ -516,6 +879,25 @@ function expressionCatalogForEditor() {
   }
 
   return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function expressionEntryKindOrder(kind) {
+  switch (kind) {
+    case "variable":
+      return 0;
+    case "function":
+      return 1;
+    case "probability":
+      return 2;
+    case "property":
+      return 3;
+    case "math":
+      return 4;
+    case "node":
+      return 5;
+    default:
+      return 99;
+  }
 }
 
 function identifierPrefixAtCaret(text, caret) {
@@ -582,7 +964,12 @@ function renderExpressionAutocomplete() {
   let helpEntry = null;
   if (tokenInfo && tokenInfo.prefix.length > 0) {
     const prefixLower = tokenInfo.prefix.toLowerCase();
-    const suggestions = allEntries.filter((entry) => entry.name.toLowerCase().startsWith(prefixLower) && entry.name !== tokenInfo.prefix);
+    const suggestions = allEntries
+      .filter((entry) => entry.name.toLowerCase().startsWith(prefixLower) && entry.name !== tokenInfo.prefix)
+      .sort((left, right) => {
+        const kindDelta = expressionEntryKindOrder(left.kind) - expressionEntryKindOrder(right.kind);
+        return kindDelta || left.name.localeCompare(right.name);
+      });
     ui.expressionEditor.completion = {
       tokenStart: tokenInfo.start,
       tokenEnd: tokenInfo.end,
@@ -591,7 +978,15 @@ function renderExpressionAutocomplete() {
     };
     if (ui.expressionEditor.completion.entries.length > 0) {
       expressionAutocomplete.innerHTML = "";
+      let previousKind = null;
       ui.expressionEditor.completion.entries.forEach((entry, idx) => {
+        if (entry.kind !== previousKind) {
+          previousKind = entry.kind;
+          const header = document.createElement("div");
+          header.className = "expr-suggest-group";
+          header.textContent = t(`expr.help.kind.${entry.kind || "function"}`);
+          expressionAutocomplete.appendChild(header);
+        }
         const btn = document.createElement("button");
         btn.type = "button";
         btn.classList.toggle("active", idx === ui.expressionEditor.completion.activeIndex);
@@ -824,6 +1219,13 @@ function applyI18nToDom() {
       el.textContent = text;
     }
   });
+  document.querySelectorAll("[data-title-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-title-i18n");
+    if (!key) {
+      return;
+    }
+    setTooltipText(el, t(key));
+  });
   updateFileStatusLabel(dirtySinceLastSave);
 }
 
@@ -851,6 +1253,9 @@ async function loadI18n() {
   applyI18nToDom();
   if (!expressionEditorModal?.classList.contains("hidden")) {
     refreshExpressionEditorValidation();
+  }
+  if (!functionsHelpModal?.classList.contains("hidden")) {
+    renderFunctionsHelp();
   }
 }
 
@@ -930,6 +1335,7 @@ function normalizeExecutionConfig(raw) {
   const t1 = Number(raw?.t1);
   const delayMs = Number(raw?.delayMs);
   const decimals = Number(raw?.decimals);
+  const strictDefinitions = Boolean(raw?.strictDefinitions);
   const currentTime = raw?.currentTime;
   return {
     t0: Number.isFinite(t0) ? t0 : 0,
@@ -937,6 +1343,7 @@ function normalizeExecutionConfig(raw) {
     t1: Number.isFinite(t1) ? t1 : 10,
     delayMs: Number.isFinite(delayMs) && delayMs > 0 ? Math.round(delayMs) : 1000,
     decimals: Number.isFinite(decimals) ? clampDisplayDecimals(decimals) : 3,
+    strictDefinitions,
     currentTime: Number.isFinite(Number(currentTime)) ? Number(currentTime) : null,
   };
 }
@@ -1027,6 +1434,14 @@ function canBindSliderToNode(node) {
   return Boolean(node && (node.shape === "diamond" || node.input));
 }
 
+function hasExternalValue(node) {
+  return Boolean(node?.externalValueEnabled);
+}
+
+function hasSliderBinding(node) {
+  return Boolean(node && graph.widgets.some((widget) => widget.type === "slider" && widget.source === node.name));
+}
+
 function normalizeInputNodeFlags() {
   graph.nodes.forEach((node) => {
     if (!canMarkNodeAsInput(node)) {
@@ -1081,6 +1496,15 @@ function graphBounds() {
       maxX = Math.max(maxX, cp.x);
       maxY = Math.max(maxY, cp.y);
     });
+  });
+
+  graph.widgets.forEach((widget) => {
+    const width = Number(widget.width) || 0;
+    const height = Number(widget.minimized ? 36 : widget.height) || 0;
+    minX = Math.min(minX, widget.x);
+    minY = Math.min(minY, widget.y);
+    maxX = Math.max(maxX, widget.x + width);
+    maxY = Math.max(maxY, widget.y + height);
   });
 
   const margin = 180;
@@ -1174,20 +1598,47 @@ function applyCanvasVisibility() {
 }
 
 function updateModelRunButtons() {
+  const blocked = hasStrictExecutionBlock();
   if (runFullModelBtn) {
-    runFullModelBtn.title = `${t("menu.run.execute")} (F7)`;
+    setTooltipText(runFullModelBtn, `${t("menu.run.execute")} (F7)`);
+    runFullModelBtn.disabled = blocked;
   }
   if (manualStepBtn) {
-    manualStepBtn.title = `${t("menu.run.step")} (F8)`;
+    setTooltipText(manualStepBtn, `${t("menu.run.step")} (F8)`);
+    manualStepBtn.disabled = blocked;
   }
   if (timedToggleBtn) {
     const timedKey = ui.timedRunHandle == null ? "action.timedStart" : "action.timedStop";
     timedToggleBtn.textContent = ui.timedRunHandle == null ? "⏱" : "⏸";
-    timedToggleBtn.title = `${t(timedKey)} (F9)`;
+    setTooltipText(timedToggleBtn, `${t(timedKey)} (F9)`);
+    timedToggleBtn.disabled = blocked && ui.timedRunHandle == null;
   }
   if (resetExecBtn) {
-    resetExecBtn.title = `${t("menu.run.reset")} (F10)`;
+    setTooltipText(resetExecBtn, `${t("menu.run.reset")} (F10)`);
   }
+  if (runEvalBtn) {
+    runEvalBtn.disabled = blocked;
+  }
+  if (runStepBtn) {
+    runStepBtn.disabled = blocked;
+  }
+  if (runTimedToggleBtn) {
+    runTimedToggleBtn.disabled = blocked && ui.timedRunHandle == null;
+  }
+  if (runStrictDefinitionsInput) {
+    runStrictDefinitionsInput.checked = Boolean(graph.execution.strictDefinitions);
+  }
+  if (strictDefinitionsInput) {
+    strictDefinitionsInput.checked = Boolean(graph.execution.strictDefinitions);
+  }
+}
+
+function updateDeleteActionLabel() {
+  if (!deleteBtnLabel) {
+    return;
+  }
+  const hasNodeSelection = ui.selectedNodes.size > 0;
+  deleteBtnLabel.textContent = hasNodeSelection ? t("menu.edit.delete") : t("menu.edit.delete");
 }
 
 function toggleGraphVisibility() {
@@ -1388,6 +1839,7 @@ function exportGraphData() {
       t1: graph.execution.t1,
       delayMs: graph.execution.delayMs,
       decimals: clampDisplayDecimals(graph.execution.decimals),
+      strictDefinitions: Boolean(graph.execution.strictDefinitions),
     },
     nodes: graph.nodes.map((n) => {
       const type = serializeNodeType(n.shape);
@@ -1480,6 +1932,7 @@ function applyGraphData(data) {
     t1: execCfg.t1,
     delayMs: execCfg.delayMs,
     decimals: execCfg.decimals,
+    strictDefinitions: execCfg.strictDefinitions,
     currentTime: null,
   };
 
@@ -1496,10 +1949,10 @@ function applyGraphData(data) {
       width: n.width,
       height: n.height,
       valueExpression: shape === "rect"
-        ? String(n.stateTransition ?? "this") || "this"
+        ? String(n.stateTransition ?? "")
         : String(n.valueExpression ?? ""),
       initialStateExpression: shape === "rect"
-        ? String(n.initialState ?? "0")
+        ? String(n.initialState ?? "")
         : String(n.initialStateExpression ?? ""),
       computedValue: null,
       computedError: "",
@@ -1715,7 +2168,7 @@ function pasteFromClipboard() {
         width: n.width,
         height: n.height,
         valueExpression: String(n.valueExpression ?? ""),
-        initialStateExpression: String(n.initialStateExpression ?? "0"),
+        initialStateExpression: String(n.initialStateExpression ?? ""),
         computedValue: n.computedValue ?? null,
         computedError: String(n.computedError ?? ""),
         pendingStateValue: n.pendingStateValue ?? null,
@@ -1880,9 +2333,9 @@ function addNode(shape, atPoint = null) {
     y: py,
     width: 120,
     height: 70,
-    valueExpression: shape === "rect" ? "this" : "",
-    initialStateExpression: shape === "rect" ? "0" : "",
-    computedValue: shape === "rect" ? 0 : null,
+    valueExpression: "",
+    initialStateExpression: "",
+    computedValue: null,
     computedError: "",
     pendingStateValue: null,
     pendingStateError: "",
@@ -2283,7 +2736,6 @@ function drawXYChart(canvas, seriesList = [], options = null) {
 }
 
 function updateXYWidgetsFromComputedValues(timeValue = null) {
-  const maxPoints = 2000;
   const currentTime = Number(
     Number.isFinite(Number(timeValue)) ? timeValue : graph.execution.currentTime,
   );
@@ -2322,9 +2774,6 @@ function updateXYWidgetsFromComputedValues(timeValue = null) {
         }
       }
       pair.points.push({ x: xVal, y: yVal });
-      if (pair.points.length > maxPoints) {
-        pair.points.splice(0, pair.points.length - maxPoints);
-      }
     });
   });
 }
@@ -2404,6 +2853,9 @@ function widgetDisplayTitle(widget) {
 function renderWidgets() {
   widgetLayer.innerHTML = "";
   applyWidgetDrivenNodeValues();
+  const view = svg.viewBox.baseVal;
+  const viewMinX = view?.x ?? 0;
+  const viewMinY = view?.y ?? 0;
 
   graph.widgets.forEach((widget) => {
     if (widget.type !== "table" && widget.type !== "xychart" && widget.type !== "slider") {
@@ -2427,8 +2879,8 @@ function renderWidgets() {
       root.classList.add("minimized");
     }
     const z = Math.max(0.0001, ui.zoom || 1);
-    root.style.left = `${widget.x * z}px`;
-    root.style.top = `${widget.y * z}px`;
+    root.style.left = `${(widget.x - viewMinX) * z}px`;
+    root.style.top = `${(widget.y - viewMinY) * z}px`;
     root.style.width = `${widget.width}px`;
     root.style.height = widget.minimized ? "36px" : `${widget.height}px`;
     root.style.transform = `scale(${z})`;
@@ -2441,6 +2893,15 @@ function renderWidgets() {
         render();
       }
     });
+    root.addEventListener("contextmenu", (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      if (!(ui.selected?.type === "widget" && ui.selected.id === widget.id)) {
+        selectWidget(widget.id);
+        render();
+      }
+      openWidgetContextMenu(evt, widget);
+    });
 
     const header = document.createElement("div");
     header.className = "value-widget-header";
@@ -2451,7 +2912,7 @@ function renderWidgets() {
     const minBtn = document.createElement("button");
     minBtn.type = "button";
     minBtn.textContent = widget.minimized ? "+" : "_";
-    minBtn.title = widget.minimized ? t("widget.restore") : t("widget.minimize");
+    setTooltipText(minBtn, widget.minimized ? t("widget.restore") : t("widget.minimize"));
     minBtn.addEventListener("pointerdown", (evt) => {
       evt.stopPropagation();
     });
@@ -2965,20 +3426,11 @@ function openBackgroundContextMenu(evt) {
         setStatusKey("status.widgetChartCreated");
       },
     },
-    { separator: true },
-    {
-      label: t("context.bg.deselect"),
-      action: () => {
-        clearAllSelection();
-        render();
-        setStatusKey("status.selectionCleared");
-      },
-      disabled: ui.selectedNodes.size === 0 && !ui.selected,
-    },
   ]);
 }
 
 function openNodeContextMenu(evt, node) {
+  const useSelectionDelete = ui.selectedNodes.has(node.id) && ui.selectedNodes.size > 0;
   showContextMenu(evt.clientX, evt.clientY, [
     {
       label: t("context.node.rename"),
@@ -3015,8 +3467,12 @@ function openNodeContextMenu(evt, node) {
       },
     },
     {
-      label: t("context.node.delete"),
+      label: useSelectionDelete ? t("menu.edit.delete") : t("context.node.delete"),
       action: () => {
+        if (useSelectionDelete) {
+          removeSelected();
+          return;
+        }
         runAction(() => {
           removeNodeFromSliderBindings(node.name);
           graph.nodes = graph.nodes.filter((n) => n.id !== node.id);
@@ -3024,6 +3480,34 @@ function openNodeContextMenu(evt, node) {
           clearAllSelection();
         });
         setStatusKey("status.nodeDeleted");
+      },
+    },
+  ]);
+}
+
+function openWidgetContextMenu(evt, widget) {
+  const wasMinimized = Boolean(widget.minimized);
+  showContextMenu(evt.clientX, evt.clientY, [
+    {
+      label: wasMinimized ? t("context.widget.restore") : t("context.widget.minimize"),
+      action: () => {
+        runAction(() => {
+          const target = graph.widgets.find((w) => w.id === widget.id);
+          if (target) {
+            target.minimized = !target.minimized;
+          }
+        });
+        setStatusKey(wasMinimized ? "status.widgetRestored" : "status.widgetMinimized");
+      },
+    },
+    {
+      label: t("context.widget.delete"),
+      action: () => {
+        runAction(() => {
+          graph.widgets = graph.widgets.filter((w) => w.id !== widget.id);
+          clearAllSelection();
+        });
+        setStatusKey("status.widgetDeleted");
       },
     },
   ]);
@@ -3277,7 +3761,7 @@ function refreshWidgetConfigPanel(widget) {
       const upBtn = document.createElement("button");
       upBtn.type = "button";
       upBtn.textContent = "↑";
-      upBtn.title = t("widget.moveUp");
+      setTooltipText(upBtn, t("widget.moveUp"));
       upBtn.disabled = idx === 0;
       upBtn.addEventListener("click", () => {
         runAction(() => {
@@ -3292,7 +3776,7 @@ function refreshWidgetConfigPanel(widget) {
       const downBtn = document.createElement("button");
       downBtn.type = "button";
       downBtn.textContent = "↓";
-      downBtn.title = t("widget.moveDown");
+      setTooltipText(downBtn, t("widget.moveDown"));
       downBtn.disabled = idx >= widget.columns.length - 1;
       downBtn.addEventListener("click", () => {
         runAction(() => {
@@ -3365,7 +3849,7 @@ function refreshWidgetConfigPanel(widget) {
       xSel.appendChild(opt);
     });
     xSel.value = choices.includes(pair.xSource) ? pair.xSource : "time";
-    xSel.title = t("widget.xSourceLabel");
+    setTooltipText(xSel, t("widget.xSourceLabel"));
     xSel.addEventListener("change", () => {
       runAction(() => {
         widget.xyPairs[idx].xSource = xSel.value;
@@ -3381,7 +3865,7 @@ function refreshWidgetConfigPanel(widget) {
       ySel.appendChild(opt);
     });
     ySel.value = choices.includes(pair.ySource) ? pair.ySource : "time";
-    ySel.title = t("widget.ySeriesLabel");
+    setTooltipText(ySel, t("widget.ySeriesLabel"));
     ySel.addEventListener("change", () => {
       runAction(() => {
         widget.xyPairs[idx].ySource = ySel.value;
@@ -3392,7 +3876,7 @@ function refreshWidgetConfigPanel(widget) {
     const colorInput = document.createElement("input");
     colorInput.type = "color";
     colorInput.value = /^#[0-9a-fA-F]{6}$/.test(String(pair.color ?? "")) ? String(pair.color) : defaultChartSeriesColor(idx);
-    colorInput.title = t("widget.seriesColor");
+    setTooltipText(colorInput, t("widget.seriesColor"));
     colorInput.addEventListener("change", () => {
       runAction(() => {
         widget.xyPairs[idx].color = colorInput.value;
@@ -3401,7 +3885,7 @@ function refreshWidgetConfigPanel(widget) {
 
     const lineLabel = document.createElement("label");
     lineLabel.className = "menu-check";
-    lineLabel.title = t("widget.seriesLine");
+    setTooltipText(lineLabel, t("widget.seriesLine"));
     const lineInput = document.createElement("input");
     lineInput.type = "checkbox";
     lineInput.checked = pair.showLine !== false;
@@ -3417,7 +3901,7 @@ function refreshWidgetConfigPanel(widget) {
 
     const pointsLabel = document.createElement("label");
     pointsLabel.className = "menu-check";
-    pointsLabel.title = t("widget.seriesPoints");
+    setTooltipText(pointsLabel, t("widget.seriesPoints"));
     const pointsInput = document.createElement("input");
     pointsInput.type = "checkbox";
     pointsInput.checked = pair.showPoints !== false;
@@ -3434,7 +3918,7 @@ function refreshWidgetConfigPanel(widget) {
     const del = document.createElement("button");
     del.type = "button";
     del.textContent = "-";
-    del.title = t("widget.removePair");
+    setTooltipText(del, t("widget.removePair"));
     del.addEventListener("click", () => {
       runAction(() => {
         if (widget.xyPairs.length > 0) {
@@ -3556,6 +4040,7 @@ function refreshWidgetConfigPanel(widget) {
 
 function refreshSidebar() {
   syncNodeSelectionFocus();
+  updateDeleteActionLabel();
 
   if (ui.selected?.type === "edge") {
     delete propsList.dataset.ownerKey;
@@ -3636,6 +4121,7 @@ function refreshSidebar() {
         ? t("label.value")
         : (stateNode ? t("label.stateTransition") : t("label.behaviorFunction"));
     }
+    updateNodeExpressionTooltips(node);
     if (document.activeElement !== nodeValueExprInput) {
       nodeValueExprInput.value = node.valueExpression || "";
     }
@@ -3652,16 +4138,19 @@ function refreshSidebar() {
         nodeInitialStateStatus.classList.toggle("hidden", !stateNode);
       }
       if (stateNode && document.activeElement !== nodeInitialStateInput) {
-        nodeInitialStateInput.value = node.initialStateExpression || "0";
+        nodeInitialStateInput.value = node.initialStateExpression || "";
       }
       if (stateNode) {
-        updateExpressionFieldState(nodeInitialStateInput, nodeInitialStateStatus, node.initialStateExpression || "0", false, "initial");
+        updateExpressionFieldState(nodeInitialStateInput, nodeInitialStateStatus, node.initialStateExpression || "", false, "initial");
       } else {
         nodeInitialStateInput.classList.remove("invalid");
         hideExpressionStatus(nodeInitialStateStatus);
       }
     }
-    if (node.computedError) {
+    const definitionIssue = validateNodeDefinition(node);
+    if (graph.execution.strictDefinitions && !definitionIssue.ok) {
+      nodeValueOutput.textContent = "-";
+    } else if (node.computedError) {
       nodeValueOutput.textContent = t("text.valueError", { reason: evalReasonText(node.computedError) });
     } else {
       nodeValueOutput.textContent = formatComputedValue(node.computedValue);
@@ -3686,6 +4175,7 @@ function refreshSidebar() {
   if (nodeValueExprLabel) {
     nodeValueExprLabel.textContent = t("label.behaviorFunction");
   }
+  updateNodeExpressionTooltips(null);
   nodeValueExprInput.classList.remove("invalid");
   nodeInitialStateInput.classList.remove("invalid");
   hideExpressionStatus(nodeValueExprStatus);
@@ -3731,6 +4221,9 @@ function refreshSidebar() {
     if (document.activeElement !== decimalDigitsInput) {
       decimalDigitsInput.value = String(clampDisplayDecimals(graph.execution.decimals));
     }
+    if (strictDefinitionsInput) {
+      strictDefinitionsInput.checked = Boolean(graph.execution.strictDefinitions);
+    }
     timeCurrentOutput.textContent =
       graph.execution.currentTime == null
         ? formatNumberValue(Number(graph.execution.t0))
@@ -3748,6 +4241,9 @@ function refreshSidebar() {
 }
 
 function render() {
+  clearStrictInvalidNodeValues();
+  updateModelRunButtons();
+  updateDeleteActionLabel();
   edgesLayer.innerHTML = "";
   nodesLayer.innerHTML = "";
   controlsLayer.innerHTML = "";
@@ -3897,6 +4393,9 @@ function render() {
     });
     if (ui.selectedNodes.has(node.id)) {
       g.classList.add("selected");
+    }
+    if (graph.execution.strictDefinitions && !validateNodeDefinition(node).ok) {
+      g.classList.add("invalid-definition");
     }
     if (ui.edgeCreate && ui.edgeCreateHoverId === node.id && node.id !== ui.edgeCreate.fromId) {
       g.classList.add("edge-target");
@@ -4104,10 +4603,10 @@ function importGraphData(data) {
         height: clamp(Number(n.height) || 70, 30, 500),
         valueExpression: shape === "rect" ? "" : String(n.valueExpression ?? ""),
         stateTransition: shape === "rect"
-          ? String(n.stateTransition ?? "this") || "this"
+          ? String(n.stateTransition ?? "")
           : "",
         initialState: shape === "rect"
-          ? String(n.initialState ?? "0")
+          ? String(n.initialState ?? "")
           : "",
         computedValue: null,
         computedError: "",
@@ -4460,7 +4959,7 @@ async function createNewGraph() {
   graph.edges = [];
   graph.widgets = [];
   stopTimedExecution(false);
-  graph.execution = { t0: 0, dt: 1, t1: 10, delayMs: 1000, decimals: 3, currentTime: null };
+  graph.execution = { t0: 0, dt: 1, t1: 10, delayMs: 1000, decimals: 3, strictDefinitions: false, currentTime: null };
   nodeCounter = 1;
   edgeCounter = 1;
   widgetCounter = 1;
@@ -4704,6 +5203,9 @@ function validateTimeConfig() {
 }
 
 function executeOneStep(restartIfEnded = true) {
+  if (!enforceStrictDefinitionsIfNeeded()) {
+    return false;
+  }
   const cfg = validateTimeConfig();
   if (!cfg) {
     return false;
@@ -4758,6 +5260,9 @@ function executeOneStep(restartIfEnded = true) {
 }
 
 function executeNodeExpressions() {
+  if (!enforceStrictDefinitionsIfNeeded()) {
+    return;
+  }
   stopTimedExecution(false);
   const cfg = validateTimeConfig();
   if (!cfg) {
@@ -4843,6 +5348,9 @@ function executeNodeExpressions() {
 }
 
 function runManualStep() {
+  if (!enforceStrictDefinitionsIfNeeded()) {
+    return;
+  }
   stopTimedExecution(false);
   executeOneStep(true);
 }
@@ -4865,6 +5373,10 @@ function resetExecution() {
 function toggleTimedExecution() {
   if (ui.timedRunHandle != null) {
     stopTimedExecution(true);
+    return;
+  }
+
+  if (!enforceStrictDefinitionsIfNeeded()) {
     return;
   }
 
@@ -4893,7 +5405,9 @@ function toggleTimedExecution() {
     const ok = executeOneStep(false);
     if (!ok) {
       stopTimedExecution(false);
-      setStatusKey("status.timedStopped");
+      if (!(graph.execution.strictDefinitions && invalidDefinedNodes().length > 0)) {
+        setStatusKey("status.timedStopped");
+      }
     }
   }, delayMs);
   setStatusKey("status.timedStarted", { delay: delayMs });
@@ -4907,8 +5421,8 @@ window.addEventListener("pointermove", (evt) => {
       const z = Math.max(0.0001, ui.zoom || 1);
       const dx = (evt.clientX - ui.widgetDrag.startClientX) / z;
       const dy = (evt.clientY - ui.widgetDrag.startClientY) / z;
-      widget.x = Math.max(0, ui.widgetDrag.startX + dx);
-      widget.y = Math.max(0, ui.widgetDrag.startY + dy);
+      widget.x = ui.widgetDrag.startX + dx;
+      widget.y = ui.widgetDrag.startY + dy;
       renderWidgets();
     }
     return;
@@ -5184,6 +5698,16 @@ svg.addEventListener("contextmenu", (evt) => {
   openBackgroundContextMenu(evt);
 });
 
+[graphViewport, canvasContent].forEach((el) => {
+  el?.addEventListener("contextmenu", (evt) => {
+    if (evt.target.closest?.(".node, .edge, .st-widget, .context-menu")) {
+      return;
+    }
+    evt.preventDefault();
+    openBackgroundContextMenu(evt);
+  });
+});
+
 menuTitles.forEach((title) => {
   title.addEventListener("click", (evt) => {
     evt.stopPropagation();
@@ -5348,6 +5872,24 @@ decimalDigitsInput.addEventListener("change", () => {
   render();
 });
 
+function commitStrictDefinitionsToggle(enabled) {
+  graph.execution.strictDefinitions = Boolean(enabled);
+  setStatusKey(graph.execution.strictDefinitions ? "status.strictDefinitionsOn" : "status.strictDefinitionsOff");
+  scheduleFileStatusRefresh();
+  render();
+}
+
+if (strictDefinitionsInput) {
+  strictDefinitionsInput.addEventListener("change", () => {
+    commitStrictDefinitionsToggle(strictDefinitionsInput.checked);
+  });
+}
+if (runStrictDefinitionsInput) {
+  runStrictDefinitionsInput.addEventListener("change", () => {
+    commitStrictDefinitionsToggle(runStrictDefinitionsInput.checked);
+  });
+}
+
 [timeStartInput, timeStepInput, timeEndInput, timeDelayInput, decimalDigitsInput].forEach((inputEl) => {
   inputEl.addEventListener("keydown", (evt) => {
     if (evt.key === "Enter") {
@@ -5455,12 +5997,6 @@ nodeShapeInput.addEventListener("change", () => {
   runAction(() => {
     const wasSliderBindable = canBindSliderToNode(node);
     node.shape = nodeShapeInput.value;
-    if (isStateNode(node) && !String(node.initialStateExpression || "").trim()) {
-      node.initialStateExpression = "0";
-    }
-    if (isStateNode(node) && !String(node.valueExpression || "").trim()) {
-      node.valueExpression = "this";
-    }
     if (!isStateNode(node)) {
       node.initialStateExpression = "";
       node.pendingStateValue = null;
@@ -5615,6 +6151,72 @@ if (expressionEditorModal) {
     }
   });
 }
+if (functionsHelpBtn) {
+  functionsHelpBtn.addEventListener("click", () => {
+    closeTopMenus();
+    openFunctionsHelp();
+  });
+}
+if (functionsHelpCloseBtn) {
+  functionsHelpCloseBtn.addEventListener("click", closeFunctionsHelp);
+}
+if (functionsHelpDismissBtn) {
+  functionsHelpDismissBtn.addEventListener("click", closeFunctionsHelp);
+}
+if (functionsHelpModal) {
+  functionsHelpModal.addEventListener("pointerdown", (evt) => {
+    if (evt.target === functionsHelpModal) {
+      closeFunctionsHelp();
+    }
+  });
+}
+
+document.addEventListener("pointerover", (evt) => {
+  const target = activeTooltipTarget(evt.target);
+  if (!target) {
+    scheduleHideAppTooltip(60);
+    return;
+  }
+  scheduleShowAppTooltip(target, evt.clientX, evt.clientY);
+});
+
+document.addEventListener("pointermove", (evt) => {
+  const target = activeTooltipTarget(evt.target);
+  if (!target) {
+    scheduleHideAppTooltip(60);
+    return;
+  }
+  if (ui.tooltipTarget !== target) {
+    scheduleShowAppTooltip(target, evt.clientX, evt.clientY);
+    return;
+  }
+  cancelTooltipTimers();
+  positionAppTooltip(evt.clientX, evt.clientY);
+});
+
+document.addEventListener("pointerout", (evt) => {
+  if (!evt.relatedTarget || !activeTooltipTarget(evt.relatedTarget)) {
+    scheduleHideAppTooltip(60);
+  }
+});
+
+document.addEventListener("focusin", (evt) => {
+  const target = activeTooltipTarget(evt.target);
+  if (!target) {
+    return;
+  }
+  const rect = target.getBoundingClientRect();
+  showAppTooltip(target, rect.left + 8, rect.bottom);
+});
+
+document.addEventListener("focusout", (evt) => {
+  if (!evt.relatedTarget || !activeTooltipTarget(evt.relatedTarget)) {
+    hideAppTooltip();
+  }
+});
+
+window.addEventListener("scroll", hideAppTooltip, true);
+window.addEventListener("resize", hideAppTooltip);
 
 modelTitleInput.addEventListener("input", () => {
   graph.modelTitle = modelTitleInput.value;
@@ -5652,25 +6254,72 @@ document.addEventListener("keydown", (evt) => {
     return;
   }
 
+  if (!functionsHelpModal?.classList.contains("hidden")) {
+    if (evt.key === "Escape" || evt.key === "F1") {
+      evt.preventDefault();
+      closeFunctionsHelp();
+    }
+    return;
+  }
+
+  if (evt.key === "F1") {
+    evt.preventDefault();
+    openFunctionsHelp();
+    return;
+  }
+
   if (evt.key === "F7") {
     evt.preventDefault();
-    executeNodeExpressions();
+    if (!hasStrictExecutionBlock()) {
+      executeNodeExpressions();
+    }
     return;
   }
   if (evt.key === "F8") {
     evt.preventDefault();
-    runManualStep();
+    if (!hasStrictExecutionBlock()) {
+      runManualStep();
+    }
     return;
   }
   if (evt.key === "F9") {
     evt.preventDefault();
-    toggleTimedExecution();
+    if (ui.timedRunHandle != null || !hasStrictExecutionBlock()) {
+      toggleTimedExecution();
+    }
     return;
   }
   if (evt.key === "F10") {
     evt.preventDefault();
     resetExecution();
     return;
+  }
+
+  if (evt.altKey && !evt.ctrlKey && !evt.metaKey && !evt.shiftKey && !isTypingTarget(evt.target)) {
+    if (evt.key === "1") {
+      evt.preventDefault();
+      runAction(() => {
+        addNode("rect");
+      });
+      setStatusKey("status.nodeCreated");
+      return;
+    }
+    if (evt.key === "2") {
+      evt.preventDefault();
+      runAction(() => {
+        addNode("ellipse");
+      });
+      setStatusKey("status.nodeCreated");
+      return;
+    }
+    if (evt.key === "3") {
+      evt.preventDefault();
+      runAction(() => {
+        addNode("diamond");
+      });
+      setStatusKey("status.nodeCreated");
+      return;
+    }
   }
 
   if (evt.ctrlKey || evt.metaKey) {

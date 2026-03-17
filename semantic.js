@@ -30,6 +30,10 @@
     throw new Error("integral is only available in state node expressions");
   }
 
+  function unavailableArrayConstructor() {
+    throw new Error("array is a special expression form");
+  }
+
   function unavailableDistribution(name) {
     return () => {
       throw new Error(`${name} is unavailable`);
@@ -95,7 +99,6 @@
     int: vectorizeFunction(Math.trunc),
     sign: vectorizeFunction(Math.sign),
     rand: Math.random,
-    random: Math.random,
     range: (...args) => {
       if (args.length === 1) {
         return buildNumericRange(0, args[0], 1);
@@ -108,6 +111,7 @@
       }
       throw new Error("range expects 1, 2, or 3 arguments");
     },
+    array: unavailableArrayConstructor,
     gaussian: typeof probability.gaussian === "function" ? probability.gaussian : unavailableDistribution("gaussian"),
     uniform: typeof probability.uniform === "function" ? probability.uniform : unavailableDistribution("uniform"),
     exponential: typeof probability.exponential === "function" ? probability.exponential : unavailableDistribution("exponential"),
@@ -206,6 +210,26 @@
     return value.every((row) => row.length === columns);
   }
 
+  function isNumericTensor(value) {
+    if (isFiniteNumber(value)) {
+      return true;
+    }
+    if (!Array.isArray(value)) {
+      return false;
+    }
+    if (value.length === 0) {
+      return true;
+    }
+    if (!value.every((item) => isNumericTensor(item))) {
+      return false;
+    }
+    const first = value[0];
+    if (!Array.isArray(first)) {
+      return value.every((item) => !Array.isArray(item));
+    }
+    return value.every((item) => Array.isArray(item) && sameArrayShape(first, item));
+  }
+
   function validateComputedValue(value) {
     if (isFiniteNumber(value)) {
       return { ok: true, kind: "number", value };
@@ -215,6 +239,9 @@
     }
     if (isNumericMatrix(value)) {
       return { ok: true, kind: "matrix", value: value.map((row) => row.slice()) };
+    }
+    if (isNumericTensor(value)) {
+      return { ok: true, kind: "array", value: JSON.parse(JSON.stringify(value)) };
     }
     return { ok: false, reason: "type" };
   }
@@ -885,6 +912,39 @@
         return out;
       }
       case "call": {
+        if (node.name === "array") {
+          if (node.args.length !== 2) {
+            throw new Error("array expects exactly 2 arguments");
+          }
+          const dimsValue = evaluateAstNode(node.args[0], scope);
+          const dims = Array.isArray(dimsValue) ? dimsValue.slice() : [dimsValue];
+          if (!dims.length) {
+            throw new Error("array requires at least one dimension");
+          }
+          const normalizedDims = dims.map((dim, idx) => {
+            const value = Number(dim);
+            if (!Number.isInteger(value) || value < 0) {
+              throw new Error(`array dimension ${idx} must be a non-negative integer`);
+            }
+            return value;
+          });
+          const totalSize = normalizedDims.reduce((acc, value) => acc * Math.max(1, value), 1);
+          if (totalSize > 100000) {
+            throw new Error("array is too large");
+          }
+          const buildArray = (level, localIndices) => {
+            if (level >= normalizedDims.length) {
+              const localScope = { ...scope };
+              localIndices.forEach((value, idx) => {
+                localScope[`$${idx}`] = value;
+              });
+              return evaluateAstNode(node.args[1], localScope);
+            }
+            const size = normalizedDims[level];
+            return Array.from({ length: size }, (_, idx) => buildArray(level + 1, [...localIndices, idx]));
+          };
+          return buildArray(0, []);
+        }
         if (!Object.prototype.hasOwnProperty.call(scope, node.name)) {
           throw new ReferenceError(`${node.name} is not defined`);
         }
