@@ -489,11 +489,13 @@
       hasIntegral: containsIdentifierToken(key, "integral"),
       ast: null,
       syntaxErrorMessage: null,
+      integralArgAsts: [],
     };
 
     try {
       const normalizedSource = rewriteThisAlias(rewriteConditionalIfCalls(key));
       compiled.ast = parseExpressionAst(normalizedSource);
+      compiled.integralArgAsts = collectIntegralArgAstsFromNode(compiled.ast, []);
     } catch (err) {
       if (err && err.name === "SyntaxError") {
         compiled.syntaxErrorMessage = String(err.message || "");
@@ -503,6 +505,31 @@
     }
 
     return rememberCompiledExpression(key, compiled);
+  }
+
+  function getPureIntegralArgAst(compiled) {
+    const ast = compiled?.ast;
+    if (!ast || ast.type !== "call" || ast.name !== "integral" || ast.args.length !== 1) {
+      return null;
+    }
+    return ast.args[0];
+  }
+
+  function collectIntegralArgAstsFromNode(node, out = []) {
+    if (!node || typeof node !== "object") {
+      return out;
+    }
+    if (node.type === "call" && node.name === "integral" && node.args.length === 1) {
+      out.push(node.args[0]);
+    }
+    Object.values(node).forEach((value) => {
+      if (Array.isArray(value)) {
+        value.forEach((item) => collectIntegralArgAstsFromNode(item, out));
+      } else if (value && typeof value === "object") {
+        collectIntegralArgAstsFromNode(value, out);
+      }
+    });
+    return out;
   }
 
   function vectorizedBinaryOperation(left, right, scalarFn) {
@@ -899,23 +926,23 @@
     return ast;
   }
 
-  function evaluateAstNode(node, scope) {
+  function evaluateAstNode(node, scope, hooks = null) {
     switch (node.type) {
       case "literal":
         return node.value;
       case "array":
-        return node.elements.map((item) => evaluateAstNode(item, scope));
+        return node.elements.map((item) => evaluateAstNode(item, scope, hooks));
       case "identifier":
         if (!Object.prototype.hasOwnProperty.call(scope, node.name)) {
           throw new ReferenceError(`${node.name} is not defined`);
         }
         return scope[node.name];
       case "index": {
-        const target = evaluateAstNode(node.target, scope);
+        const target = evaluateAstNode(node.target, scope, hooks);
         if (!Array.isArray(target)) {
           throw new Error("indexing requires an array or matrix");
         }
-        let idx = Number(evaluateAstNode(node.index, scope));
+        let idx = Number(evaluateAstNode(node.index, scope, hooks));
         if (!Number.isInteger(idx)) {
           throw new Error("array index must be an integer");
         }
@@ -928,21 +955,21 @@
         return target[idx];
       }
       case "slice": {
-        const target = evaluateAstNode(node.target, scope);
+        const target = evaluateAstNode(node.target, scope, hooks);
         if (!Array.isArray(target)) {
           throw new Error("slicing requires an array or matrix");
         }
-        const step = node.step == null ? 1 : Number(evaluateAstNode(node.step, scope));
+        const step = node.step == null ? 1 : Number(evaluateAstNode(node.step, scope, hooks));
         if (!Number.isInteger(step) || step === 0) {
           throw new Error("slice step must be a non-zero integer");
         }
         const size = target.length;
         const start = step > 0
-          ? normalizeSliceIndex(node.start == null ? null : evaluateAstNode(node.start, scope), size, 0)
-          : normalizeSliceIndex(node.start == null ? null : evaluateAstNode(node.start, scope), size, size - 1);
+          ? normalizeSliceIndex(node.start == null ? null : evaluateAstNode(node.start, scope, hooks), size, 0)
+          : normalizeSliceIndex(node.start == null ? null : evaluateAstNode(node.start, scope, hooks), size, size - 1);
         const end = step > 0
-          ? normalizeSliceIndex(node.end == null ? null : evaluateAstNode(node.end, scope), size, size)
-          : normalizeSliceIndex(node.end == null ? null : evaluateAstNode(node.end, scope), size, -1);
+          ? normalizeSliceIndex(node.end == null ? null : evaluateAstNode(node.end, scope, hooks), size, size)
+          : normalizeSliceIndex(node.end == null ? null : evaluateAstNode(node.end, scope, hooks), size, -1);
         const out = [];
         if (step > 0) {
           for (let idx = Math.max(0, start); idx < Math.min(size, end); idx += step) {
@@ -956,11 +983,14 @@
         return out;
       }
       case "call": {
+        if (node.name === "integral" && hooks?.onIntegralCall) {
+          return hooks.onIntegralCall(node, scope);
+        }
         if (node.name === "array") {
           if (node.args.length !== 2) {
             throw new Error("array expects exactly 2 arguments");
           }
-          const dimsValue = evaluateAstNode(node.args[0], scope);
+          const dimsValue = evaluateAstNode(node.args[0], scope, hooks);
           const dims = Array.isArray(dimsValue) ? dimsValue.slice() : [dimsValue];
           if (!dims.length) {
             throw new Error("array requires at least one dimension");
@@ -982,7 +1012,7 @@
               localIndices.forEach((value, idx) => {
                 localScope[`$${idx}`] = value;
               });
-              return evaluateAstNode(node.args[1], localScope);
+              return evaluateAstNode(node.args[1], localScope, hooks);
             }
             const size = normalizedDims[level];
             return Array.from({ length: size }, (_, idx) => buildArray(level + 1, [...localIndices, idx]));
@@ -996,11 +1026,11 @@
         if (typeof fn !== "function") {
           throw new Error(`${node.name} is not callable`);
         }
-        const args = node.args.map((arg) => evaluateAstNode(arg, scope));
+        const args = node.args.map((arg) => evaluateAstNode(arg, scope, hooks));
         return fn(...args);
       }
       case "unary": {
-        const value = evaluateAstNode(node.argument, scope);
+        const value = evaluateAstNode(node.argument, scope, hooks);
         if (node.op === "+") {
           return vectorizedUnaryOperation(value, (item) => +item);
         }
@@ -1013,8 +1043,8 @@
         throw new Error(`Unsupported operator ${node.op}`);
       }
       case "binary": {
-        const left = evaluateAstNode(node.left, scope);
-        const right = evaluateAstNode(node.right, scope);
+        const left = evaluateAstNode(node.left, scope, hooks);
+        const right = evaluateAstNode(node.right, scope, hooks);
         switch (node.op) {
           case "+":
             return vectorizedBinaryOperation(left, right, (a, b) => a + b);
@@ -1076,6 +1106,155 @@
     let raw;
     try {
       raw = evaluateAstNode(compiled.ast, { ...MATH_SCOPE, ...context });
+    } catch (err) {
+      if (err && err.name === "ReferenceError") {
+        return { ok: false, reason: "reference", message: String(err.message || "") };
+      }
+      if (err && err.name === "SyntaxError") {
+        return { ok: false, reason: "syntax", message: String(err.message || "") };
+      }
+      return { ok: false, reason: "runtime", message: String(err?.message || "") };
+    }
+
+    const normalized = coerceBooleanToNumber(raw);
+    const validated = validateComputedValue(normalized);
+    if (!validated.ok) {
+      return { ok: false, reason: "type" };
+    }
+    return { ok: true, kind: validated.kind, value: validated.value };
+  }
+
+  function analyzeStateTransitionExpression(expression) {
+    const source = String(expression ?? "").trim();
+    if (!source) {
+      return { ok: true, pureIntegral: false, usesIntegral: false, integralCount: 0 };
+    }
+    const compiled = getCompiledExpression(source);
+    if (compiled.syntaxErrorMessage) {
+      return {
+        ok: false,
+        reason: "syntax",
+        message: compiled.syntaxErrorMessage,
+        pureIntegral: false,
+        usesIntegral: compiled.hasIntegral,
+        integralCount: Array.isArray(compiled.integralArgAsts) ? compiled.integralArgAsts.length : 0,
+      };
+    }
+    return {
+      ok: true,
+      pureIntegral: Boolean(getPureIntegralArgAst(compiled)),
+      usesIntegral: compiled.hasIntegral,
+      integralCount: Array.isArray(compiled.integralArgAsts) ? compiled.integralArgAsts.length : 0,
+    };
+  }
+
+  function evaluateIntegralDerivativeExpression(expression, context = {}, options = {}) {
+    const source = String(expression ?? "").trim();
+    if (!source) {
+      return { ok: false, reason: "runtime", message: "empty integral expression" };
+    }
+    const compiled = getCompiledExpression(source);
+    if (!options.allowThisAlias && compiled.hasThisAlias) {
+      return { ok: false, reason: "runtime", message: "'this' is only available in state transitions" };
+    }
+    const derivativeAst = getPureIntegralArgAst(compiled);
+    if (!derivativeAst) {
+      return { ok: false, reason: "runtime", message: "integral derivative is unavailable" };
+    }
+    if (compiled.syntaxErrorMessage) {
+      return { ok: false, reason: "syntax", message: compiled.syntaxErrorMessage };
+    }
+
+    let raw;
+    try {
+      raw = evaluateAstNode(derivativeAst, { ...MATH_SCOPE, integral: unavailableIntegral, ...context });
+    } catch (err) {
+      if (err && err.name === "ReferenceError") {
+        return { ok: false, reason: "reference", message: String(err.message || "") };
+      }
+      if (err && err.name === "SyntaxError") {
+        return { ok: false, reason: "syntax", message: String(err.message || "") };
+      }
+      return { ok: false, reason: "runtime", message: String(err?.message || "") };
+    }
+
+    const normalized = coerceBooleanToNumber(raw);
+    const validated = validateComputedValue(normalized);
+    if (!validated.ok) {
+      return { ok: false, reason: "type" };
+    }
+    return { ok: true, kind: validated.kind, value: validated.value };
+  }
+
+  function evaluateIntegralDerivativeList(expression, context = {}, options = {}) {
+    const source = String(expression ?? "").trim();
+    if (!source) {
+      return { ok: true, kind: "array", value: [] };
+    }
+    const compiled = getCompiledExpression(source);
+    if (!options.allowThisAlias && compiled.hasThisAlias) {
+      return { ok: false, reason: "runtime", message: "'this' is only available in state transitions" };
+    }
+    if (compiled.syntaxErrorMessage) {
+      return { ok: false, reason: "syntax", message: compiled.syntaxErrorMessage };
+    }
+
+    const values = [];
+    try {
+      for (const derivativeAst of compiled.integralArgAsts || []) {
+        const raw = evaluateAstNode(derivativeAst, { ...MATH_SCOPE, integral: unavailableIntegral, ...context });
+        const normalized = coerceBooleanToNumber(raw);
+        const validated = validateComputedValue(normalized);
+        if (!validated.ok) {
+          return { ok: false, reason: "type" };
+        }
+        values.push(validated.value);
+      }
+    } catch (err) {
+      if (err && err.name === "ReferenceError") {
+        return { ok: false, reason: "reference", message: String(err.message || "") };
+      }
+      if (err && err.name === "SyntaxError") {
+        return { ok: false, reason: "syntax", message: String(err.message || "") };
+      }
+      return { ok: false, reason: "runtime", message: String(err?.message || "") };
+    }
+    return { ok: true, kind: "array", value: values };
+  }
+
+  function evaluateStateTransitionExpressionWithIntegralValues(expression, context = {}, integralValues = [], options = {}) {
+    const source = String(expression ?? "").trim();
+    if (!source) {
+      return { ok: true, kind: "empty", value: null };
+    }
+    const compiled = getCompiledExpression(source);
+    if (!options.allowThisAlias && compiled.hasThisAlias) {
+      return { ok: false, reason: "runtime", message: "'this' is only available in state transitions" };
+    }
+    if (compiled.syntaxErrorMessage) {
+      return { ok: false, reason: "syntax", message: compiled.syntaxErrorMessage };
+    }
+
+    let integralIndex = 0;
+    let raw;
+    try {
+      raw = evaluateAstNode(
+        compiled.ast,
+        { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
+        {
+          onIntegralCall(callNode) {
+            if (callNode.args.length !== 1) {
+              throw new Error("integral expects exactly 1 argument");
+            }
+            if (integralIndex >= integralValues.length) {
+              throw new Error("integral value is unavailable");
+            }
+            const out = integralValues[integralIndex];
+            integralIndex += 1;
+            return out;
+          },
+        },
+      );
     } catch (err) {
       if (err && err.name === "ReferenceError") {
         return { ok: false, reason: "reference", message: String(err.message || "") };
@@ -1275,10 +1454,18 @@
     };
   }
 
-  function evaluateStatefulGraphStep(nodes, edges, globals = {}, plan = null) {
+  function evaluateStatefulGraphStep(nodes, edges, globals = {}, plan = null, options = {}) {
     const runtimePlan = plan || prepareStatefulExecutionPlan(nodes, edges);
     const nodeById = runtimePlan.nodeById;
     const incoming = runtimePlan.incoming;
+    const stateValueOverrides = options?.stateValueOverrides instanceof Map ? options.stateValueOverrides : null;
+    const derivativeStateNodeIds = options?.derivativeStateNodeIds instanceof Set ? options.derivativeStateNodeIds : null;
+    const resolvedStateValue = (node) => {
+      if (stateValueOverrides && stateValueOverrides.has(node.id)) {
+        return stateValueOverrides.get(node.id);
+      }
+      return node.computedValue;
+    };
     const fixedNodes = nodes.filter((node) => !isStateNode(node) && hasExternalValue(node));
     const parameterNodes = nodes.filter((node) => isParameterNode(node) && !hasExternalValue(node));
     const algebraicNodes = nodes.filter((node) => !isStateNode(node) && !isParameterNode(node) && !hasExternalValue(node));
@@ -1326,7 +1513,7 @@
             return;
           }
           if (isStateNode(fromNode)) {
-            context[fromNode.name] = fromNode.computedValue;
+            context[fromNode.name] = resolvedStateValue(fromNode);
             return;
           }
           if (hasExternalValue(fromNode)) {
@@ -1374,7 +1561,7 @@
     stateNodes.forEach((node) => {
       const context = {
         ...globals,
-        __self: node.computedValue,
+        __self: resolvedStateValue(node),
         ...ensureNodePropertyAccess(node),
         integral: createStateIntegral(node, globals),
       };
@@ -1390,7 +1577,7 @@
           return;
         }
         if (isStateNode(fromNode)) {
-          context[fromNode.name] = fromNode.computedValue;
+          context[fromNode.name] = resolvedStateValue(fromNode);
           return;
         }
         if (hasExternalValue(fromNode)) {
@@ -1421,6 +1608,12 @@
 
       if (!dependenciesReady) {
         stateTransitionResults.set(node.id, { ok: false, reason: "dependency" });
+        return;
+      }
+      if (derivativeStateNodeIds && derivativeStateNodeIds.has(node.id)) {
+        stateTransitionResults.set(node.id, evaluateIntegralDerivativeList(node.valueExpression, context, {
+          allowThisAlias: true,
+        }));
         return;
       }
       stateTransitionResults.set(node.id, evaluateValueExpression(node.valueExpression, context, {
@@ -1465,6 +1658,10 @@
     validateExpressionSyntax,
     formatComputedValue,
     replaceIdentifierInExpression,
+    analyzeStateTransitionExpression,
+    evaluateIntegralDerivativeExpression,
+    evaluateIntegralDerivativeList,
+    evaluateStateTransitionExpressionWithIntegralValues,
     evaluateGraphExpressions,
     prepareStatefulExecutionPlan,
     evaluateStatefulGraphStep,

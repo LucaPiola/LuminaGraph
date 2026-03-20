@@ -13,7 +13,9 @@ Al momento implementati (senza librerie esterne!):
 * gestione dei nodi algebrici, di stato, parametri, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale) a valori scalari; controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo del numero di cifre decimali visualizzate;
 * gestione di esecuzione completa, passo-passo, temporizzata;
 * gestione opzionale di blocco di esecuzione ed evidenziazione per nodi non definiti;
-* varie funzioni definite; mapping da valori booleani a valori numerici e funzione `if`; funzione `integral`, per ora solo per algoritmo di integrazione di Eulero; alcune funzioni per distribuzioni di probabilità;
+* varie funzioni definite; mapping da valori booleani a valori numerici e funzione `if`;
+* funzione `integral`, con scelta dell'algoritmo di integrazione, se Eulero o RK4;
+* alcune funzioni per distribuzioni di probabilità;
 * generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione di vettori con la sintassi di Python, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari, per esempio `[1:5]*2`;
 * funzione `array` per la costruzione dinamica di vettori, matrici, ...;
 * gestione di proprietà custom per il modello e i singoli nodi e funzioni `getModelProperty`/`getProperty` e `setModelProperty`/`setProperty`;
@@ -31,7 +33,6 @@ Al momento non implementati:
 * estensioni per funzioni a valori non scalari (reduction? array? ...);
 * altre funzioni;
 * nodi di stato con output;
-* algoritmi di integrazione espliciti;
 * stati iniziali senza costanti esplicite;
 * sottomodelli;
 * interfaccia a tab per più grafi;

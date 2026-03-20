@@ -369,7 +369,7 @@ body {
   right: 0;
   top: 0;
   bottom: 0;
-  width: 320px;
+  width: 300px;
   min-width: 0;
   border-left: 1px solid var(--line);
   padding: 14px;
@@ -400,20 +400,25 @@ h4 {
 
 #globalPanel {
   margin-top: 10px;
-  padding: 8px;
+  padding: 4px;
+  display: grid;
+  gap: 4px;
+}
+
+#globalPanel.hidden {
+  display: none;
 }
 
 .row2-exec {
-  margin-top: 10px;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 4px;
 }
 
 .time-row3 {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
+  gap: 4px;
 }
 
 .time-row3 label {
@@ -421,10 +426,9 @@ h4 {
 }
 
 .row3-exec {
-  margin-top: 10px;
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
+  gap: 4px;
 }
 
 .compact-field {
@@ -439,70 +443,128 @@ h4 {
 }
 
 .run-icons-row {
-  margin-top: 10px;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  gap: 4px;
 }
 
-.model-compact-row {
-  margin-top: 8px;
+.model-section {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid #dbe4ec;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 #globalPanel h3 {
-  margin-bottom: 8px;
+  margin: 0;
+  font-size: 0.95rem;
 }
 
 #globalPanel h4 {
-  margin-top: 10px;
-  margin-bottom: 6px;
+  margin: 0;
+  font-size: 0.84rem;
 }
 
 #globalPanel label {
-  margin-top: 6px;
-  margin-bottom: 3px;
+  margin: 0 0 2px;
+  font-size: 0.78rem;
 }
 
 #globalPanel input,
 #globalPanel select {
-  padding: 5px 7px;
+  padding: 3px 5px;
+  min-height: 26px;
+  font-size: 0.88rem;
 }
 
-#globalPanel .run-icons-row,
-#globalPanel .row2-exec {
-  margin-top: 8px;
+.model-compact-row {
+  grid-template-columns: 1fr 1fr;
+  align-items: end;
 }
 
-#globalPanel .compact-check {
-  margin-top: 6px;
-  padding: 2px 0;
-  font-size: 0.84rem;
-  line-height: 1.2;
+.model-meta-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  align-items: end;
 }
 
-#globalPanel .compact-check span {
+.model-current-inline {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+
+.model-current-inline label {
+  margin: 0;
   white-space: nowrap;
 }
 
+.model-properties-section {
+  align-content: start;
+}
+
+#globalPanel .compact-check {
+  margin: 0;
+  min-height: 100%;
+  padding: 1px 0;
+  font-size: 0.76rem;
+  line-height: 1.1;
+}
+
+#globalPanel .compact-check span {
+  white-space: normal;
+}
+
 #globalPanel .small-btn {
-  margin-top: 8px;
+  margin-top: 0;
+  padding: 4px 6px;
+  font-size: 0.76rem;
+  line-height: 1.1;
 }
 
 #globalPanel .props-list {
-  gap: 6px;
+  gap: 4px;
 }
 
 #globalPanel .value-output {
-  margin: 3px 0 8px;
-  min-height: 30px;
+  margin: 0;
+  min-height: 24px;
+  padding: 3px 5px;
+  text-align: right;
+  font-size: 0.84rem;
 }
 
 .icon-btn {
   margin-top: 0;
-  padding: 6px 0;
+  padding: 4px 0;
   line-height: 1;
   text-align: center;
-  font-size: 1rem;
+  font-size: 0.88rem;
+}
+
+@media (max-width: 980px) {
+  .row3-exec {
+    grid-template-columns: 1fr;
+  }
+
+  .model-compact-row {
+    grid-template-columns: 1fr;
+  }
+
+  .model-current-inline {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .model-current-inline label,
+  #globalPanel .value-output {
+    text-align: left;
+  }
 }
 
 .hidden {
@@ -578,6 +640,58 @@ button:disabled {
   margin-top: 10px;
 }
 
+.panel-section {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #dbe4ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.compact-panel-section {
+  gap: 4px;
+  padding: 6px;
+}
+
+#nodePanel,
+#widgetPanel {
+  display: grid;
+  gap: 6px;
+}
+
+#nodePanel.hidden,
+#widgetPanel.hidden {
+  display: none;
+}
+
+#nodePanel h3,
+#widgetPanel h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+#nodePanel h4,
+#widgetPanel h4 {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+#nodePanel label,
+#widgetPanel label {
+  margin: 0 0 2px;
+  font-size: 0.78rem;
+}
+
+#nodePanel input,
+#nodePanel select,
+#widgetPanel input,
+#widgetPanel select {
+  padding: 3px 5px;
+  min-height: 26px;
+  font-size: 0.88rem;
+}
+
 .expr-inline-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -592,7 +706,9 @@ button:disabled {
 .expr-edit-btn {
   margin-top: 0;
   white-space: nowrap;
-  padding: 6px 10px;
+  padding: 4px 7px;
+  font-size: 0.76rem;
+  line-height: 1.1;
 }
 
 .expr-status {
@@ -653,6 +769,16 @@ button:disabled {
   background: #fff4f6;
 }
 
+.empty-props {
+  padding: 5px 6px;
+  border: 1px dashed #c7d5e2;
+  border-radius: 6px;
+  background: #f8fbfe;
+  color: #617689;
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
 .node-type-row {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -664,13 +790,103 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 0;
 }
 
 .node-type-row .menu-check {
   margin: 0;
-  padding: 2px 0;
+  padding: 0;
   white-space: nowrap;
+}
+
+.widget-config-grid {
+  display: grid;
+  gap: 6px;
+}
+
+#nodePanel .small-btn,
+#widgetPanel .small-btn {
+  margin-top: 0;
+  padding: 4px 6px;
+  font-size: 0.76rem;
+  line-height: 1.1;
+}
+
+#nodePanel .props-list,
+#widgetPanel .props-list {
+  gap: 4px;
+}
+
+#widgetPanel .menu-check.compact-bool {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  font-size: 0.75rem;
+  line-height: 1.1;
+}
+
+#widgetPanel .menu-check.compact-bool input {
+  width: 12px;
+  height: 12px;
+  min-height: 12px;
+}
+
+#widgetPanel .menu-check.compact-bool span {
+  white-space: nowrap;
+}
+
+.chart-pair-row {
+  display: grid;
+  gap: 4px;
+}
+
+.chart-pair-list {
+  display: grid;
+  gap: 4px;
+}
+
+.chart-pair-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+}
+
+.chart-pair-select-btn,
+.chart-pair-delete-btn {
+  margin-top: 0;
+  padding: 4px 6px;
+  font-size: 0.76rem;
+  line-height: 1.1;
+}
+
+.chart-pair-select-btn {
+  text-align: left;
+}
+
+.chart-pair-select-btn.active {
+  background: #d6ebfb;
+  border-color: #7fb0d6;
+}
+
+.chart-pair-top {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.chart-pair-bottom {
+  display: grid;
+  grid-template-columns: auto auto 1fr 84px;
+  gap: 4px;
+  align-items: center;
+}
+
+.chart-pair-bottom input[type="color"] {
+  width: 32px;
+  min-width: 32px;
+  padding: 2px;
 }
 
 .edge-line {
