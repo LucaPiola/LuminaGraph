@@ -12,11 +12,11 @@
         <div class="menu-root">
           <button class="menu-title" type="button" data-menu="fileMenu" data-i18n="menu.file" data-title-i18n="tooltip.menu.file">File</button>
           <div class="menu-panel" id="fileMenu">
-            <button id="newGraphBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.new"><span data-i18n="menu.file.new">Nuovo grafo</span><span class="menu-shortcut">Ctrl+N</span></button>
+            <button id="newGraphBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.new"><span data-i18n="menu.file.new">Nuovo modello</span><span class="menu-shortcut">Alt+N</span></button>
             <hr class="menu-sep" />
             <button id="saveJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.save"><span data-i18n="menu.file.save">Salva</span><span class="menu-shortcut">Ctrl+S</span></button>
             <button id="saveAsJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.saveAs"><span data-i18n="menu.file.saveAs">Salva con nome...</span><span class="menu-shortcut">Ctrl+Shift+S</span></button>
-            <button id="loadJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.load"><span data-i18n="menu.file.load">Carica JSON...</span><span class="menu-shortcut">Ctrl+O</span></button>
+            <button id="loadJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.load"><span data-i18n="menu.file.load">Carica modello...</span><span class="menu-shortcut">Alt+O</span></button>
             <input id="loadJsonInput" type="file" accept="application/json" class="hidden-file" />
           </div>
         </div>
@@ -42,6 +42,7 @@
             <button id="addRectNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.rect"><span data-i18n="menu.insert.rect">Variabile di stato</span><span class="menu-shortcut">Alt+1</span></button>
             <button id="addEllipseNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.ellipse"><span data-i18n="menu.insert.ellipse">Variabile algebrica</span><span class="menu-shortcut">Alt+2</span></button>
             <button id="addDiamondNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.diamond"><span data-i18n="menu.insert.diamond">Parametro</span><span class="menu-shortcut">Alt+3</span></button>
+            <button id="addSubmodelNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.submodel"><span data-i18n="menu.insert.submodel">Sottomodello</span><span class="menu-shortcut">Alt+4</span></button>
             <hr class="menu-sep" />
             <button id="addSliderWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.sliderWidget" data-title-i18n="tooltip.menu.insert.slider">Slider</button>
             <hr class="menu-sep" />
@@ -95,8 +96,9 @@
           </div>
         </div>
 
+        <button id="exitSubmodelBtn" class="menu-nav-btn hidden" type="button" data-i18n="action.exitSubmodel">Torna su</button>
+        <div class="menu-breadcrumb hidden" id="modelBreadcrumbText"></div>
         <div class="menu-file-status" id="fileStatusText">File: (non salvato)</div>
-        <div class="menu-time" id="menuTimeText">t = 0</div>
         <div class="menu-status" id="statusText" data-i18n="status.ready">Pronto.</div>
       </header>
 
@@ -189,6 +191,7 @@
                   <option value="rect" data-i18n="shape.rect">Variabile di stato</option>
                   <option value="ellipse" data-i18n="shape.ellipse">Variabile algebrica</option>
                   <option value="diamond" data-i18n="shape.diamond">parametro</option>
+                  <option value="submodel" data-i18n="shape.submodel">sottomodello</option>
                 </select>
 
                 <div class="node-flags-col">
@@ -206,15 +209,24 @@
             </div>
 
             <div class="panel-section compact-panel-section">
+              <label id="nodeModelPathLabel" for="nodeModelPathInput" class="hidden" data-i18n="label.submodelPath" data-title-i18n="tooltip.node.submodelPath">File sottomodello</label>
+              <input id="nodeModelPathInput" class="hidden display-only-input" type="text" readonly tabindex="-1" data-title-i18n="tooltip.node.submodelPath" />
+              <div id="submodelActionRow" class="row2-exec hidden">
+                <button id="loadSubmodelBtn" class="small-btn" type="button" data-i18n="action.loadSubmodel" data-title-i18n="tooltip.node.loadSubmodel">Apri</button>
+                <button id="showSubmodelBtn" class="small-btn" type="button" data-i18n="action.showSubmodel" data-title-i18n="tooltip.node.showSubmodel">Mostra</button>
+              </div>
+              <div id="nodeSubmodelInfo" class="expr-status hidden"></div>
+              <div id="nodeSubmodelBindings" class="submodel-bindings hidden"></div>
+
               <label id="nodeValueExprLabel" for="nodeValueExprInput" data-i18n="label.behaviorFunction" data-title-i18n="tooltip.node.expressionBehavior">Funzione comportamento</label>
-              <div class="expr-inline-row">
+              <div id="nodeValueExprRow" class="expr-inline-row">
                 <input id="nodeValueExprInput" type="text" data-title-i18n="tooltip.node.expressionBehavior" />
                 <button id="editNodeValueExprBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression">Modifica...</button>
               </div>
               <div id="nodeValueExprStatus" class="expr-status hidden"></div>
 
               <label id="nodeInitialStateLabel" for="nodeInitialStateInput" data-i18n="label.initialState" data-title-i18n="tooltip.node.initialState">Stato iniziale</label>
-              <div class="expr-inline-row">
+              <div id="nodeInitialStateRow" class="expr-inline-row">
                 <input id="nodeInitialStateInput" type="text" data-title-i18n="tooltip.node.initialState" />
                 <button id="editNodeInitialStateBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression">Modifica...</button>
               </div>

@@ -3,7 +3,7 @@ const graphViewport = document.getElementById("graphViewport");
 const sidebar = document.getElementById("sidebar");
 const statusText = document.getElementById("statusText");
 const fileStatusText = document.getElementById("fileStatusText");
-const menuTimeText = document.getElementById("menuTimeText");
+const modelBreadcrumbText = document.getElementById("modelBreadcrumbText");
 const topMenuBar = document.getElementById("topMenuBar");
 const menuRoots = Array.from(document.querySelectorAll(".menu-root"));
 const menuTitles = Array.from(document.querySelectorAll(".menu-title"));
@@ -11,6 +11,7 @@ const menuCommands = Array.from(document.querySelectorAll(".menu-command"));
 const addRectNodeItem = document.getElementById("addRectNodeItem");
 const addEllipseNodeItem = document.getElementById("addEllipseNodeItem");
 const addDiamondNodeItem = document.getElementById("addDiamondNodeItem");
+const addSubmodelNodeItem = document.getElementById("addSubmodelNodeItem");
 const addSliderWidgetItem = document.getElementById("addSliderWidgetItem");
 const addTableWidgetItem = document.getElementById("addTableWidgetItem");
 const addXYChartWidgetItem = document.getElementById("addXYChartWidgetItem");
@@ -71,10 +72,19 @@ const nodeInputInput = document.getElementById("nodeInputInput");
 const nodeInputLabel = nodeInputInput?.closest("label");
 const nodeOutputInput = document.getElementById("nodeOutputInput");
 const nodeValueExprLabel = document.getElementById("nodeValueExprLabel");
+const nodeValueExprRow = document.getElementById("nodeValueExprRow");
 const nodeValueExprInput = document.getElementById("nodeValueExprInput");
 const editNodeValueExprBtn = document.getElementById("editNodeValueExprBtn");
 const nodeValueExprStatus = document.getElementById("nodeValueExprStatus");
+const nodeModelPathLabel = document.getElementById("nodeModelPathLabel");
+const nodeModelPathInput = document.getElementById("nodeModelPathInput");
+const submodelActionRow = document.getElementById("submodelActionRow");
+const loadSubmodelBtn = document.getElementById("loadSubmodelBtn");
+const showSubmodelBtn = document.getElementById("showSubmodelBtn");
+const nodeSubmodelInfo = document.getElementById("nodeSubmodelInfo");
+const nodeSubmodelBindings = document.getElementById("nodeSubmodelBindings");
 const nodeInitialStateLabel = document.getElementById("nodeInitialStateLabel");
+const nodeInitialStateRow = document.getElementById("nodeInitialStateRow");
 const nodeInitialStateInput = document.getElementById("nodeInitialStateInput");
 const editNodeInitialStateBtn = document.getElementById("editNodeInitialStateBtn");
 const nodeInitialStateStatus = document.getElementById("nodeInitialStateStatus");
@@ -98,6 +108,7 @@ const expressionEditorCloseBtn = document.getElementById("expressionEditorCloseB
 const expressionEditorCancelBtn = document.getElementById("expressionEditorCancelBtn");
 const expressionEditorApplyBtn = document.getElementById("expressionEditorApplyBtn");
 const functionsHelpBtn = document.getElementById("functionsHelpBtn");
+const exitSubmodelBtn = document.getElementById("exitSubmodelBtn");
 const functionsHelpModal = document.getElementById("functionsHelpModal");
 const functionsHelpCloseBtn = document.getElementById("functionsHelpCloseBtn");
 const functionsHelpDismissBtn = document.getElementById("functionsHelpDismissBtn");
@@ -121,6 +132,12 @@ let i18n = {};
 let lastSavedSnapshot = "";
 let currentFileHandle = null;
 let currentFileName = "";
+let currentModelDirectoryHandle = null;
+const modelContextStack = [];
+const submodelTemplateCache = new Map();
+const submodelFileHandleCache = new Map();
+const submodelSourceCache = new Map();
+const SUBMODEL_DEFERRED_RESOLUTION = "__submodel_deferred_resolution__";
 let dirtySinceLastSave = false;
 let fileStatusRefreshTimer = null;
 
@@ -159,6 +176,8 @@ const ui = {
   zoom: 1,
   nodeNameEditStart: null,
   timedRunHandle: null,
+  timedStepRunning: false,
+  submodelsPrepared: false,
   widgetDrag: null,
   widgetResize: null,
   sliderInteraction: null,
@@ -568,6 +587,16 @@ function validateNodeDefinition(node) {
   const valueExpr = String(node.valueExpression ?? "");
   const initialExpr = String(node.initialStateExpression ?? "");
 
+  if (isSubmodelNode(node)) {
+    if (!String(node.modelPath ?? "").trim()) {
+      return { ok: false, reason: "missingSubmodelPath" };
+    }
+    if (String(node.submodelError ?? "").trim()) {
+      return { ok: false, reason: "invalidSubmodelPath", message: String(node.submodelError ?? "") };
+    }
+    return { ok: true };
+  }
+
   if (isStateNode(node)) {
     if (!valueExpr.trim()) {
       return { ok: false, reason: "missingTransition" };
@@ -632,6 +661,12 @@ function nodeDefinitionIssueText(issue) {
   }
   if (issue.reason === "invalidInitialState") {
     return t("error.nodeDefinition.invalidInitialState", { reason: localizeExpressionErrorMessage(issue.message || "") });
+  }
+  if (issue.reason === "missingSubmodelPath") {
+    return t("error.nodeDefinition.missingSubmodelPath");
+  }
+  if (issue.reason === "invalidSubmodelPath") {
+    return t("error.nodeDefinition.invalidSubmodelPath", { reason: issue.message || "" });
   }
   return t("error.evalReason.runtime");
 }
@@ -897,6 +932,21 @@ function expressionCatalogForEditor() {
           insertText: depNode.name,
           cursorOffset: depNode.name.length,
         });
+        if (isSubmodelNode(depNode)) {
+          const outputs = Array.isArray(depNode.interfaceCache?.outputs)
+            ? depNode.interfaceCache.outputs.map((value) => String(value).trim()).filter(Boolean)
+            : [];
+          outputs.forEach((outputName) => {
+            const qualifiedName = `${depNode.name}.${outputName}`;
+            pushEntry(qualifiedName, {
+              kind: "node",
+              signature: qualifiedName,
+              description: t("text.submodelOutputEntry", { node: depNode.name, output: outputName }),
+              insertText: qualifiedName,
+              cursorOffset: qualifiedName.length,
+            });
+          });
+        }
       });
   }
 
@@ -1202,8 +1252,36 @@ function openExpressionEditor(fieldKey) {
   expressionEditorTextarea.select();
 }
 
+function openCustomExpressionEditor(title, initialValue, onApply) {
+  if (!expressionEditorModal || !expressionEditorTextarea || !expressionEditorTitle) {
+    return;
+  }
+  ui.expressionEditor = {
+    nodeId: null,
+    fieldKey: "__custom__",
+    syntaxOk: true,
+    baseTitle: String(title ?? ""),
+    initialValue: String(initialValue ?? ""),
+    onApplyCustom: typeof onApply === "function" ? onApply : null,
+  };
+  expressionEditorTitle.textContent = String(title ?? "");
+  expressionEditorTextarea.value = String(initialValue ?? "");
+  expressionEditorModal.classList.remove("hidden");
+  refreshExpressionEditorValidation();
+  expressionEditorTextarea.focus();
+  expressionEditorTextarea.select();
+}
+
 function applyExpressionEditor() {
   if (!ui.expressionEditor || !ui.expressionEditor.syntaxOk) {
+    return;
+  }
+  if (ui.expressionEditor.fieldKey === "__custom__") {
+    const nextValue = expressionEditorTextarea ? expressionEditorTextarea.value : "";
+    if (typeof ui.expressionEditor.onApplyCustom === "function") {
+      ui.expressionEditor.onApplyCustom(nextValue);
+    }
+    closeExpressionEditor();
     return;
   }
   const node = getNodeById(ui.expressionEditor.nodeId);
@@ -1249,6 +1327,19 @@ function applyI18nToDom() {
     setTooltipText(el, t(key));
   });
   updateFileStatusLabel(dirtySinceLastSave);
+}
+
+function applyI18nTooltipsToSubtree(root) {
+  if (!root || !(root instanceof Element)) {
+    return;
+  }
+  root.querySelectorAll("[data-title-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-title-i18n");
+    if (!key) {
+      return;
+    }
+    setTooltipText(el, t(key));
+  });
 }
 
 async function loadI18n() {
@@ -1304,6 +1395,22 @@ function updateFileStatusLabel(dirty = dirtySinceLastSave) {
   }
 }
 
+function updateModelBreadcrumb() {
+  if (!modelBreadcrumbText || !exitSubmodelBtn) {
+    return;
+  }
+  if (modelContextStack.length === 0) {
+    modelBreadcrumbText.textContent = "";
+    modelBreadcrumbText.classList.add("hidden");
+    exitSubmodelBtn.classList.add("hidden");
+    return;
+  }
+  const segments = [t("text.mainModel"), ...modelContextStack.map((entry) => entry.nodeName)];
+  modelBreadcrumbText.textContent = segments.join(" / ");
+  modelBreadcrumbText.classList.remove("hidden");
+  exitSubmodelBtn.classList.remove("hidden");
+}
+
 function scheduleFileStatusRefresh() {
   if (fileStatusRefreshTimer != null) {
     return;
@@ -1347,6 +1454,13 @@ function formatComputedValue(value) {
   }
   if (Array.isArray(value)) {
     return `[${value.map((item) => formatComputedValue(item)).join(", ")}]`;
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch (_err) {
+      return String(value);
+    }
   }
   return String(value);
 }
@@ -1446,6 +1560,10 @@ function isAlgebraicNode(node) {
   return node?.shape === "ellipse";
 }
 
+function isSubmodelNode(node) {
+  return node?.shape === "submodel";
+}
+
 function nodeHasIncomingEdges(nodeId) {
   return graph.edges.some((edge) => edge.to === nodeId);
 }
@@ -1456,6 +1574,237 @@ function canMarkNodeAsInput(node) {
 
 function canBindSliderToNode(node) {
   return Boolean(node && (node.shape === "diamond" || node.input));
+}
+
+function normalizeSubmodelPath(value) {
+  let raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  raw = raw.replace(/\\/g, "/");
+  while (raw.startsWith("./")) {
+    raw = raw.slice(2);
+  }
+  raw = raw.trim();
+  if (!raw || raw === "." || raw.includes("..")) {
+    return "";
+  }
+  const parts = raw.split("/").filter(Boolean);
+  const base = parts.length ? parts[parts.length - 1].trim() : "";
+  if (!base || base === "." || base === "..") {
+    return "";
+  }
+  return base;
+}
+
+function submodelInterfaceSummary(node) {
+  const inputs = Array.isArray(node?.interfaceCache?.inputs) ? node.interfaceCache.inputs : [];
+  const outputs = Array.isArray(node?.interfaceCache?.outputs) ? node.interfaceCache.outputs : [];
+  return t("text.submodelInterfaceSummary", {
+    inputs: inputs.length ? inputs.join(", ") : "-",
+    outputs: outputs.length ? outputs.join(", ") : "-",
+  });
+}
+
+function canShowSubmodelNode(node) {
+  if (!node || !isSubmodelNode(node)) {
+    return false;
+  }
+  const normalizedPath = normalizeSubmodelPath(node.modelPath);
+  if (!normalizedPath) {
+    return false;
+  }
+  return Boolean(
+    currentModelDirectoryHandle ||
+    submodelTemplateCache.has(normalizedPath) ||
+    submodelSourceCache.has(normalizedPath),
+  );
+}
+
+async function chooseSubmodelFileForNode(node) {
+  if (!node || !isSubmodelNode(node)) {
+    return false;
+  }
+  let entry = null;
+  if (window.showOpenFilePicker) {
+    const handles = await window.showOpenFilePicker({
+      multiple: false,
+      types: [{
+        description: "JSON",
+        accept: { "application/json": [".json"] },
+      }],
+    });
+    entry = handles?.[0] || null;
+  } else {
+    entry = await pickSubmodelFileWithInput();
+  }
+  if (!entry) {
+    throw new Error(t("error.loadCancelled"));
+  }
+  const item = await parseSelectedJsonEntry(entry);
+  const normalizedPath = normalizeSubmodelPath(item?.name);
+  if (!normalizedPath) {
+    throw new Error(t("error.submodelPathInvalid"));
+  }
+  node.modelPath = normalizedPath;
+  node.interfaceCache = { inputs: [], outputs: [] };
+  node.submodelError = "";
+  node.__runtimeSubmodel = null;
+  node.__runtimeSubmodelPath = "";
+  submodelSourceCache.set(normalizedPath, item.text);
+  if (item.fileHandle) {
+    submodelFileHandleCache.set(normalizedPath, item.fileHandle);
+  }
+  try {
+    const data = JSON.parse(item.text);
+    submodelTemplateCache.set(normalizedPath, buildRuntimeModelFromData(data));
+  } catch (_err) {
+    // Parsing/semantic errors are surfaced by the normal refresh path below.
+  }
+  sanitizeSubmodelBindings(node);
+  sanitizeAllEdgesForNode(node.id);
+  invalidateExecutionPlan();
+  ui.submodelsPrepared = false;
+  scheduleFileStatusRefresh();
+  return true;
+}
+
+function sanitizeSubmodelBindings(node) {
+  if (!node || !isSubmodelNode(node)) {
+    return;
+  }
+  const allowedInputs = new Set(
+    Array.isArray(node.interfaceCache?.inputs)
+      ? node.interfaceCache.inputs.map((value) => String(value).trim()).filter(Boolean)
+      : [],
+  );
+  const source = node.inputBindings && typeof node.inputBindings === "object" ? node.inputBindings : {};
+  if (allowedInputs.size === 0) {
+    node.inputBindings = Object.fromEntries(
+      Object.entries(source)
+        .map(([key, value]) => [String(key || "").trim(), String(value ?? "").trim()])
+        .filter(([key, value]) => key && value),
+    );
+    return;
+  }
+  const next = {};
+  Object.entries(source).forEach(([key, value]) => {
+    const inputName = String(key || "").trim();
+    if (!inputName || !allowedInputs.has(inputName)) {
+      return;
+    }
+    const binding = String(value ?? "").trim();
+    if (binding) {
+      next[inputName] = binding;
+    }
+  });
+  node.inputBindings = next;
+}
+
+function sanitizeAllEdgesForNode(nodeId) {
+  graph.edges.forEach((edge) => {
+    if (edge.from === nodeId || edge.to === nodeId) {
+      sanitizeEdgePorts(edge);
+    }
+  });
+}
+
+function renderSubmodelBindingsEditor(node) {
+  if (!nodeSubmodelBindings) {
+    return;
+  }
+  nodeSubmodelBindings.innerHTML = "";
+  if (!node || !isSubmodelNode(node)) {
+    nodeSubmodelBindings.classList.add("hidden");
+    return;
+  }
+  sanitizeSubmodelBindings(node);
+  nodeSubmodelBindings.classList.remove("hidden");
+
+  const note = document.createElement("div");
+  note.className = "submodel-bindings-note";
+  note.textContent = t("text.submodelBindingDefault");
+  nodeSubmodelBindings.appendChild(note);
+
+  const inputs = Array.isArray(node.interfaceCache?.inputs)
+    ? node.interfaceCache.inputs.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+  if (!inputs.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-props";
+    empty.textContent = t("text.submodelNoInputs");
+    nodeSubmodelBindings.appendChild(empty);
+    return;
+  }
+
+  inputs.forEach((inputName) => {
+    const row = document.createElement("div");
+    row.className = "submodel-binding-row";
+    const label = document.createElement("label");
+    const inputId = `submodel-binding-${node.id}-${inputName.replace(/[^a-zA-Z0-9_-]+/g, "_")}`;
+    label.htmlFor = inputId;
+    label.textContent = inputName;
+    const input = document.createElement("input");
+    input.id = inputId;
+    input.type = "text";
+    input.value = String(node.inputBindings?.[inputName] ?? "");
+    input.placeholder = t("placeholder.submodelBinding");
+    input.setAttribute("data-title-i18n", "tooltip.node.submodelBinding");
+    input.addEventListener("focus", () => {
+      beginTransaction();
+    });
+    input.addEventListener("input", () => {
+      const expr = String(input.value ?? "").trim();
+      if (!node.inputBindings || typeof node.inputBindings !== "object") {
+        node.inputBindings = {};
+      }
+      if (expr) {
+        node.inputBindings[inputName] = expr;
+      } else {
+        delete node.inputBindings[inputName];
+      }
+      dirtySinceLastSave = true;
+      updateFileStatusLabel(true);
+      scheduleFileStatusRefresh();
+    });
+    input.addEventListener("blur", () => {
+      commitTransaction();
+    });
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "small-btn expr-edit-btn";
+    editBtn.textContent = t("action.editExpression");
+    setTooltipText(editBtn, t("tooltip.node.editExpression"));
+    editBtn.addEventListener("click", () => {
+      openCustomExpressionEditor(
+        `${t("action.editExpression")} - ${inputName}`,
+        input.value,
+        (nextValue) => {
+          beginTransaction();
+          input.value = String(nextValue ?? "");
+          const expr = String(input.value ?? "").trim();
+          if (!node.inputBindings || typeof node.inputBindings !== "object") {
+            node.inputBindings = {};
+          }
+          if (expr) {
+            node.inputBindings[inputName] = expr;
+          } else {
+            delete node.inputBindings[inputName];
+          }
+          dirtySinceLastSave = true;
+          updateFileStatusLabel(true);
+          scheduleFileStatusRefresh();
+          commitTransaction();
+        },
+      );
+    });
+    row.appendChild(label);
+    row.appendChild(input);
+    row.appendChild(editBtn);
+    nodeSubmodelBindings.appendChild(row);
+  });
+
+  applyI18nTooltipsToSubtree(nodeSubmodelBindings);
 }
 
 function hasExternalValue(node) {
@@ -1485,6 +1834,9 @@ function serializeNodeType(shape) {
   if (shape === "diamond") {
     return "parameter";
   }
+  if (shape === "submodel") {
+    return "submodel";
+  }
   return "state";
 }
 
@@ -1494,6 +1846,9 @@ function deserializeNodeType(type) {
   }
   if (type === "parameter") {
     return "diamond";
+  }
+  if (type === "submodel") {
+    return "submodel";
   }
   return "rect";
 }
@@ -1896,6 +2251,21 @@ function exportGraphData() {
       } else if (type === "state") {
         out.stateTransition = String(n.valueExpression ?? "");
         out.initialState = String(n.initialStateExpression ?? "");
+      } else if (type === "submodel") {
+        out.modelPath = String(n.modelPath ?? "");
+        out.inputBindings = n.inputBindings && typeof n.inputBindings === "object"
+          ? Object.fromEntries(
+            Object.entries(n.inputBindings)
+              .map(([key, value]) => [String(key), String(value ?? "")])
+              .filter(([key]) => key.trim()),
+          )
+          : {};
+        out.interfaceCache = n.interfaceCache && typeof n.interfaceCache === "object"
+          ? {
+            inputs: Array.isArray(n.interfaceCache.inputs) ? n.interfaceCache.inputs.map((value) => String(value)) : [],
+            outputs: Array.isArray(n.interfaceCache.outputs) ? n.interfaceCache.outputs.map((value) => String(value)) : [],
+          }
+          : { inputs: [], outputs: [] };
       } else {
         out.valueExpression = String(n.valueExpression ?? "");
       }
@@ -1905,6 +2275,8 @@ function exportGraphData() {
       id: e.id,
       from: e.from,
       to: e.to,
+      sourcePort: String(e.sourcePort ?? ""),
+      targetPort: String(e.targetPort ?? ""),
       controlPoints: (e.controlPoints || []).map((cp) => ({ x: cp.x, y: cp.y })),
     })),
     widgets: graph.widgets.map((w) => ({
@@ -1947,6 +2319,53 @@ function currentSnapshot() {
   return JSON.stringify(exportGraphData());
 }
 
+function captureCurrentModelContext(nodeName = "") {
+  return {
+    data: exportGraphData(),
+    currentFileHandle,
+    currentFileName,
+    currentModelDirectoryHandle,
+    lastSavedSnapshot,
+    dirtySinceLastSave,
+    history: {
+      undo: deepClone(history.undo),
+      redo: deepClone(history.redo),
+    },
+    view: {
+      zoom: ui.zoom,
+      scrollLeft: graphViewport.scrollLeft,
+      scrollTop: graphViewport.scrollTop,
+    },
+    nodeName: String(nodeName || ""),
+  };
+}
+
+function restoreModelContext(context) {
+  if (!context) {
+    return;
+  }
+  stopTimedExecution(false);
+  applyGraphData(context.data);
+  currentFileHandle = context.currentFileHandle || null;
+  currentFileName = context.currentFileName || "";
+  currentModelDirectoryHandle = context.currentModelDirectoryHandle || null;
+  lastSavedSnapshot = String(context.lastSavedSnapshot || "");
+  dirtySinceLastSave = Boolean(context.dirtySinceLastSave);
+  history.undo = Array.isArray(context.history?.undo) ? deepClone(context.history.undo) : [];
+  history.redo = Array.isArray(context.history?.redo) ? deepClone(context.history.redo) : [];
+  history.transactionStart = null;
+  clearAllSelection();
+  ui.zoom = clampZoom(Number(context.view?.zoom) || 1);
+  updateHistoryButtons();
+  updateFileStatusLabel(dirtySinceLastSave);
+  updateModelBreadcrumb();
+  render();
+  window.requestAnimationFrame(() => {
+    graphViewport.scrollLeft = Number(context.view?.scrollLeft) || 0;
+    graphViewport.scrollTop = Number(context.view?.scrollTop) || 0;
+  });
+}
+
 function markSavedSnapshot() {
   lastSavedSnapshot = currentSnapshot();
   dirtySinceLastSave = false;
@@ -1958,6 +2377,9 @@ function hasUnsavedChanges() {
 }
 
 function applyGraphData(data) {
+  stopTimedExecution(false);
+  clearRuntimeSubmodelState();
+  ui.submodelsPrepared = false;
   const execCfg = normalizeExecutionConfig(data.execution);
   graph.modelTitle = String(data?.modelTitle ?? "");
   graph.properties = Array.isArray(data?.modelProperties)
@@ -1992,6 +2414,21 @@ function applyGraphData(data) {
       initialStateExpression: shape === "rect"
         ? String(n.initialState ?? "")
         : String(n.initialStateExpression ?? ""),
+      modelPath: shape === "submodel" ? String(n.modelPath ?? "") : "",
+      inputBindings: shape === "submodel" && n.inputBindings && typeof n.inputBindings === "object"
+        ? Object.fromEntries(
+          Object.entries(n.inputBindings)
+            .map(([key, value]) => [String(key), String(value ?? "")])
+            .filter(([key]) => key.trim()),
+        )
+        : {},
+      interfaceCache: shape === "submodel" && n.interfaceCache && typeof n.interfaceCache === "object"
+        ? {
+          inputs: Array.isArray(n.interfaceCache.inputs) ? n.interfaceCache.inputs.map((value) => String(value)) : [],
+          outputs: Array.isArray(n.interfaceCache.outputs) ? n.interfaceCache.outputs.map((value) => String(value)) : [],
+        }
+        : { inputs: [], outputs: [] },
+      submodelError: "",
       computedValue: null,
       computedError: "",
       pendingStateValue: null,
@@ -2003,8 +2440,11 @@ function applyGraphData(data) {
     id: e.id,
     from: e.from,
     to: e.to,
+    sourcePort: String(e.sourcePort ?? ""),
+    targetPort: String(e.targetPort ?? ""),
     controlPoints: (e.controlPoints || []).map((cp) => ({ x: cp.x, y: cp.y })),
   }));
+  graph.edges.forEach((edge) => sanitizeEdgePorts(edge));
   graph.widgets = Array.isArray(data.widgets)
     ? data.widgets
       .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider"))
@@ -2087,6 +2527,7 @@ function pushUndoState(state) {
 
 function invalidateExecutionPlan() {
   ui.executionPlan = null;
+  ui.submodelsPrepared = false;
 }
 
 function beginTransaction() {
@@ -2178,6 +2619,9 @@ function collectSelectedForClipboard() {
       height: n.height,
       valueExpression: n.valueExpression,
       initialStateExpression: n.initialStateExpression,
+      modelPath: n.modelPath,
+      inputBindings: deepClone(n.inputBindings || {}),
+      interfaceCache: deepClone(n.interfaceCache || { inputs: [], outputs: [] }),
       computedValue: n.computedValue,
       computedError: n.computedError,
       pendingStateValue: n.pendingStateValue,
@@ -2189,6 +2633,8 @@ function collectSelectedForClipboard() {
     .map((e) => ({
       from: e.from,
       to: e.to,
+      sourcePort: String(e.sourcePort ?? ""),
+      targetPort: String(e.targetPort ?? ""),
       controlPoints: (e.controlPoints || []).map((cp) => ({ x: cp.x, y: cp.y })),
     }));
   return { nodes, edges };
@@ -2243,6 +2689,10 @@ function pasteFromClipboard() {
         height: n.height,
         valueExpression: String(n.valueExpression ?? ""),
         initialStateExpression: String(n.initialStateExpression ?? ""),
+        modelPath: String(n.modelPath ?? ""),
+        inputBindings: deepClone(n.inputBindings || {}),
+        interfaceCache: deepClone(n.interfaceCache || { inputs: [], outputs: [] }),
+        submodelError: "",
         computedValue: n.computedValue ?? null,
         computedError: String(n.computedError ?? ""),
         pendingStateValue: n.pendingStateValue ?? null,
@@ -2264,11 +2714,14 @@ function pasteFromClipboard() {
         id: edgeCounter++,
         from,
         to,
+        sourcePort: String(e.sourcePort ?? ""),
+        targetPort: String(e.targetPort ?? ""),
         controlPoints: (e.controlPoints || []).map((cp) => ({
           x: snap(cp.x + offset),
           y: snap(cp.y + offset),
         })),
       });
+      sanitizeEdgePorts(graph.edges[graph.edges.length - 1]);
     });
 
     normalizeInputNodeFlags();
@@ -2392,6 +2845,36 @@ function buildEdgeGeometry(edge) {
   return { path, points };
 }
 
+function getSubmodelEdgePortChoices(node, side) {
+  if (!node || !isSubmodelNode(node)) {
+    return [];
+  }
+  const values = side === "target" ? node.interfaceCache?.inputs : node.interfaceCache?.outputs;
+  return Array.isArray(values) ? values.map((value) => String(value).trim()).filter(Boolean) : [];
+}
+
+function sanitizeEdgePorts(edge) {
+  if (!edge) {
+    return;
+  }
+  const sourceChoices = getSubmodelEdgePortChoices(getNodeById(edge.from), "source");
+  const targetChoices = getSubmodelEdgePortChoices(getNodeById(edge.to), "target");
+
+  if (sourceChoices.length === 1 && !String(edge.sourcePort ?? "").trim()) {
+    edge.sourcePort = sourceChoices[0];
+  }
+  if (targetChoices.length === 1 && !String(edge.targetPort ?? "").trim()) {
+    edge.targetPort = targetChoices[0];
+  }
+
+  if (!sourceChoices.includes(String(edge.sourcePort ?? "").trim())) {
+    edge.sourcePort = "";
+  }
+  if (!targetChoices.includes(String(edge.targetPort ?? "").trim())) {
+    edge.targetPort = "";
+  }
+}
+
 function addNode(shape, atPoint = null) {
   const id = nodeCounter++;
   const px = snap(atPoint ? atPoint.x : 180 + (id % 5) * 120);
@@ -2409,6 +2892,10 @@ function addNode(shape, atPoint = null) {
     height: 70,
     valueExpression: "",
     initialStateExpression: "",
+    modelPath: "",
+    inputBindings: {},
+    interfaceCache: { inputs: [], outputs: [] },
+    submodelError: "",
     computedValue: null,
     computedError: "",
     pendingStateValue: null,
@@ -2441,9 +2928,12 @@ function addEdge(fromId, toId) {
     id: edgeCounter++,
     from: fromId,
     to: toId,
+    sourcePort: "",
+    targetPort: "",
     controlPoints: [],
   };
   graph.edges.push(edge);
+  sanitizeEdgePorts(edge);
   if (targetNode?.input) {
     removeNodeFromSliderBindings(targetNode.name);
     targetNode.input = false;
@@ -2542,6 +3032,18 @@ function getNodeByName(name) {
 
 function buildNodeNameMap() {
   return new Map(graph.nodes.map((node) => [String(node.name ?? ""), node]));
+}
+
+function getModelNodeByName(model, name) {
+  return model?.nodes?.find((node) => node.name === name) || null;
+}
+
+function getModelNodeById(model, id) {
+  return model?.nodes?.find((node) => node.id === id) || null;
+}
+
+function buildModelNodeNameMap(model) {
+  return new Map((model?.nodes || []).map((node) => [String(node.name ?? ""), node]));
 }
 
 function defaultChartSeriesColor(index = 0) {
@@ -2727,6 +3229,27 @@ function applySliderWidgetValueToNode(widget) {
   node.externalValue = value;
   node.computedValue = value;
   node.computedError = "";
+}
+
+function resetModelExternalValues(model) {
+  (model?.nodes || []).forEach((node) => {
+    node.externalValueEnabled = false;
+    node.externalValue = null;
+  });
+}
+
+function applyRuntimeModelInputOverrides(model, inputValueMap = new Map()) {
+  resetModelExternalValues(model);
+  inputValueMap.forEach((value, name) => {
+    const node = getModelNodeByName(model, name);
+    if (!node) {
+      return;
+    }
+    node.externalValueEnabled = true;
+    node.externalValue = value;
+    node.computedValue = value;
+    node.computedError = "";
+  });
 }
 
 function drawXYChart(canvas, seriesList = [], options = null) {
@@ -3740,6 +4263,13 @@ function openBackgroundContextMenu(evt) {
         setStatusKey("status.nodeCreated");
       },
     },
+    {
+      label: t("context.bg.newSubmodel"),
+      action: () => {
+        runAction(() => addNode("submodel", p));
+        setStatusKey("status.nodeCreated");
+      },
+    },
     { separator: true },
     {
       label: t("context.bg.newSliderWidget"),
@@ -3790,6 +4320,14 @@ function openNodeContextMenu(evt, node) {
         setStatusKey("status.propertyAdded");
       },
     },
+    ...(isSubmodelNode(node)
+      ? [{
+        label: t("action.openSubmodel"),
+        action: () => {
+          void openSubmodelNode(node);
+        },
+      }]
+      : []),
     {
       label: t("context.node.newLinked"),
       action: () => {
@@ -4483,7 +5021,70 @@ function refreshSidebar() {
 
     const from = getNodeById(edge.from);
     const to = getNodeById(edge.to);
-    edgeInfo.textContent = `${from?.name || edge.from} -> ${to?.name || edge.to}`;
+    sanitizeEdgePorts(edge);
+    edgeInfo.innerHTML = "";
+
+    const summary = document.createElement("div");
+    summary.textContent = `${from?.name || edge.from} -> ${to?.name || edge.to}`;
+    edgeInfo.appendChild(summary);
+
+    const sourceChoices = getSubmodelEdgePortChoices(from, "source");
+    if (sourceChoices.length > 0) {
+      const sourceWrap = document.createElement("div");
+      sourceWrap.className = "widget-config-grid";
+      const sourceLabel = document.createElement("label");
+      sourceLabel.textContent = t("label.edgeSourcePort");
+      const sourceSelect = document.createElement("select");
+      const emptyOpt = document.createElement("option");
+      emptyOpt.value = "";
+      emptyOpt.textContent = t("text.edgePortAuto");
+      sourceSelect.appendChild(emptyOpt);
+      sourceChoices.forEach((name) => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        sourceSelect.appendChild(opt);
+      });
+      sourceSelect.value = String(edge.sourcePort ?? "");
+      sourceSelect.addEventListener("change", () => {
+        runAction(() => {
+          edge.sourcePort = String(sourceSelect.value || "");
+          sanitizeEdgePorts(edge);
+        });
+      });
+      sourceWrap.appendChild(sourceLabel);
+      sourceWrap.appendChild(sourceSelect);
+      edgeInfo.appendChild(sourceWrap);
+    }
+
+    const targetChoices = getSubmodelEdgePortChoices(to, "target");
+    if (targetChoices.length > 0) {
+      const targetWrap = document.createElement("div");
+      targetWrap.className = "widget-config-grid";
+      const targetLabel = document.createElement("label");
+      targetLabel.textContent = t("label.edgeTargetPort");
+      const targetSelect = document.createElement("select");
+      const emptyOpt = document.createElement("option");
+      emptyOpt.value = "";
+      emptyOpt.textContent = t("text.edgePortAuto");
+      targetSelect.appendChild(emptyOpt);
+      targetChoices.forEach((name) => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        targetSelect.appendChild(opt);
+      });
+      targetSelect.value = String(edge.targetPort ?? "");
+      targetSelect.addEventListener("change", () => {
+        runAction(() => {
+          edge.targetPort = String(targetSelect.value || "");
+          sanitizeEdgePorts(edge);
+        });
+      });
+      targetWrap.appendChild(targetLabel);
+      targetWrap.appendChild(targetSelect);
+      edgeInfo.appendChild(targetWrap);
+    }
     return;
   }
 
@@ -4534,6 +5135,7 @@ function refreshSidebar() {
       nodeShapeInput.value = node.shape;
     }
     const showInputToggle = canMarkNodeAsInput(node);
+    const submodelNode = isSubmodelNode(node);
     nodeInputInput.checked = Boolean(node.input);
     nodeOutputInput.checked = Boolean(node.output);
     if (nodeInputLabel) {
@@ -4542,31 +5144,90 @@ function refreshSidebar() {
     nodeInputInput.disabled = !showInputToggle;
     const stateNode = isStateNode(node);
     const parameterNode = node.shape === "diamond";
+    if (nodeOutputInput?.closest("label")) {
+      nodeOutputInput.closest("label").classList.toggle("hidden", submodelNode);
+    }
+    if (submodelNode && !sameSidebarNode) {
+      nodeOutputInput.checked = false;
+    }
+    if (nodeModelPathLabel) {
+      nodeModelPathLabel.classList.toggle("hidden", !submodelNode);
+    }
+    if (nodeModelPathInput) {
+      nodeModelPathInput.classList.toggle("hidden", !submodelNode);
+      if (submodelNode && (!sameSidebarNode || document.activeElement !== nodeModelPathInput)) {
+        nodeModelPathInput.value = node.modelPath || "";
+      }
+    }
+    if (submodelActionRow) {
+      submodelActionRow.classList.toggle("hidden", !submodelNode);
+    }
+    if (loadSubmodelBtn) {
+      loadSubmodelBtn.classList.toggle("hidden", !submodelNode);
+      loadSubmodelBtn.disabled = !submodelNode;
+    }
+    if (showSubmodelBtn) {
+      showSubmodelBtn.classList.toggle("hidden", !submodelNode);
+      showSubmodelBtn.disabled = !submodelNode || !canShowSubmodelNode(node);
+    }
+    if (nodeSubmodelInfo) {
+      if (submodelNode) {
+        if (
+          (!Array.isArray(node.interfaceCache?.inputs) || node.interfaceCache.inputs.length === 0) &&
+          (!Array.isArray(node.interfaceCache?.outputs) || node.interfaceCache.outputs.length === 0) &&
+          String(node.modelPath ?? "").trim() &&
+          !node.submodelError
+        ) {
+          void refreshSubmodelInterface(node, false, { allowPrompt: false });
+        }
+        const summary = node.submodelError
+          ? t("text.submodelError", { reason: node.submodelError })
+          : submodelInterfaceSummary(node);
+        nodeSubmodelInfo.textContent = summary;
+        nodeSubmodelInfo.classList.remove("hidden");
+        nodeSubmodelInfo.classList.toggle("error", Boolean(node.submodelError));
+        nodeSubmodelInfo.classList.toggle("ok", !node.submodelError);
+      } else {
+        nodeSubmodelInfo.classList.add("hidden");
+        nodeSubmodelInfo.classList.remove("error", "ok");
+        nodeSubmodelInfo.textContent = "";
+      }
+    }
+    renderSubmodelBindingsEditor(submodelNode ? node : null);
     if (nodeValueExprLabel) {
       nodeValueExprLabel.textContent = parameterNode
         ? t("label.value")
         : (stateNode ? t("label.stateTransition") : t("label.behaviorFunction"));
     }
     updateNodeExpressionTooltips(node);
-    if (!sameSidebarNode || document.activeElement !== nodeValueExprInput) {
+    if (!submodelNode && (!sameSidebarNode || document.activeElement !== nodeValueExprInput)) {
       nodeValueExprInput.value = node.valueExpression || "";
     }
-    updateExpressionFieldState(nodeValueExprInput, nodeValueExprStatus, node.valueExpression || "", false, "value");
+    nodeValueExprLabel.classList.toggle("hidden", submodelNode);
+    nodeValueExprRow?.classList.toggle("hidden", submodelNode);
+    nodeValueExprStatus.classList.toggle("hidden", submodelNode);
+    if (!submodelNode) {
+      updateExpressionFieldState(nodeValueExprInput, nodeValueExprStatus, node.valueExpression || "", false, "value");
+    } else {
+      nodeValueExprInput.classList.remove("invalid");
+      hideExpressionStatus(nodeValueExprStatus);
+    }
     if (nodeInitialStateLabel) {
-      nodeInitialStateLabel.classList.toggle("hidden", !stateNode);
+      nodeInitialStateLabel.classList.toggle("hidden", !stateNode || submodelNode);
     }
     if (nodeInitialStateInput) {
-      nodeInitialStateInput.classList.toggle("hidden", !stateNode);
+      nodeInitialStateRow?.classList.toggle("hidden", !stateNode || submodelNode);
+      nodeInitialStateInput.classList.toggle("hidden", !stateNode || submodelNode);
       if (editNodeInitialStateBtn) {
-        editNodeInitialStateBtn.classList.toggle("hidden", !stateNode);
+        editNodeInitialStateBtn.classList.toggle("hidden", !stateNode || submodelNode);
       }
       if (nodeInitialStateStatus) {
-        nodeInitialStateStatus.classList.toggle("hidden", !stateNode);
+        nodeInitialStateStatus.classList.toggle("hidden", !stateNode || submodelNode);
       }
-      if (stateNode && (!sameSidebarNode || document.activeElement !== nodeInitialStateInput)) {
+      if (stateNode && !submodelNode && (!sameSidebarNode || document.activeElement !== nodeInitialStateInput)) {
         nodeInitialStateInput.value = node.initialStateExpression || "";
       }
-      if (stateNode) {
+      if (stateNode && !submodelNode) {
         updateExpressionFieldState(nodeInitialStateInput, nodeInitialStateStatus, node.initialStateExpression || "", false, "initial");
       } else {
         nodeInitialStateInput.classList.remove("invalid");
@@ -4617,7 +5278,36 @@ function refreshSidebar() {
   if (nodeInitialStateLabel) {
     nodeInitialStateLabel.classList.add("hidden");
   }
+  if (nodeModelPathLabel) {
+    nodeModelPathLabel.classList.add("hidden");
+  }
+  if (nodeModelPathInput) {
+    nodeModelPathInput.classList.add("hidden");
+  }
+  if (submodelActionRow) {
+    submodelActionRow.classList.add("hidden");
+  }
+  if (loadSubmodelBtn) {
+    loadSubmodelBtn.classList.add("hidden");
+    loadSubmodelBtn.disabled = true;
+  }
+  if (showSubmodelBtn) {
+    showSubmodelBtn.classList.add("hidden");
+    showSubmodelBtn.disabled = true;
+  }
+  if (nodeSubmodelInfo) {
+    nodeSubmodelInfo.classList.add("hidden");
+    nodeSubmodelInfo.classList.remove("error", "ok");
+    nodeSubmodelInfo.textContent = "";
+  }
+  renderSubmodelBindingsEditor(null);
+  if (nodeOutputInput?.closest("label")) {
+    nodeOutputInput.closest("label").classList.remove("hidden");
+  }
+  nodeValueExprLabel.classList.remove("hidden");
+  nodeValueExprRow?.classList.remove("hidden");
   if (nodeInitialStateInput) {
+    nodeInitialStateRow?.classList.add("hidden");
     nodeInitialStateInput.classList.add("hidden");
   }
   if (widgetPanelTitle) {
@@ -4678,6 +5368,7 @@ function render() {
   updateMenuTimeLabel();
   updateDeleteActionLabel();
   updateEditActionButtons();
+  updateModelBreadcrumb();
   edgesLayer.innerHTML = "";
   nodesLayer.innerHTML = "";
   controlsLayer.innerHTML = "";
@@ -4825,6 +5516,14 @@ function render() {
       evt.stopPropagation();
       openNodeContextMenu(evt, node);
     });
+    g.addEventListener("dblclick", (evt) => {
+      if (!isSubmodelNode(node)) {
+        return;
+      }
+      evt.preventDefault();
+      evt.stopPropagation();
+      void openSubmodelNode(node);
+    });
     if (ui.selectedNodes.has(node.id)) {
       g.classList.add("selected");
     }
@@ -4836,6 +5535,7 @@ function render() {
     }
 
     let shapeEl;
+    let submodelInnerShape = null;
     if (node.shape === "ellipse") {
       shapeEl = document.createElementNS(SVG_NS, "ellipse");
       shapeEl.setAttribute("cx", node.x);
@@ -4852,6 +5552,15 @@ function render() {
       shapeEl.setAttribute("width", node.width);
       shapeEl.setAttribute("height", node.height);
       shapeEl.setAttribute("rx", 8);
+      if (isSubmodelNode(node)) {
+        submodelInnerShape = document.createElementNS(SVG_NS, "rect");
+        submodelInnerShape.setAttribute("x", node.x - node.width / 2 + 6);
+        submodelInnerShape.setAttribute("y", node.y - node.height / 2 + 6);
+        submodelInnerShape.setAttribute("width", Math.max(8, node.width - 12));
+        submodelInnerShape.setAttribute("height", Math.max(8, node.height - 12));
+        submodelInnerShape.setAttribute("rx", 6);
+        submodelInnerShape.classList.add("node-shape", "node-shape-inner");
+      }
     }
     shapeEl.classList.add("node-shape");
 
@@ -4947,6 +5656,31 @@ function render() {
       outputBadgeLabel.textContent = "O";
     }
 
+    const submodelPorts = [];
+    if (isSubmodelNode(node)) {
+      const makePorts = (items, side) => {
+        const values = Array.isArray(items) ? items : [];
+        if (!values.length) {
+          return;
+        }
+        const availableHeight = Math.max(12, node.height - 20);
+        const step = availableHeight / (values.length + 1);
+        values.forEach((name, idx) => {
+          const port = document.createElementNS(SVG_NS, "circle");
+          port.classList.add("submodel-port", side);
+          port.setAttribute("r", "4");
+          port.setAttribute("cx", side === "input" ? node.x - node.width / 2 : node.x + node.width / 2);
+          port.setAttribute("cy", node.y - node.height / 2 + 10 + step * (idx + 1));
+          const title = document.createElementNS(SVG_NS, "title");
+          title.textContent = `${side === "input" ? t("label.input") : t("label.output")}: ${String(name)}`;
+          port.appendChild(title);
+          submodelPorts.push(port);
+        });
+      };
+      makePorts(node.interfaceCache?.inputs, "input");
+      makePorts(node.interfaceCache?.outputs, "output");
+    }
+
     const centerPortHit = document.createElementNS(SVG_NS, "circle");
     const disableCenterPortForMultiSelection =
       ui.selectedNodes.size > 1 && ui.selectedNodes.has(node.id);
@@ -4985,6 +5719,9 @@ function render() {
     });
 
     g.appendChild(shapeEl);
+    if (submodelInnerShape) {
+      g.appendChild(submodelInnerShape);
+    }
     g.appendChild(label);
     if (inputBadge && inputBadgeLabel) {
       g.appendChild(inputBadge);
@@ -4994,6 +5731,7 @@ function render() {
       g.appendChild(outputBadge);
       g.appendChild(outputBadgeLabel);
     }
+    submodelPorts.forEach((port) => g.appendChild(port));
     g.appendChild(centerPortHit);
     g.appendChild(handle);
     nodesLayer.appendChild(g);
@@ -5021,7 +5759,7 @@ function importGraphData(data) {
   const nodes = data.nodes
     .filter((n) => Number.isInteger(n.id))
     .map((n) => {
-      if (!["state", "algebraic", "parameter"].includes(n.type)) {
+      if (!["state", "algebraic", "parameter", "submodel"].includes(n.type)) {
         throw new Error(t("error.invalidJson"));
       }
       const shape = deserializeNodeType(n.type);
@@ -5042,6 +5780,21 @@ function importGraphData(data) {
         initialState: shape === "rect"
           ? String(n.initialState ?? "")
           : "",
+        modelPath: shape === "submodel" ? String(n.modelPath ?? "") : "",
+        inputBindings: shape === "submodel" && n.inputBindings && typeof n.inputBindings === "object"
+          ? Object.fromEntries(
+            Object.entries(n.inputBindings)
+              .map(([key, value]) => [String(key), String(value ?? "")])
+              .filter(([key]) => key.trim()),
+          )
+          : {},
+        interfaceCache: shape === "submodel" && n.interfaceCache && typeof n.interfaceCache === "object"
+          ? {
+            inputs: Array.isArray(n.interfaceCache.inputs) ? n.interfaceCache.inputs.map((value) => String(value)) : [],
+            outputs: Array.isArray(n.interfaceCache.outputs) ? n.interfaceCache.outputs.map((value) => String(value)) : [],
+          }
+          : { inputs: [], outputs: [] },
+        submodelError: "",
         computedValue: null,
         computedError: "",
         pendingStateValue: null,
@@ -5067,6 +5820,8 @@ function importGraphData(data) {
       id: e.id,
       from: e.from,
       to: e.to,
+      sourcePort: String(e.sourcePort ?? ""),
+      targetPort: String(e.targetPort ?? ""),
       controlPoints: Array.isArray(e.controlPoints)
         ? e.controlPoints.filter(isValidPoint).map((cp) => ({ x: cp.x, y: cp.y }))
         : [],
@@ -5158,16 +5913,27 @@ function normalizeJsonFilename(name) {
   return trimmed.toLowerCase().endsWith(".json") ? trimmed : `${trimmed}.json`;
 }
 
-function loadGraphFromJsonText(jsonText, sourceName = "", fileHandle = null) {
+function loadGraphFromJsonText(jsonText, sourceName = "", fileHandle = null, directoryHandle = null, preserveSubmodelCache = false) {
   stopTimedExecution(false);
   try {
+    if (!preserveSubmodelCache) {
+      submodelTemplateCache.clear();
+      submodelFileHandleCache.clear();
+      submodelSourceCache.clear();
+    }
     const data = JSON.parse(String(jsonText || "{}"));
     runAction(() => {
       importGraphData(data);
     });
     currentFileHandle = fileHandle || null;
+    currentModelDirectoryHandle = directoryHandle || null;
     currentFileName = sourceName || currentFileName || defaultGraphFilename();
+    history.undo = [];
+    history.redo = [];
+    updateHistoryButtons();
     markSavedSnapshot();
+    ui.submodelsPrepared = false;
+    updateModelBreadcrumb();
     setStatusKey("status.loaded");
     window.requestAnimationFrame(() => {
       fitToContent();
@@ -5186,6 +5952,616 @@ function downloadJsonFile(filename, json) {
   a.download = normalizeJsonFilename(filename);
   a.click();
   URL.revokeObjectURL(url);
+}
+
+async function ensureCurrentModelDirectoryHandle() {
+  if (currentModelDirectoryHandle) {
+    return currentModelDirectoryHandle;
+  }
+  if (supportsDirectoryInputSelection()) {
+    currentModelDirectoryHandle = await pickModelDirectoryWithInput();
+    return currentModelDirectoryHandle;
+  }
+  if (typeof window.showDirectoryPicker === "function") {
+    currentModelDirectoryHandle = await window.showDirectoryPicker({ mode: "read" });
+    return currentModelDirectoryHandle;
+  }
+  throw new Error(t("error.submodelDirectoryUnsupported"));
+}
+
+function basenameOfSubmodelPath(modelPath) {
+  return String(modelPath ?? "").split("/").filter(Boolean).pop() || String(modelPath ?? "");
+}
+
+function isDeferredSubmodelResolutionError(err) {
+  return String(err?.message || "") === SUBMODEL_DEFERRED_RESOLUTION;
+}
+
+function pickSubmodelFileWithInput(accept = ".json,application/json") {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = accept;
+    input.style.position = "fixed";
+    input.style.left = "-9999px";
+    input.addEventListener("change", () => {
+      const file = input.files && input.files[0] ? input.files[0] : null;
+      input.remove();
+      if (file) {
+        resolve(file);
+      } else {
+        reject(new Error(t("error.loadCancelled")));
+      }
+    }, { once: true });
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+function pickSubmodelFilesWithInput(accept = ".json,application/json") {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.accept = accept;
+    input.style.position = "fixed";
+    input.style.left = "-9999px";
+    input.addEventListener("change", () => {
+      const files = Array.from(input.files || []);
+      input.remove();
+      if (files.length) {
+        resolve(files);
+      } else {
+        reject(new Error(t("error.loadCancelled")));
+      }
+    }, { once: true });
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+function supportsDirectoryInputSelection() {
+  const input = document.createElement("input");
+  return "webkitdirectory" in input || "directory" in input;
+}
+
+function createPseudoFileHandle(file) {
+  return {
+    name: String(file?.name || ""),
+    async getFile() {
+      return file;
+    },
+  };
+}
+
+function createPseudoDirectoryHandle(files) {
+  const fileMap = new Map();
+  Array.from(files || []).forEach((file) => {
+    const baseName = normalizeSubmodelPath(file?.name) || basenameOfSubmodelPath(file?.name);
+    if (baseName && !fileMap.has(baseName)) {
+      fileMap.set(baseName, file);
+    }
+  });
+  return {
+    kind: "directory",
+    name: "",
+    async getFileHandle(name) {
+      const baseName = normalizeSubmodelPath(name) || basenameOfSubmodelPath(name);
+      const file = fileMap.get(baseName);
+      if (!file) {
+        const err = new Error(`Missing file: ${baseName}`);
+        err.name = "NotFoundError";
+        throw err;
+      }
+      return createPseudoFileHandle(file);
+    },
+  };
+}
+
+function pickModelDirectoryWithInput() {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.style.position = "fixed";
+    input.style.left = "-9999px";
+    input.webkitdirectory = true;
+    input.directory = true;
+    input.setAttribute("webkitdirectory", "");
+    input.setAttribute("directory", "");
+    input.addEventListener("change", async () => {
+      const files = Array.from(input.files || []).filter((file) => String(file?.name || "").toLowerCase().endsWith(".json"));
+      input.remove();
+      if (!files.length) {
+        reject(new Error(t("error.loadCancelled")));
+        return;
+      }
+      try {
+        await cacheSelectedSubmodelEntries(files);
+        resolve(createPseudoDirectoryHandle(files));
+      } catch (err) {
+        reject(err);
+      }
+    }, { once: true });
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+async function parseSelectedJsonEntry(entry) {
+  if (!entry) {
+    return null;
+  }
+  if (typeof entry.getFile === "function") {
+    const file = await entry.getFile();
+    return {
+      name: String(file?.name || entry.name || ""),
+      text: await file.text(),
+      file,
+      fileHandle: entry,
+    };
+  }
+  return {
+    name: String(entry?.name || ""),
+    text: await entry.text(),
+    file: entry,
+    fileHandle: null,
+  };
+}
+
+function collectReferencedSubmodelNames(data) {
+  if (!data || !Array.isArray(data.nodes)) {
+    return [];
+  }
+  return data.nodes
+    .filter((node) => String(node?.type ?? "") === "submodel")
+    .map((node) => normalizeSubmodelPath(node?.modelPath))
+    .filter(Boolean);
+}
+
+function rootModelHasSubmodels(data) {
+  return Boolean(data && Array.isArray(data.nodes) && data.nodes.some((node) => String(node?.type ?? "") === "submodel"));
+}
+
+function rootModelHasUnresolvedSubmodels(data) {
+  const names = collectReferencedSubmodelNames(data);
+  return names.some((name) => name && !submodelSourceCache.has(name) && !submodelTemplateCache.has(name));
+}
+
+async function maybeSelectModelDirectoryForSubmodels(data) {
+  if (!rootModelHasSubmodels(data)) {
+    return null;
+  }
+  if (!rootModelHasUnresolvedSubmodels(data)) {
+    return null;
+  }
+  if (!supportsDirectoryInputSelection() && typeof window.showDirectoryPicker !== "function") {
+    return null;
+  }
+  const shouldSelect = window.confirm(t("confirm.selectModelFolder"));
+  if (!shouldSelect) {
+    return null;
+  }
+  const handle = await ensureCurrentModelDirectoryHandle();
+  setStatusKey("status.modelFolderSelected");
+  return handle;
+}
+
+async function prepareSelectedJsonEntries(entries) {
+  const parsed = [];
+  for (const entry of entries) {
+    const item = await parseSelectedJsonEntry(entry);
+    if (!item?.name) {
+      continue;
+    }
+    try {
+      item.data = JSON.parse(item.text);
+    } catch (_err) {
+      item.data = null;
+    }
+    item.baseName = normalizeSubmodelPath(item.name) || basenameOfSubmodelPath(item.name);
+    parsed.push(item);
+  }
+  const referenced = new Set();
+  parsed.forEach((item) => {
+    collectReferencedSubmodelNames(item.data).forEach((name) => referenced.add(name));
+  });
+  let root = parsed.find((item) => item.baseName && !referenced.has(item.baseName)) || parsed[0] || null;
+  if (!root) {
+    return null;
+  }
+  parsed.forEach((item) => {
+    if (!item.baseName || item === root) {
+      return;
+    }
+    submodelSourceCache.set(item.baseName, item.text);
+    if (item.fileHandle) {
+      submodelFileHandleCache.set(item.baseName, item.fileHandle);
+    }
+    if (item.data) {
+      try {
+        submodelTemplateCache.set(item.baseName, buildRuntimeModelFromData(item.data));
+      } catch (_err) {
+        // Ignore invalid child cache candidates; the actual load path will surface errors.
+      }
+    }
+  });
+  return root;
+}
+
+async function cacheSelectedSubmodelEntries(entries, allowedNames = null) {
+  const allowed = allowedNames instanceof Set ? allowedNames : null;
+  for (const entry of entries) {
+    const item = await parseSelectedJsonEntry(entry);
+    if (!item?.name) {
+      continue;
+    }
+    const baseName = normalizeSubmodelPath(item.name) || basenameOfSubmodelPath(item.name);
+    if (!baseName || (allowed && !allowed.has(baseName))) {
+      continue;
+    }
+    submodelSourceCache.set(baseName, item.text);
+    if (item.fileHandle) {
+      submodelFileHandleCache.set(baseName, item.fileHandle);
+    }
+    try {
+      const data = JSON.parse(item.text);
+      submodelTemplateCache.set(baseName, buildRuntimeModelFromData(data));
+    } catch (_err) {
+      // Ignore invalid JSON here; the actual submodel load path will report the error.
+    }
+  }
+}
+
+async function promptForMissingSubmodelFiles(missingPaths) {
+  const unresolved = new Set(
+    Array.from(missingPaths || [])
+      .map((value) => normalizeSubmodelPath(value))
+      .filter(Boolean),
+  );
+  if (!unresolved.size) {
+    return false;
+  }
+  try {
+    if (window.showOpenFilePicker) {
+      const handles = await window.showOpenFilePicker({
+        multiple: true,
+        types: [{
+          description: "JSON",
+          accept: { "application/json": [".json"] },
+        }],
+      });
+      if (!handles || handles.length === 0) {
+        return false;
+      }
+      await cacheSelectedSubmodelEntries(handles, unresolved);
+    } else {
+      const files = await pickSubmodelFilesWithInput();
+      await cacheSelectedSubmodelEntries(files, unresolved);
+    }
+    return Array.from(unresolved).every((name) => submodelTemplateCache.has(name) || submodelSourceCache.has(name));
+  } catch (_err) {
+    return false;
+  }
+}
+
+async function resolveSubmodelFileByPath(modelPath, options = {}) {
+  const normalizedPath = normalizeSubmodelPath(modelPath);
+  if (!normalizedPath) {
+    throw new Error(t("error.submodelPathInvalid"));
+  }
+  const allowPrompt = options.allowPrompt !== false;
+  const expectedName = basenameOfSubmodelPath(normalizedPath);
+
+  async function readFromFileHandle(fileHandle, directoryHandle = null) {
+    const file = await fileHandle.getFile();
+    const text = await file.text();
+    submodelFileHandleCache.set(normalizedPath, fileHandle);
+    submodelSourceCache.set(normalizedPath, text);
+    return {
+      file,
+      fileHandle,
+      directoryHandle,
+      text,
+    };
+  }
+
+  if (currentModelDirectoryHandle) {
+    const fileHandle = await currentModelDirectoryHandle.getFileHandle(normalizedPath);
+    return readFromFileHandle(fileHandle, currentModelDirectoryHandle);
+  }
+
+  const cachedHandle = submodelFileHandleCache.get(normalizedPath);
+  if (cachedHandle) {
+    try {
+      return await readFromFileHandle(cachedHandle, null);
+    } catch (err) {
+      submodelFileHandleCache.delete(normalizedPath);
+    }
+  }
+
+  if (submodelSourceCache.has(normalizedPath) && !options.forcePrompt) {
+    return {
+      file: null,
+      fileHandle: null,
+      directoryHandle: null,
+      text: submodelSourceCache.get(normalizedPath),
+    };
+  }
+
+  if (!allowPrompt) {
+    throw new Error(SUBMODEL_DEFERRED_RESOLUTION);
+  }
+
+  if (supportsDirectoryInputSelection() || typeof window.showDirectoryPicker === "function") {
+    const directoryHandle = await ensureCurrentModelDirectoryHandle();
+    const fileHandle = await directoryHandle.getFileHandle(normalizedPath);
+    return readFromFileHandle(fileHandle, directoryHandle);
+  }
+
+  if (typeof window.showOpenFilePicker === "function") {
+    const handles = await window.showOpenFilePicker({
+      multiple: false,
+      types: [{
+        description: "JSON",
+        accept: { "application/json": [".json"] },
+      }],
+    });
+    const fileHandle = handles?.[0] || null;
+    if (!fileHandle) {
+      throw new Error(t("error.loadCancelled"));
+    }
+    if (expectedName && fileHandle.name !== expectedName) {
+      throw new Error(`${t("error.submodelPathInvalid")}: ${expectedName}`);
+    }
+    return readFromFileHandle(fileHandle, null);
+  }
+
+  const file = await pickSubmodelFileWithInput();
+  if (expectedName && file.name !== expectedName) {
+    throw new Error(`${t("error.submodelPathInvalid")}: ${expectedName}`);
+  }
+  const text = await file.text();
+  submodelSourceCache.set(normalizedPath, text);
+  return {
+    file,
+    fileHandle: null,
+    directoryHandle: null,
+    text,
+  };
+}
+
+function extractSubmodelInterfaceFromData(data) {
+  if (!data || !Array.isArray(data.nodes)) {
+    throw new Error(t("error.invalidJson"));
+  }
+  const inputs = [];
+  const outputs = [];
+  data.nodes.forEach((node) => {
+    const nodeType = String(node?.type ?? "");
+    const name = String(node?.name ?? "").trim();
+    if (!name) {
+      return;
+    }
+    if (nodeType === "algebraic" && node.input === true) {
+      inputs.push(name);
+    }
+    if (node.output === true) {
+      outputs.push(name);
+    }
+  });
+  return {
+    inputs: [...new Set(inputs)],
+    outputs: [...new Set(outputs)],
+  };
+}
+
+async function loadSubmodelInterfaceByPath(modelPath) {
+  const normalizedPath = normalizeSubmodelPath(modelPath);
+  if (!normalizedPath) {
+    throw new Error(t("error.submodelPathInvalid"));
+  }
+  const { text } = await resolveSubmodelFileByPath(normalizedPath);
+  const data = JSON.parse(text);
+  submodelTemplateCache.set(normalizedPath, buildRuntimeModelFromData(data));
+  return extractSubmodelInterfaceFromData(data);
+}
+
+async function loadSubmodelTemplateByPath(modelPath, visited = new Set(), options = {}) {
+  const normalizedPath = normalizeSubmodelPath(modelPath);
+  if (!normalizedPath) {
+    throw new Error(t("error.submodelPathInvalid"));
+  }
+  if (visited.has(normalizedPath)) {
+    throw new Error(t("error.submodelRecursiveReference"));
+  }
+  if (submodelTemplateCache.has(normalizedPath)) {
+    const cachedTemplate = submodelTemplateCache.get(normalizedPath);
+    const nextVisited = new Set(visited);
+    nextVisited.add(normalizedPath);
+    for (const childNode of cachedTemplate.nodes.filter((node) => isSubmodelNode(node) && String(node.modelPath ?? "").trim())) {
+      await loadSubmodelTemplateByPath(childNode.modelPath, nextVisited, options);
+    }
+    return cachedTemplate;
+  }
+  const { text } = await resolveSubmodelFileByPath(normalizedPath, {
+    allowPrompt: options.allowPrompt !== false,
+  });
+  const data = JSON.parse(text);
+  const template = buildRuntimeModelFromData(data);
+  submodelTemplateCache.set(normalizedPath, template);
+  const nextVisited = new Set(visited);
+  nextVisited.add(normalizedPath);
+  for (const childNode of template.nodes.filter((node) => isSubmodelNode(node) && String(node.modelPath ?? "").trim())) {
+    await loadSubmodelTemplateByPath(childNode.modelPath, nextVisited, options);
+  }
+  return template;
+}
+
+async function ensureSubmodelTemplatesReady(options = {}) {
+  const submodelNodes = graph.nodes.filter((node) => isSubmodelNode(node));
+  if (!submodelNodes.length) {
+    ui.submodelsPrepared = true;
+    return true;
+  }
+  if (ui.submodelsPrepared) {
+    return true;
+  }
+  try {
+    for (const node of submodelNodes) {
+      const normalizedPath = normalizeSubmodelPath(node.modelPath);
+      if (!normalizedPath) {
+        node.submodelError = t("error.nodeDefinition.missingSubmodelPath");
+        continue;
+      }
+      const template = await loadSubmodelTemplateByPath(normalizedPath, new Set(), options);
+      node.interfaceCache = {
+        inputs: template.nodes.filter((child) => child.input).map((child) => child.name),
+        outputs: template.nodes.filter((child) => child.output).map((child) => child.name),
+      };
+      node.submodelError = "";
+      sanitizeSubmodelBindings(node);
+      sanitizeAllEdgesForNode(node.id);
+    }
+    ui.submodelsPrepared = true;
+    refreshSidebar();
+    render();
+    return true;
+  } catch (err) {
+    if (options.allowPrompt === false && isDeferredSubmodelResolutionError(err)) {
+      return false;
+    }
+    ui.submodelsPrepared = false;
+    setStatusKey("error.submodelPrepareFailed", { message: String(err?.message || t("error.load")) });
+    return false;
+  }
+}
+
+async function refreshSubmodelInterface(node, updateStatus = true, options = {}) {
+  if (!node || !isSubmodelNode(node)) {
+    return false;
+  }
+  const modelPath = String(node.modelPath ?? "").trim();
+  if (!modelPath) {
+    node.interfaceCache = { inputs: [], outputs: [] };
+    node.submodelError = t("error.nodeDefinition.missingSubmodelPath");
+    ui.submodelsPrepared = false;
+    if (updateStatus) {
+      setStatusKey("error.submodelMissingPath");
+    }
+    render();
+    return false;
+  }
+  try {
+    const normalizedPath = normalizeSubmodelPath(modelPath);
+    const { text } = await resolveSubmodelFileByPath(normalizedPath, {
+      allowPrompt: options.allowPrompt !== false,
+    });
+    const data = JSON.parse(text);
+    submodelTemplateCache.set(normalizedPath, buildRuntimeModelFromData(data));
+    const iface = extractSubmodelInterfaceFromData(data);
+    node.interfaceCache = {
+      inputs: Array.isArray(iface.inputs) ? iface.inputs.map((value) => String(value)) : [],
+      outputs: Array.isArray(iface.outputs) ? iface.outputs.map((value) => String(value)) : [],
+    };
+    sanitizeSubmodelBindings(node);
+    sanitizeAllEdgesForNode(node.id);
+    node.submodelError = "";
+    invalidateExecutionPlan();
+    ui.submodelsPrepared = false;
+    scheduleFileStatusRefresh();
+    if (updateStatus) {
+      setStatusKey("status.submodelInterfaceLoaded", { name: node.name });
+    }
+    render();
+    return true;
+  } catch (err) {
+    if (options.allowPrompt === false && isDeferredSubmodelResolutionError(err)) {
+      return false;
+    }
+    node.interfaceCache = { inputs: [], outputs: [] };
+    node.submodelError = String(err?.message || t("error.load"));
+    ui.submodelsPrepared = false;
+    sanitizeAllEdgesForNode(node.id);
+    invalidateExecutionPlan();
+    scheduleFileStatusRefresh();
+    if (updateStatus) {
+      setStatusKey("error.submodelLoadFailed", { message: node.submodelError });
+    }
+    render();
+    return false;
+  }
+}
+
+async function refreshAllSubmodelInterfaces() {
+  const submodelNodes = graph.nodes.filter((node) => isSubmodelNode(node) && String(node.modelPath ?? "").trim());
+  if (!submodelNodes.length) {
+    return;
+  }
+  for (const node of submodelNodes) {
+    // Best-effort refresh without spamming the status bar.
+    await refreshSubmodelInterface(node, false, { allowPrompt: false });
+  }
+}
+
+async function preloadSubmodelsAfterLoad() {
+  const submodelNodes = graph.nodes.filter((node) => isSubmodelNode(node) && String(node.modelPath ?? "").trim());
+  if (!submodelNodes.length) {
+    return;
+  }
+  try {
+    await refreshAllSubmodelInterfaces();
+    await ensureSubmodelTemplatesReady({ allowPrompt: false });
+  } catch (_err) {
+    // Best-effort preload. Errors are already surfaced by the preparation path.
+  }
+}
+
+async function openSubmodelNode(node) {
+  if (!node || !isSubmodelNode(node)) {
+    return false;
+  }
+  const modelPath = normalizeSubmodelPath(node.modelPath);
+  if (!modelPath) {
+    setStatusKey("error.submodelMissingPath");
+    return false;
+  }
+  try {
+    const { text, fileHandle, file, directoryHandle } = await resolveSubmodelFileByPath(modelPath);
+    submodelTemplateCache.set(modelPath, buildRuntimeModelFromData(JSON.parse(text)));
+    modelContextStack.push(captureCurrentModelContext(node.name));
+    loadGraphFromJsonText(
+      text,
+      (fileHandle && fileHandle.name) || (file && file.name) || modelPath,
+      fileHandle,
+      directoryHandle,
+      true,
+    );
+    await preloadSubmodelsAfterLoad();
+    setStatusKey("status.submodelOpened", { name: node.name });
+    return true;
+  } catch (err) {
+    setStatusKey("error.submodelOpenFailed", { message: String(err?.message || t("error.load")) });
+    return false;
+  }
+}
+
+async function exitCurrentSubmodel() {
+  if (modelContextStack.length === 0) {
+    return;
+  }
+  if (hasUnsavedChanges()) {
+    const shouldSave = window.confirm(t("confirm.exitSubmodel.save"));
+    if (shouldSave) {
+      const saved = await saveGraphJson(false);
+      if (!saved) {
+        return;
+      }
+    }
+  }
+  const parentContext = modelContextStack.pop();
+  restoreModelContext(parentContext);
+  setStatusKey("status.submodelClosed");
 }
 
 async function writeJsonToFileHandle(fileHandle, json) {
@@ -5238,6 +6614,7 @@ async function saveGraphJson(forceSaveAs = false) {
     }
     filename = currentFileHandle.name || filename;
     currentFileName = filename;
+    submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
     markSavedSnapshot();
     setStatusKey("status.saved");
     return true;
@@ -5253,6 +6630,7 @@ async function saveGraphJson(forceSaveAs = false) {
           setStatusKey("error.saveFailed");
           return false;
         }
+        submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
         markSavedSnapshot();
         setStatusKey("status.saved");
         return true;
@@ -5275,6 +6653,7 @@ async function saveGraphJson(forceSaveAs = false) {
       selectedName = normalizeJsonFilename(proposed);
     }
     currentFileName = selectedName;
+    submodelTemplateCache.set(String(currentFileName || selectedName), buildRuntimeModelFromData(data));
     downloadJsonFile(selectedName, json);
     markSavedSnapshot();
     setStatusKey("status.saved");
@@ -5307,6 +6686,7 @@ async function saveGraphJson(forceSaveAs = false) {
       } else {
         filename = currentFileHandle.name || filename;
         currentFileName = filename;
+        submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
         markSavedSnapshot();
         setStatusKey("status.savedAs");
         return true;
@@ -5332,28 +6712,39 @@ async function saveGraphJson(forceSaveAs = false) {
   }
 
   downloadJsonFile(filename, json);
+  submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
   markSavedSnapshot();
   setStatusKey(forceSaveAs ? "status.savedAs" : "status.saved");
   return true;
 }
 
-function loadGraphJsonFile(file) {
-  const reader = new FileReader();
-  reader.onload = () => {
-    loadGraphFromJsonText(String(reader.result || "{}"), file?.name || "graph.json");
-  };
-  reader.onerror = () => {
+async function loadGraphJsonFile(file) {
+  try {
+    submodelTemplateCache.clear();
+    submodelFileHandleCache.clear();
+    submodelSourceCache.clear();
+    const extraFiles = Array.from(loadJsonInput.files || []).filter((entry) => entry !== file);
+    const rootEntry = await prepareSelectedJsonEntries([file, ...extraFiles]);
+    if (!rootEntry) {
+      return;
+    }
+    const text = rootEntry.text;
+    const rootData = rootEntry.data || JSON.parse(text);
+    loadGraphFromJsonText(text, rootEntry.name || file?.name || "graph.json", null, null, true);
+    await maybeSelectModelDirectoryForSubmodels(rootData);
+    await preloadSubmodelsAfterLoad();
+  } catch (_err) {
     cancelTransaction();
     setStatusKey("status.readError");
-  };
-  reader.readAsText(file);
+  }
 }
 
 async function openGraphJson() {
+  modelContextStack.length = 0;
   if (window.showOpenFilePicker) {
     try {
       const handles = await window.showOpenFilePicker({
-        multiple: false,
+        multiple: true,
         types: [
           {
             description: "JSON",
@@ -5364,10 +6755,26 @@ async function openGraphJson() {
       if (!handles || handles.length === 0) {
         return;
       }
-      const handle = handles[0];
-      const file = await handle.getFile();
-      const text = await file.text();
-      loadGraphFromJsonText(text, handle.name || file.name || "graph.json", handle);
+      submodelTemplateCache.clear();
+      submodelFileHandleCache.clear();
+      submodelSourceCache.clear();
+      const rootEntry = await prepareSelectedJsonEntries(handles);
+      if (!rootEntry) {
+        return;
+      }
+      const handle = rootEntry.fileHandle;
+      const file = rootEntry.file;
+      const text = rootEntry.text;
+      const rootData = rootEntry.data || JSON.parse(text);
+      loadGraphFromJsonText(
+        text,
+        rootEntry.name || (handle && handle.name) || (file && file.name) || "graph.json",
+        handle || null,
+        null,
+        true,
+      );
+      await maybeSelectModelDirectoryForSubmodels(rootData);
+      await preloadSubmodelsAfterLoad();
       return;
     } catch (err) {
       if (err && err.name === "AbortError") {
@@ -5375,10 +6782,12 @@ async function openGraphJson() {
       }
     }
   }
+  loadJsonInput.multiple = true;
   loadJsonInput.click();
 }
 
 async function createNewGraph() {
+  modelContextStack.length = 0;
   if (hasUnsavedChanges()) {
     const shouldSave = window.confirm(t("confirm.newGraph.save"));
     if (shouldSave) {
@@ -5414,7 +6823,12 @@ async function createNewGraph() {
   history.redo = [];
   updateHistoryButtons();
   currentFileHandle = null;
-  currentFileName = "";
+  currentFileName = defaultGraphFilename();
+  currentModelDirectoryHandle = null;
+  submodelTemplateCache.clear();
+  submodelFileHandleCache.clear();
+  submodelSourceCache.clear();
+  ui.submodelsPrepared = false;
   markSavedSnapshot();
   setStatusKey("status.newGraph");
   render();
@@ -5424,6 +6838,7 @@ function stopTimedExecution(updateStatus = true) {
   if (ui.timedRunHandle != null) {
     window.clearInterval(ui.timedRunHandle);
     ui.timedRunHandle = null;
+    ui.timedStepRunning = false;
     if (updateStatus) {
       setStatusKey("status.timedStopped");
     }
@@ -5543,6 +6958,100 @@ function serializeNodePropertyStoredValue(value) {
   return String(value);
 }
 
+function buildRuntimeModelFromData(data) {
+  if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
+    throw new Error(t("error.invalidJson"));
+  }
+  const execCfg = normalizeExecutionConfig(data.execution);
+  const nodes = data.nodes
+    .filter((n) => Number.isInteger(n.id))
+    .map((n) => {
+      if (!["state", "algebraic", "parameter", "submodel"].includes(n.type)) {
+        throw new Error(t("error.invalidJson"));
+      }
+      const shape = deserializeNodeType(n.type);
+      return {
+        id: n.id,
+        name: typeof n.name === "string" ? n.name : t("node.defaultName", { id: n.id }),
+        input: shape === "ellipse" ? Boolean(n.input) : false,
+        output: Boolean(n.output),
+        shape,
+        x: Number.isFinite(Number(n.x)) ? Number(n.x) : 200,
+        y: Number.isFinite(Number(n.y)) ? Number(n.y) : 200,
+        width: clamp(Number(n.width) || 120, 40, 500),
+        height: clamp(Number(n.height) || 70, 30, 500),
+        valueExpression: shape === "rect"
+          ? String(n.stateTransition ?? "")
+          : String(n.valueExpression ?? ""),
+        initialStateExpression: shape === "rect"
+          ? String(n.initialState ?? "")
+          : "",
+        modelPath: shape === "submodel" ? String(n.modelPath ?? "") : "",
+        inputBindings: shape === "submodel" && n.inputBindings && typeof n.inputBindings === "object"
+          ? Object.fromEntries(
+            Object.entries(n.inputBindings)
+              .map(([key, value]) => [String(key), String(value ?? "")])
+              .filter(([key]) => key.trim()),
+          )
+          : {},
+        interfaceCache: shape === "submodel" && n.interfaceCache && typeof n.interfaceCache === "object"
+          ? {
+            inputs: Array.isArray(n.interfaceCache.inputs) ? n.interfaceCache.inputs.map((value) => String(value)) : [],
+            outputs: Array.isArray(n.interfaceCache.outputs) ? n.interfaceCache.outputs.map((value) => String(value)) : [],
+          }
+          : { inputs: [], outputs: [] },
+        submodelError: "",
+        computedValue: null,
+        computedError: "",
+        pendingStateValue: null,
+        pendingStateError: "",
+        externalValueEnabled: false,
+        externalValue: null,
+        properties: Array.isArray(n.properties)
+          ? n.properties.map((p) => ({ key: String(p?.key ?? ""), value: String(p?.value ?? "") }))
+          : [],
+      };
+    });
+  const nodesWithValidNames = semantics.sanitizeNodeNames(nodes, "n");
+  const nodeIds = new Set(nodesWithValidNames.map((node) => node.id));
+  const edges = data.edges
+    .filter((e) => Number.isInteger(e.id) && nodeIds.has(e.from) && nodeIds.has(e.to) && e.from !== e.to)
+    .map((e) => ({
+      id: e.id,
+      from: e.from,
+      to: e.to,
+      sourcePort: String(e.sourcePort ?? ""),
+      targetPort: String(e.targetPort ?? ""),
+      controlPoints: Array.isArray(e.controlPoints)
+        ? e.controlPoints.filter(isValidPoint).map((cp) => ({ x: cp.x, y: cp.y }))
+        : [],
+    }));
+
+  return {
+    modelTitle: String(data?.modelTitle ?? ""),
+    properties: Array.isArray(data?.modelProperties)
+      ? data.modelProperties.map((p) => ({ key: String(p?.key ?? ""), value: String(p?.value ?? "") }))
+      : [],
+    nodes: nodesWithValidNames,
+    edges,
+    widgets: [],
+    execution: {
+      t0: execCfg.t0,
+      dt: execCfg.dt,
+      t1: execCfg.t1,
+      delayMs: execCfg.delayMs,
+      decimals: execCfg.decimals,
+      integrator: execCfg.integrator,
+      strictDefinitions: execCfg.strictDefinitions,
+      currentTime: null,
+    },
+  };
+}
+
+function cloneRuntimeModel(template) {
+  return deepClone(template);
+}
+
 function getModelPropertyValue(key, fallback = null) {
   const name = String(key ?? "");
   const found = graph.properties.find((prop) => String(prop?.key ?? "") === name);
@@ -5575,6 +7084,350 @@ function buildExecutionGlobals(timeValue) {
   };
 }
 
+function buildExecutionGlobalsForModel(model, rootExecution, timeValue) {
+  return {
+    time: timeValue,
+    t0: Number(rootExecution.t0),
+    t1: Number(rootExecution.t1),
+    dt: Number(rootExecution.dt),
+    getModelProperty: (key, fallback = null) => {
+      const name = String(key ?? "");
+      const found = model.properties.find((prop) => String(prop?.key ?? "") === name);
+      return found ? parseModelPropertyStoredValue(found.value) : fallback;
+    },
+    setModelProperty: (key, value) => {
+      const name = String(key ?? "");
+      const stored = serializeModelPropertyStoredValue(value);
+      const found = model.properties.find((prop) => String(prop?.key ?? "") === name);
+      if (found) {
+        found.value = stored;
+      } else {
+        model.properties.push({ key: name, value: stored });
+      }
+      return value;
+    },
+  };
+}
+
+function initializeStateNodesForModel(model, timeValue, rootExecution) {
+  model.nodes.forEach((node) => {
+    if (!isStateNode(node)) {
+      node.computedValue = null;
+      node.computedError = "";
+      node.pendingStateValue = null;
+      node.pendingStateError = "";
+      return;
+    }
+    const initExpr = String(node.initialStateExpression ?? "0");
+    const initResult = semantics.evaluateValueExpression(
+      initExpr,
+      buildExecutionGlobalsForModel(model, rootExecution, timeValue),
+    );
+    if (initResult.ok) {
+      node.computedValue = initResult.value;
+      node.computedError = "";
+    } else {
+      node.computedValue = null;
+      node.computedError = initResult.reason || "runtime";
+    }
+    node.pendingStateValue = null;
+    node.pendingStateError = "";
+  });
+}
+
+function promotePendingStateNodesForModel(model) {
+  model.nodes.forEach((node) => {
+    if (!isStateNode(node)) {
+      return;
+    }
+    if (node.pendingStateError) {
+      node.computedValue = null;
+      node.computedError = node.pendingStateError;
+      node.pendingStateValue = null;
+      node.pendingStateError = "";
+      return;
+    }
+    if (node.pendingStateValue !== null && node.pendingStateValue !== undefined) {
+      node.computedValue = node.pendingStateValue;
+      node.computedError = "";
+      node.pendingStateValue = null;
+      node.pendingStateError = "";
+    }
+  });
+}
+
+function getCachedSubmodelTemplate(modelPath) {
+  const normalized = normalizeSubmodelPath(modelPath);
+  return normalized ? submodelTemplateCache.get(normalized) || null : null;
+}
+
+function ensureSubmodelRuntimeModel(node) {
+  const normalizedPath = normalizeSubmodelPath(node?.modelPath);
+  if (!normalizedPath) {
+    return null;
+  }
+  const template = getCachedSubmodelTemplate(normalizedPath);
+  if (!template) {
+    return null;
+  }
+  if (!node.__runtimeSubmodel || node.__runtimeSubmodelPath !== normalizedPath) {
+    node.__runtimeSubmodel = cloneRuntimeModel(template);
+    node.__runtimeSubmodelPath = normalizedPath;
+  }
+  return node.__runtimeSubmodel;
+}
+
+function buildSubmodelInputOverrides(model, node, parentContext) {
+  const overrides = new Map();
+  const assignedPorts = new Set();
+
+  (model?.edges || [])
+    .filter((edge) => edge.to === node.id && String(edge.targetPort ?? "").trim())
+    .forEach((edge) => {
+      const targetPort = String(edge.targetPort ?? "").trim();
+      const fromNode = getModelNodeById(model, edge.from);
+      if (!fromNode) {
+        return;
+      }
+      if (assignedPorts.has(targetPort)) {
+        throw new Error(`duplicate input binding for ${targetPort}`);
+      }
+      let value = parentContext[fromNode.name];
+      const sourcePort = String(edge.sourcePort ?? "").trim();
+      if (sourcePort) {
+        if (value == null || typeof value !== "object" || !Object.prototype.hasOwnProperty.call(value, sourcePort)) {
+          throw new Error(`missing submodel output ${sourcePort}`);
+        }
+        value = value[sourcePort];
+      }
+      overrides.set(targetPort, value);
+      assignedPorts.add(targetPort);
+    });
+
+  Object.entries(node.inputBindings || {}).forEach(([inputName, expr]) => {
+    const name = String(inputName || "").trim();
+    if (!name || assignedPorts.has(name)) {
+      return;
+    }
+    const result = semantics.evaluateValueExpression(String(expr ?? ""), parentContext);
+    if (!result.ok) {
+      throw new Error(result.message || result.reason || "runtime");
+    }
+    overrides.set(name, result.value);
+  });
+
+  return overrides;
+}
+
+function evaluateModelAtTimeRecursive(model, timeValue, env, options = {}) {
+  const executionGlobals = buildExecutionGlobalsForModel(model, env.rootExecution, timeValue);
+  const executionPlan = semantics.prepareStatefulExecutionPlan(model.nodes, model.edges);
+  const stateValueOverrides = options.stateValueOverrides instanceof Map ? options.stateValueOverrides : null;
+  const rk4Analyses = String(env.rootExecution?.integrator ?? "euler") === "rk4"
+    ? collectRk4IntegralStateAnalysesForModel(model)
+    : new Map();
+  const integralStateNodeIds = new Set(rk4Analyses.keys());
+  const evalResults = semantics.evaluateStatefulGraphStep(
+    model.nodes,
+    model.edges,
+    executionGlobals,
+    executionPlan,
+    {
+      stateValueOverrides: stateValueOverrides || undefined,
+      derivativeStateNodeIds: integralStateNodeIds.size > 0 ? integralStateNodeIds : undefined,
+      customNodeEvaluator: createSubmodelNodeEvaluator(model, timeValue, env, {
+        applyResults: options.applyResults !== false,
+      }),
+    },
+  );
+  const algebraicValueMap = extractSuccessfulAlgebraicValueMap(evalResults.algebraic);
+
+  let rk4Results = null;
+  if (integralStateNodeIds.size > 0) {
+    const stage1Failure = firstFailedEntry(evalResults.stateTransitions, integralStateNodeIds);
+    if (!stage1Failure) {
+      const currentStateMap = buildCurrentStateMapForModel(model, stateValueOverrides);
+      const k1 = extractSuccessfulResultMap(evalResults.stateTransitions);
+      const dt = Number(env.rootExecution.dt);
+      const stage2IntegralValues = buildStageIntegralValuesMap(currentStateMap, k1, dt / 2);
+      const stage2TransitionValues = evaluateTransitionResultsWithIntegralValuesForModel(
+        model,
+        timeValue + dt / 2,
+        env,
+        executionPlan,
+        integralStateNodeIds,
+        stage2IntegralValues,
+        algebraicValueMap,
+        stateValueOverrides,
+      );
+      const stage2StateOverrides = new Map(
+        [...integralStateNodeIds].map((nodeId) => [nodeId, stage2TransitionValues.get(nodeId)?.value ?? currentStateMap.get(nodeId)]),
+      );
+      const stage2 = semantics.evaluateStatefulGraphStep(
+        model.nodes,
+        model.edges,
+        buildExecutionGlobalsForModel(model, env.rootExecution, timeValue + dt / 2),
+        executionPlan,
+        {
+          derivativeStateNodeIds: integralStateNodeIds,
+          stateValueOverrides: stage2StateOverrides,
+          customNodeEvaluator: createSubmodelNodeEvaluator(model, timeValue + dt / 2, env, { applyResults: false }),
+        },
+      );
+      const stage2Failure = firstFailedEntry(stage2.stateTransitions, integralStateNodeIds);
+      if (!stage2Failure) {
+        const stage2AlgebraicValueMap = extractSuccessfulAlgebraicValueMap(stage2.algebraic);
+        const k2 = extractSuccessfulResultMap(stage2.stateTransitions);
+        const stage3IntegralValues = buildStageIntegralValuesMap(currentStateMap, k2, dt / 2);
+        const stage3TransitionValues = evaluateTransitionResultsWithIntegralValuesForModel(
+          model,
+          timeValue + dt / 2,
+          env,
+          executionPlan,
+          integralStateNodeIds,
+          stage3IntegralValues,
+          stage2AlgebraicValueMap,
+          stage2StateOverrides,
+        );
+        const stage3StateOverrides = new Map(
+          [...integralStateNodeIds].map((nodeId) => [nodeId, stage3TransitionValues.get(nodeId)?.value ?? currentStateMap.get(nodeId)]),
+        );
+        const stage3 = semantics.evaluateStatefulGraphStep(
+          model.nodes,
+          model.edges,
+          buildExecutionGlobalsForModel(model, env.rootExecution, timeValue + dt / 2),
+          executionPlan,
+          {
+            derivativeStateNodeIds: integralStateNodeIds,
+            stateValueOverrides: stage3StateOverrides,
+            customNodeEvaluator: createSubmodelNodeEvaluator(model, timeValue + dt / 2, env, { applyResults: false }),
+          },
+        );
+        const stage3Failure = firstFailedEntry(stage3.stateTransitions, integralStateNodeIds);
+        if (!stage3Failure) {
+          const stage3AlgebraicValueMap = extractSuccessfulAlgebraicValueMap(stage3.algebraic);
+          const k3 = extractSuccessfulResultMap(stage3.stateTransitions);
+          const stage4IntegralValues = buildStageIntegralValuesMap(currentStateMap, k3, dt);
+          const stage4TransitionValues = evaluateTransitionResultsWithIntegralValuesForModel(
+            model,
+            timeValue + dt,
+            env,
+            executionPlan,
+            integralStateNodeIds,
+            stage4IntegralValues,
+            stage3AlgebraicValueMap,
+            stage3StateOverrides,
+          );
+          const stage4StateOverrides = new Map(
+            [...integralStateNodeIds].map((nodeId) => [nodeId, stage4TransitionValues.get(nodeId)?.value ?? currentStateMap.get(nodeId)]),
+          );
+          const stage4 = semantics.evaluateStatefulGraphStep(
+            model.nodes,
+            model.edges,
+            buildExecutionGlobalsForModel(model, env.rootExecution, timeValue + dt),
+            executionPlan,
+            {
+              derivativeStateNodeIds: integralStateNodeIds,
+              stateValueOverrides: stage4StateOverrides,
+              customNodeEvaluator: createSubmodelNodeEvaluator(model, timeValue + dt, env, { applyResults: false }),
+            },
+          );
+          const stage4Failure = firstFailedEntry(stage4.stateTransitions, integralStateNodeIds);
+          if (!stage4Failure) {
+            const k4 = extractSuccessfulResultMap(stage4.stateTransitions);
+            rk4Results = new Map();
+            integralStateNodeIds.forEach((nodeId) => {
+              const k1List = k1.get(nodeId) || [];
+              const k2List = k2.get(nodeId) || [];
+              const k3List = k3.get(nodeId) || [];
+              const k4List = k4.get(nodeId) || [];
+              const integratedValues = k1List.map((_, idx) => rk4IntegratedValue(
+                currentStateMap.get(nodeId),
+                k1List[idx],
+                k2List[idx],
+                k3List[idx],
+                k4List[idx],
+                dt,
+              ));
+              rk4Results.set(
+                nodeId,
+                evaluateTransitionResultsWithIntegralValuesForModel(
+                  model,
+                  timeValue,
+                  env,
+                  executionPlan,
+                  new Set([nodeId]),
+                  new Map([[nodeId, integratedValues]]),
+                  algebraicValueMap,
+                  stateValueOverrides,
+                ).get(nodeId) || { ok: false, reason: "dependency" },
+              );
+            });
+          } else {
+            rk4Results = new Map(stage4.stateTransitions.map((entry) => [entry.id, entry.result]));
+          }
+        } else {
+          rk4Results = new Map(stage3.stateTransitions.map((entry) => [entry.id, entry.result]));
+        }
+      } else {
+        rk4Results = new Map(stage2.stateTransitions.map((entry) => [entry.id, entry.result]));
+      }
+    } else {
+      rk4Results = new Map(evalResults.stateTransitions.map((entry) => [entry.id, entry.result]));
+    }
+  }
+
+  let successCount = 0;
+  let errorCount = 0;
+  let firstErrorNode = null;
+  let firstErrorReason = null;
+
+  evalResults.algebraic.forEach((entry) => {
+    const node = getModelNodeById(model, entry.id);
+    if (!node) {
+      return;
+    }
+    if (entry.result.ok) {
+      node.computedValue = entry.result.value;
+      node.computedError = "";
+      successCount += 1;
+    } else {
+      node.computedValue = null;
+      node.computedError = entry.result.reason || "runtime";
+      errorCount += 1;
+      if (!firstErrorNode) {
+        firstErrorNode = node.name;
+        firstErrorReason = node.computedError;
+      }
+    }
+  });
+
+  evalResults.stateTransitions.forEach((entry) => {
+    const node = getModelNodeById(model, entry.id);
+    if (!node) {
+      return;
+    }
+    const result = integralStateNodeIds.has(entry.id) && rk4Results
+      ? (rk4Results.get(entry.id) || { ok: false, reason: "dependency" })
+      : entry.result;
+    if (result.ok) {
+      node.pendingStateValue = result.value;
+      node.pendingStateError = "";
+      successCount += 1;
+    } else {
+      node.pendingStateValue = null;
+      node.pendingStateError = result.reason || "runtime";
+      errorCount += 1;
+      if (!firstErrorNode) {
+        firstErrorNode = node.name;
+        firstErrorReason = node.pendingStateError;
+      }
+    }
+  });
+
+  return { successCount, errorCount, firstErrorNode, firstErrorReason };
+}
+
 function currentDisplayTimeValue() {
   return graph.execution.currentTime == null
     ? Number(graph.execution.t0)
@@ -5582,10 +7435,7 @@ function currentDisplayTimeValue() {
 }
 
 function updateMenuTimeLabel() {
-  if (!menuTimeText) {
-    return;
-  }
-  menuTimeText.textContent = t("menu.time", { time: formatNumberValue(currentDisplayTimeValue()) });
+  return;
 }
 
 function ensureExecutionPlan() {
@@ -5597,6 +7447,17 @@ function ensureExecutionPlan() {
 
 function isRk4IntegratorSelected() {
   return String(graph.execution.integrator ?? "euler") === "rk4";
+}
+
+function graphHasSubmodels(model = graph) {
+  return Boolean(model?.nodes?.some((node) => isSubmodelNode(node)));
+}
+
+function clearRuntimeSubmodelState(model = graph) {
+  (model?.nodes || []).forEach((node) => {
+    node.__runtimeSubmodel = null;
+    node.__runtimeSubmodelPath = "";
+  });
 }
 
 function scaleTensorValue(value, factor) {
@@ -5667,6 +7528,16 @@ function extractSuccessfulResultMap(entries) {
   return out;
 }
 
+function extractSuccessfulAlgebraicValueMap(entries) {
+  const out = new Map();
+  entries.forEach((entry) => {
+    if (entry?.result?.ok) {
+      out.set(entry.id, entry.result.value);
+    }
+  });
+  return out;
+}
+
 function firstFailedEntry(entries, nodeIds = null) {
   const allowed = nodeIds instanceof Set ? nodeIds : null;
   for (const entry of entries) {
@@ -5678,6 +7549,162 @@ function firstFailedEntry(entries, nodeIds = null) {
     }
   }
   return null;
+}
+
+function collectRk4IntegralStateAnalysesForModel(model) {
+  const analyses = new Map();
+  (model?.nodes || []).forEach((node) => {
+    if (!isStateNode(node)) {
+      return;
+    }
+    const analysis = semantics.analyzeStateTransitionExpression(node.valueExpression);
+    if (analysis.ok && analysis.usesIntegral && analysis.integralCount > 0) {
+      analyses.set(node.id, analysis);
+    }
+  });
+  return analyses;
+}
+
+function buildCurrentStateMapForModel(model, stateValueOverrides = null) {
+  const out = new Map();
+  (model?.nodes || []).forEach((node) => {
+    if (!isStateNode(node)) {
+      return;
+    }
+    out.set(
+      node.id,
+      stateValueOverrides instanceof Map && stateValueOverrides.has(node.id)
+        ? stateValueOverrides.get(node.id)
+        : node.computedValue,
+    );
+  });
+  return out;
+}
+
+function createSubmodelNodeEvaluator(model, timeValue, env, options = {}) {
+  const applyResults = options.applyResults !== false;
+  return function submodelNodeEvaluator(runtimeNode, context) {
+    if (!isSubmodelNode(runtimeNode)) {
+      return null;
+    }
+    const normalizedPath = normalizeSubmodelPath(runtimeNode.modelPath);
+    if (!normalizedPath) {
+      return { ok: false, reason: "runtime", message: "missing submodel path" };
+    }
+    if (!submodelTemplateCache.has(normalizedPath)) {
+      return { ok: false, reason: "runtime", message: "submodel is not loaded" };
+    }
+    if (env.stack.includes(normalizedPath)) {
+      return { ok: false, reason: "runtime", message: "recursive submodel reference" };
+    }
+    try {
+      const inputOverrides = buildSubmodelInputOverrides(model, runtimeNode, context);
+      const runtimeChildModel = ensureSubmodelRuntimeModel(runtimeNode);
+      if (!runtimeChildModel) {
+        return { ok: false, reason: "runtime", message: "submodel is not loaded" };
+      }
+      const childModel = applyResults ? runtimeChildModel : cloneRuntimeModel(runtimeChildModel);
+      if (childModel.execution.currentTime == null || childModel.execution.currentTime !== timeValue) {
+        if (childModel.execution.currentTime == null) {
+          initializeStateNodesForModel(childModel, timeValue, env.rootExecution);
+        } else {
+          promotePendingStateNodesForModel(childModel);
+        }
+      }
+      applyRuntimeModelInputOverrides(childModel, inputOverrides);
+      const childResult = evaluateModelAtTimeRecursive(
+        childModel,
+        timeValue,
+        {
+          rootExecution: env.rootExecution,
+          stack: [...env.stack, normalizedPath],
+        },
+        { applyResults },
+      );
+      childModel.execution.currentTime = timeValue;
+      if (childResult.errorCount > 0) {
+        return {
+          ok: false,
+          reason: childResult.firstErrorReason || "runtime",
+          message: childResult.firstErrorNode || "submodel",
+        };
+      }
+      const outputs = {};
+      childModel.nodes.forEach((childNode) => {
+        if (childNode.output) {
+          outputs[childNode.name] = childNode.computedValue;
+        }
+      });
+      return { ok: true, kind: "object", value: outputs };
+    } catch (err) {
+      return { ok: false, reason: "runtime", message: String(err?.message || "runtime") };
+    }
+  };
+}
+
+function evaluateTransitionResultsWithIntegralValuesForModel(
+  model,
+  timeValue,
+  env,
+  executionPlan,
+  integralStateIds,
+  integralValuesMap,
+  algebraicValueMap,
+  stateValueOverrides = null,
+) {
+  const globals = buildExecutionGlobalsForModel(model, env.rootExecution, timeValue);
+  const results = new Map();
+  (model?.nodes || []).forEach((node) => {
+    if (!integralStateIds.has(node.id)) {
+      return;
+    }
+    const context = {
+      ...globals,
+      __self: stateValueOverrides instanceof Map && stateValueOverrides.has(node.id)
+        ? stateValueOverrides.get(node.id)
+        : node.computedValue,
+      getProperty: (key, fallback = null) => {
+        const found = node.properties.find((prop) => String(prop?.key ?? "") === String(key ?? ""));
+        return found ? parseNodePropertyStoredValue(found.value) : fallback;
+      },
+      setProperty: (key, value) => {
+        const name = String(key ?? "");
+        const stored = serializeNodePropertyStoredValue(value);
+        const found = node.properties.find((prop) => String(prop?.key ?? "") === name);
+        if (found) {
+          found.value = stored;
+        } else {
+          node.properties.push({ key: name, value: stored });
+        }
+        return value;
+      },
+    };
+    (executionPlan.incoming.get(node.id) || []).forEach((fromId) => {
+      const fromNode = getModelNodeById(model, fromId);
+      if (!fromNode) {
+        return;
+      }
+      if (isStateNode(fromNode)) {
+        context[fromNode.name] = stateValueOverrides instanceof Map && stateValueOverrides.has(fromId)
+          ? stateValueOverrides.get(fromId)
+          : fromNode.computedValue;
+        return;
+      }
+      if (algebraicValueMap.has(fromId)) {
+        context[fromNode.name] = algebraicValueMap.get(fromId);
+      }
+    });
+    results.set(
+      node.id,
+      semantics.evaluateStateTransitionExpressionWithIntegralValues(
+        node.valueExpression,
+        context,
+        integralValuesMap.get(node.id) || [],
+        { allowThisAlias: true },
+      ),
+    );
+  });
+  return results;
 }
 
 function buildStageIntegralValuesMap(currentStateMap, derivativeListMap, factor) {
@@ -5790,179 +7817,14 @@ function promotePendingStateNodes() {
 
 function evaluateAtTime(timeValue) {
   applyWidgetDrivenNodeValues();
-  const executionGlobals = buildExecutionGlobals(timeValue);
-  const executionPlan = ensureExecutionPlan();
-  const rk4Analyses = isRk4IntegratorSelected() ? collectRk4IntegralStateAnalyses() : new Map();
-  const integralStateNodeIds = new Set(rk4Analyses.keys());
-  const evalResults = semantics.evaluateStatefulGraphStep(
-    graph.nodes,
-    graph.edges,
-    executionGlobals,
-    executionPlan,
-    integralStateNodeIds.size > 0 ? { derivativeStateNodeIds: integralStateNodeIds } : undefined,
-  );
+  const result = evaluateModelAtTimeRecursive(graph, timeValue, {
+    rootExecution: graph.execution,
+    stack: [],
+  });
   const nodeMap = buildNodeNameMap();
-  let successCount = 0;
-  let errorCount = 0;
-  let firstErrorNode = null;
-  let firstErrorReason = null;
-
-  evalResults.algebraic.forEach((entry) => {
-    const node = getNodeById(entry.id);
-    if (!node) {
-      return;
-    }
-    if (entry.result.ok) {
-      node.computedValue = entry.result.value;
-      node.computedError = "";
-      successCount += 1;
-    } else {
-      node.computedValue = null;
-      node.computedError = entry.result.reason || "runtime";
-      errorCount += 1;
-      if (!firstErrorNode) {
-        firstErrorNode = node.name;
-        firstErrorReason = node.computedError;
-      }
-    }
-  });
-
-  let rk4Results = null;
-  if (integralStateNodeIds.size > 0) {
-    const stage1Failure = firstFailedEntry(evalResults.stateTransitions, integralStateNodeIds);
-    if (!stage1Failure) {
-      const currentStateMap = new Map();
-      graph.nodes.forEach((node) => {
-        if (integralStateNodeIds.has(node.id)) {
-          currentStateMap.set(node.id, node.computedValue);
-        }
-      });
-      const k1 = extractSuccessfulResultMap(evalResults.stateTransitions);
-      const dt = Number(graph.execution.dt);
-      const stage2IntegralValues = buildStageIntegralValuesMap(currentStateMap, k1, dt / 2);
-      const stage2TransitionValues = evaluateTransitionResultsWithIntegralValues(
-        timeValue + dt / 2,
-        integralStateNodeIds,
-        stage2IntegralValues,
-      );
-      const stage2 = semantics.evaluateStatefulGraphStep(
-        graph.nodes,
-        graph.edges,
-        buildExecutionGlobals(timeValue + dt / 2),
-        executionPlan,
-        {
-          derivativeStateNodeIds: integralStateNodeIds,
-          stateValueOverrides: new Map(
-            [...integralStateNodeIds].map((nodeId) => [nodeId, stage2TransitionValues.get(nodeId)?.value ?? currentStateMap.get(nodeId)]),
-          ),
-        },
-      );
-      const stage2Failure = firstFailedEntry(stage2.stateTransitions, integralStateNodeIds);
-      if (!stage2Failure) {
-        const k2 = extractSuccessfulResultMap(stage2.stateTransitions);
-        const stage3IntegralValues = buildStageIntegralValuesMap(currentStateMap, k2, dt / 2);
-        const stage3TransitionValues = evaluateTransitionResultsWithIntegralValues(
-          timeValue + dt / 2,
-          integralStateNodeIds,
-          stage3IntegralValues,
-        );
-        const stage3 = semantics.evaluateStatefulGraphStep(
-          graph.nodes,
-          graph.edges,
-          buildExecutionGlobals(timeValue + dt / 2),
-          executionPlan,
-          {
-            derivativeStateNodeIds: integralStateNodeIds,
-            stateValueOverrides: new Map(
-              [...integralStateNodeIds].map((nodeId) => [nodeId, stage3TransitionValues.get(nodeId)?.value ?? currentStateMap.get(nodeId)]),
-            ),
-          },
-        );
-        const stage3Failure = firstFailedEntry(stage3.stateTransitions, integralStateNodeIds);
-        if (!stage3Failure) {
-          const k3 = extractSuccessfulResultMap(stage3.stateTransitions);
-          const stage4IntegralValues = buildStageIntegralValuesMap(currentStateMap, k3, dt);
-          const stage4TransitionValues = evaluateTransitionResultsWithIntegralValues(
-            timeValue + dt,
-            integralStateNodeIds,
-            stage4IntegralValues,
-          );
-          const stage4 = semantics.evaluateStatefulGraphStep(
-            graph.nodes,
-            graph.edges,
-            buildExecutionGlobals(timeValue + dt),
-            executionPlan,
-            {
-              derivativeStateNodeIds: integralStateNodeIds,
-              stateValueOverrides: new Map(
-                [...integralStateNodeIds].map((nodeId) => [nodeId, stage4TransitionValues.get(nodeId)?.value ?? currentStateMap.get(nodeId)]),
-              ),
-            },
-          );
-          const stage4Failure = firstFailedEntry(stage4.stateTransitions, integralStateNodeIds);
-          if (!stage4Failure) {
-            const k4 = extractSuccessfulResultMap(stage4.stateTransitions);
-            rk4Results = new Map();
-            integralStateNodeIds.forEach((nodeId) => {
-              const node = getNodeById(nodeId);
-              const k1List = k1.get(nodeId) || [];
-              const k2List = k2.get(nodeId) || [];
-              const k3List = k3.get(nodeId) || [];
-              const k4List = k4.get(nodeId) || [];
-              const integratedValues = k1List.map((_, idx) => rk4IntegratedValue(
-                currentStateMap.get(nodeId),
-                k1List[idx],
-                k2List[idx],
-                k3List[idx],
-                k4List[idx],
-                dt,
-              ));
-              rk4Results.set(nodeId, {
-                ...(evaluateTransitionResultsWithIntegralValues(timeValue, new Set([nodeId]), new Map([[nodeId, integratedValues]])).get(nodeId)
-                  || { ok: false, reason: "dependency" }),
-              });
-            });
-          } else {
-            rk4Results = new Map(stage4.stateTransitions.map((entry) => [entry.id, entry.result]));
-          }
-        } else {
-          rk4Results = new Map(stage3.stateTransitions.map((entry) => [entry.id, entry.result]));
-        }
-      } else {
-        rk4Results = new Map(stage2.stateTransitions.map((entry) => [entry.id, entry.result]));
-      }
-    } else {
-      rk4Results = new Map(evalResults.stateTransitions.map((entry) => [entry.id, entry.result]));
-    }
-  }
-
-  evalResults.stateTransitions.forEach((entry) => {
-    const node = getNodeById(entry.id);
-    if (!node) {
-      return;
-    }
-    const result = integralStateNodeIds.has(entry.id) && rk4Results
-      ? (rk4Results.get(entry.id) || { ok: false, reason: "dependency" })
-      : entry.result;
-    if (result.ok) {
-      node.pendingStateValue = result.value;
-      node.pendingStateError = "";
-      successCount += 1;
-    } else {
-      node.pendingStateValue = null;
-      node.pendingStateError = result.reason || "runtime";
-      errorCount += 1;
-      if (!firstErrorNode) {
-        firstErrorNode = node.name;
-        firstErrorReason = node.pendingStateError;
-      }
-    }
-  });
-
   updateTableWidgetsFromComputedValues(timeValue, nodeMap);
   updateXYWidgetsFromComputedValues(timeValue, nodeMap);
-
-  return { successCount, errorCount, firstErrorNode, firstErrorReason };
+  return result;
 }
 
 function validateTimeConfig() {
@@ -5984,8 +7846,29 @@ function validateTimeConfig() {
   return { t0, dt, t1 };
 }
 
-function executeOneStep(restartIfEnded = true) {
+async function prepareSubmodelsForExecution() {
+  await preloadSubmodelsAfterLoad();
+  let ready = await ensureSubmodelTemplatesReady({ allowPrompt: false });
+  if (!ready) {
+    const hasSubmodels = graph.nodes.some((node) => isSubmodelNode(node) && String(node.modelPath ?? "").trim());
+    if (hasSubmodels && !currentModelDirectoryHandle && (supportsDirectoryInputSelection() || typeof window.showDirectoryPicker === "function")) {
+      try {
+        await ensureCurrentModelDirectoryHandle();
+        await preloadSubmodelsAfterLoad();
+        ready = await ensureSubmodelTemplatesReady({ allowPrompt: false });
+      } catch (_err) {
+        ready = false;
+      }
+    }
+  }
+  return ready;
+}
+
+async function executeOneStep(restartIfEnded = true) {
   if (!enforceStrictDefinitionsIfNeeded()) {
+    return false;
+  }
+  if (!(await prepareSubmodelsForExecution())) {
     return false;
   }
   const cfg = validateTimeConfig();
@@ -6012,6 +7895,7 @@ function executeOneStep(restartIfEnded = true) {
     clearAllTableWidgetRows();
   }
   if (graph.execution.currentTime == null) {
+    clearRuntimeSubmodelState();
     initializeStateNodes(nextTime);
   } else {
     promotePendingStateNodes();
@@ -6040,8 +7924,11 @@ function executeOneStep(restartIfEnded = true) {
   return true;
 }
 
-function executeNodeExpressions() {
+async function executeNodeExpressions() {
   if (!enforceStrictDefinitionsIfNeeded()) {
+    return;
+  }
+  if (!(await prepareSubmodelsForExecution())) {
     return;
   }
   stopTimedExecution(false);
@@ -6059,6 +7946,7 @@ function executeNodeExpressions() {
     graph.execution.currentTime = null;
     clearAllXYChartPoints();
     clearAllTableWidgetRows();
+    clearRuntimeSubmodelState();
   }
 
   const maxSteps = 100000;
@@ -6125,12 +8013,12 @@ function executeNodeExpressions() {
   }
 }
 
-function runManualStep() {
+async function runManualStep() {
   if (!enforceStrictDefinitionsIfNeeded()) {
     return;
   }
   stopTimedExecution(false);
-  executeOneStep(true);
+  await executeOneStep(true);
 }
 
 function resetExecution() {
@@ -6142,18 +8030,22 @@ function resetExecution() {
   graph.execution.currentTime = null;
   clearAllXYChartPoints();
   clearAllTableWidgetRows();
+  clearRuntimeSubmodelState();
   initializeStateNodes(cfg.t0);
   refreshRuntimeView();
   setStatusKey("status.executionReset", { time: formatNumberValue(Number(cfg.t0)) });
 }
 
-function toggleTimedExecution() {
+async function toggleTimedExecution() {
   if (ui.timedRunHandle != null) {
     stopTimedExecution(true);
     return;
   }
 
   if (!enforceStrictDefinitionsIfNeeded()) {
+    return;
+  }
+  if (!(await prepareSubmodelsForExecution())) {
     return;
   }
 
@@ -6177,8 +8069,14 @@ function toggleTimedExecution() {
     refreshRuntimeView();
   }
 
-  ui.timedRunHandle = window.setInterval(() => {
-    const ok = executeOneStep(false);
+  ui.timedStepRunning = false;
+  ui.timedRunHandle = window.setInterval(async () => {
+    if (ui.timedStepRunning) {
+      return;
+    }
+    ui.timedStepRunning = true;
+    const ok = await executeOneStep(false);
+    ui.timedStepRunning = false;
     if (!ok) {
       stopTimedExecution(false);
       if (!(graph.execution.strictDefinitions && invalidDefinedNodes().length > 0)) {
@@ -6478,6 +8376,18 @@ svg.addEventListener("pointerdown", (evt) => {
   render();
 });
 
+[graphViewport, canvasContent].forEach((el) => {
+  el?.addEventListener("pointerdown", (evt) => {
+    if (evt.target.closest?.(".node, .edge, .st-widget, .menu-bar, .sidebar, .context-menu, svg")) {
+      return;
+    }
+    hideContextMenu();
+    closeTopMenus();
+    clearAllSelection();
+    render();
+  });
+});
+
 svg.addEventListener("contextmenu", (evt) => {
   const onNode = evt.target.closest?.(".node");
   if (onNode) {
@@ -6544,6 +8454,15 @@ addDiamondNodeItem.addEventListener("click", () => {
   setStatusKey("status.nodeCreated");
 });
 
+if (addSubmodelNodeItem) {
+  addSubmodelNodeItem.addEventListener("click", () => {
+    runAction(() => {
+      addNode("submodel");
+    });
+    setStatusKey("status.nodeCreated");
+  });
+}
+
 addSliderWidgetItem.addEventListener("click", () => {
   runAction(() => {
     addSliderWidget();
@@ -6592,11 +8511,19 @@ if (toggleWidgetsBtn) {
   toggleWidgetsBtn.addEventListener("click", toggleWidgetsVisibility);
 }
 if (runFullModelBtn) {
-  runFullModelBtn.addEventListener("click", executeNodeExpressions);
+  runFullModelBtn.addEventListener("click", () => {
+    void executeNodeExpressions();
+  });
 }
-runEvalBtn.addEventListener("click", executeNodeExpressions);
-runStepBtn.addEventListener("click", runManualStep);
-runTimedToggleBtn.addEventListener("click", toggleTimedExecution);
+runEvalBtn.addEventListener("click", () => {
+  void executeNodeExpressions();
+});
+runStepBtn.addEventListener("click", () => {
+  void runManualStep();
+});
+runTimedToggleBtn.addEventListener("click", () => {
+  void toggleTimedExecution();
+});
 runResetBtn.addEventListener("click", resetExecution);
 
 undoBtn.addEventListener("click", undo);
@@ -6614,6 +8541,12 @@ newGraphBtn.addEventListener("click", () => {
 saveJsonBtn.addEventListener("click", () => saveGraphJson(false));
 saveAsJsonBtn.addEventListener("click", () => saveGraphJson(true));
 loadJsonBtn.addEventListener("click", openGraphJson);
+
+if (exitSubmodelBtn) {
+  exitSubmodelBtn.addEventListener("click", () => {
+    void exitCurrentSubmodel();
+  });
+}
 
 snapToGridInput.addEventListener("change", () => {
   ui.snapToGrid = snapToGridInput.checked;
@@ -6704,7 +8637,7 @@ if (runStrictDefinitionsInput) {
 loadJsonInput.addEventListener("change", () => {
   const file = loadJsonInput.files?.[0];
   if (file) {
-    loadGraphJsonFile(file);
+    void loadGraphJsonFile(file);
   }
   loadJsonInput.value = "";
 });
@@ -6800,17 +8733,89 @@ nodeShapeInput.addEventListener("change", () => {
   runAction(() => {
     const wasSliderBindable = canBindSliderToNode(node);
     node.shape = nodeShapeInput.value;
+    if (isSubmodelNode(node)) {
+      node.input = false;
+      node.output = false;
+      node.valueExpression = "";
+      node.initialStateExpression = "";
+      node.pendingStateValue = null;
+      node.pendingStateError = "";
+    }
     if (!isStateNode(node)) {
       node.initialStateExpression = "";
       node.pendingStateValue = null;
       node.pendingStateError = "";
     }
+    if (!isSubmodelNode(node)) {
+      node.modelPath = "";
+      node.inputBindings = {};
+      node.interfaceCache = { inputs: [], outputs: [] };
+      node.submodelError = "";
+    }
+    node.__runtimeSubmodel = null;
+    node.__runtimeSubmodelPath = "";
     normalizeInputNodeFlags();
     if (wasSliderBindable && !canBindSliderToNode(node)) {
       removeNodeFromSliderBindings(node.name);
     }
   });
 });
+
+if (nodeModelPathInput) {
+  ["focus", "mousedown", "mouseup", "click", "select"].forEach((eventName) => {
+    nodeModelPathInput.addEventListener(eventName, (evt) => {
+      evt.preventDefault();
+      nodeModelPathInput.blur();
+    });
+  });
+}
+
+if (loadSubmodelBtn) {
+  loadSubmodelBtn.addEventListener("click", async () => {
+    if (ui.selectedNodes.size !== 1) {
+      return;
+    }
+    const nodeId = [...ui.selectedNodes][0];
+    const node = getNodeById(nodeId);
+    if (!node || !isSubmodelNode(node)) {
+      return;
+    }
+    if (!String(node.modelPath ?? "").trim()) {
+      try {
+        const chosen = await chooseSubmodelFileForNode(node);
+        if (!chosen) {
+          return;
+        }
+      } catch (err) {
+        if (err && err.name === "AbortError") {
+          return;
+        }
+        setStatus(String(err?.message || t("error.submodelLoadFailed", { message: t("error.load") })));
+        refreshSidebar();
+        render();
+        return;
+      }
+    }
+    await refreshSubmodelInterface(node, true, { allowPrompt: true });
+    await preloadSubmodelsAfterLoad();
+    refreshSidebar();
+    render();
+  });
+}
+
+if (showSubmodelBtn) {
+  showSubmodelBtn.addEventListener("click", async () => {
+    if (ui.selectedNodes.size !== 1) {
+      return;
+    }
+    const nodeId = [...ui.selectedNodes][0];
+    const node = getNodeById(nodeId);
+    if (!canShowSubmodelNode(node)) {
+      return;
+    }
+    await openSubmodelNode(node);
+  });
+}
 
 nodeInputInput.addEventListener("change", () => {
   if (ui.selectedNodes.size !== 1) {
@@ -6852,8 +8857,12 @@ nodeOutputInput.addEventListener("change", () => {
   });
 });
 
-manualStepBtn.addEventListener("click", runManualStep);
-timedToggleBtn.addEventListener("click", toggleTimedExecution);
+manualStepBtn.addEventListener("click", () => {
+  void runManualStep();
+});
+timedToggleBtn.addEventListener("click", () => {
+  void toggleTimedExecution();
+});
 resetExecBtn.addEventListener("click", resetExecution);
 
 nodeValueExprInput.addEventListener("input", () => {
@@ -7045,6 +9054,26 @@ addPropBtn.addEventListener("click", () => {
   });
 });
 
+window.addEventListener("keydown", (evt) => {
+  if ((evt.ctrlKey || evt.metaKey) && !evt.shiftKey && evt.key.toLowerCase() === "n" && !isTypingTarget(evt.target)) {
+    evt.preventDefault();
+    evt.stopPropagation();
+    createNewGraph();
+    return;
+  }
+  if (evt.altKey && !evt.ctrlKey && !evt.metaKey && !evt.shiftKey && evt.key.toLowerCase() === "n" && !isTypingTarget(evt.target)) {
+    evt.preventDefault();
+    evt.stopPropagation();
+    createNewGraph();
+    return;
+  }
+  if (evt.altKey && !evt.ctrlKey && !evt.metaKey && !evt.shiftKey && evt.key.toLowerCase() === "o" && !isTypingTarget(evt.target)) {
+    evt.preventDefault();
+    evt.stopPropagation();
+    openGraphJson();
+  }
+}, true);
+
 document.addEventListener("keydown", (evt) => {
   if (!expressionEditorModal?.classList.contains("hidden")) {
     if (evt.key === "Escape") {
@@ -7074,21 +9103,21 @@ document.addEventListener("keydown", (evt) => {
   if (evt.key === "F7") {
     evt.preventDefault();
     if (!hasStrictExecutionBlock()) {
-      executeNodeExpressions();
+      void executeNodeExpressions();
     }
     return;
   }
   if (evt.key === "F8") {
     evt.preventDefault();
     if (!hasStrictExecutionBlock()) {
-      runManualStep();
+      void runManualStep();
     }
     return;
   }
   if (evt.key === "F9") {
     evt.preventDefault();
     if (ui.timedRunHandle != null || !hasStrictExecutionBlock()) {
-      toggleTimedExecution();
+      void toggleTimedExecution();
     }
     return;
   }
@@ -7119,6 +9148,14 @@ document.addEventListener("keydown", (evt) => {
       evt.preventDefault();
       runAction(() => {
         addNode("diamond");
+      });
+      setStatusKey("status.nodeCreated");
+      return;
+    }
+    if (evt.key === "4") {
+      evt.preventDefault();
+      runAction(() => {
+        addNode("submodel");
       });
       setStatusKey("status.nodeCreated");
       return;
@@ -7160,11 +9197,6 @@ document.addEventListener("keydown", (evt) => {
     if (key === "n") {
       evt.preventDefault();
       createNewGraph();
-      return;
-    }
-    if (key === "o") {
-      evt.preventDefault();
-      openGraphJson();
       return;
     }
     if (key === "f" && evt.shiftKey) {

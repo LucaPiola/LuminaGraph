@@ -10,31 +10,31 @@ Al momento implementati (senza librerie esterne!):
 * editor per grafi orientati, con nodi di forme diverse, frecce spline, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard, undo e redo, ...;
 * menu, menu contestuale e pannello di configurazione aggiornato dinamicamente, con tooltip;
 * gestione dei testi in italiano e inglese in file di configurazione e scelta in extraURL;
-* gestione dei nodi algebrici, di stato, parametri, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale) a valori scalari; controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo del numero di cifre decimali visualizzate;
+* gestione dei nodi algebrici, di stato, parametri e sottomodelli, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale); controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo del numero di cifre decimali visualizzate;
 * gestione di esecuzione completa, passo-passo, temporizzata;
 * gestione opzionale di blocco di esecuzione ed evidenziazione per nodi non definiti;
 * varie funzioni definite; mapping da valori booleani a valori numerici e funzione `if`;
 * funzione `integral`, con scelta dell'algoritmo di integrazione, se Eulero o RK4;
 * alcune funzioni per distribuzioni di probabilità;
-* generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione di vettori con la sintassi di Python, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari, per esempio `[1:5]*2`;
+* generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione di vettori con la sintassi di Python, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari;
 * funzioni "special form" per operare su vettori e matrici: `array`, `reduce`, `map`, `filter`;
 * gestione di proprietà custom per il modello e i singoli nodi e funzioni `getModelProperty`/`getProperty` e `setModelProperty`/`setProperty`;
 * gestione di nodi di output e di widget di output: grafici e tabelle; pannello di configurazione aggiornato dinamicamente;
 * gestione di nodi di input e di widget di input, anche per parametri: slider; pannello di configurazione aggiornato dinamicamente;
+* gestione dei sottomodelli con file JSON separati, con caricamento dalla stessa cartella del modello, binding dei nodi di input e accesso ai nodi di output con notazione `nomeSottomodello.nomeOutput`;
 * visualizzazione alternata per il grafo e i widget;
 * definizione della base dei tempi e modalità varie di esecuzione; pannello di configurazione aggiornato dinamicamente;
-* caricamento e salvataggio di modelli in file json;
+* caricamento e salvataggio di modelli in file JSON;
 * editor per funzioni con controllo sintattico interattivo e help;
 * menu di help;
 * ...
-* 
+
 Al momento non implementati:
 * altri widget e altre opzioni per i widget già presenti, in particolare per la visualizzazione di valori non scalari;
 * altre funzioni;
 * nodi di stato con output;
 * stati iniziali senza costanti esplicite;
-* sottomodelli;
-* interfaccia a tab per più grafi;
+* interfaccia a tab per più modelli;
 * ...
 
 ---

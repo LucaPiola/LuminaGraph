@@ -748,7 +748,7 @@
         i += 2;
         continue;
       }
-      if ("+-*/%<>()[],!:".includes(ch)) {
+      if ("+-*/%<>()[],!:. ".replace(/\s/g, "").includes(ch)) {
         tokens.push({ type: "op", value: ch });
         i += 1;
         continue;
@@ -982,6 +982,14 @@
     function parsePostfix() {
       let expr = parsePrimary();
       while (true) {
+        if (match(".")) {
+          const token = next();
+          if (!token || token.type !== "identifier") {
+            throw new SyntaxError("Expected property name after '.'");
+          }
+          expr = { type: "member", target: expr, property: token.value };
+          continue;
+        }
         if (match("[")) {
           expr = parseBracketAccessor(expr);
           continue;
@@ -1085,6 +1093,16 @@
           throw new ReferenceError(`${node.name} is not defined`);
         }
         return scope[node.name];
+      case "member": {
+        const target = evaluateAstNode(node.target, scope, hooks);
+        if (target == null || (typeof target !== "object" && !Array.isArray(target))) {
+          throw new Error("member access requires an object or array");
+        }
+        if (!Object.prototype.hasOwnProperty.call(target, node.property)) {
+          throw new ReferenceError(`${node.property} is not defined`);
+        }
+        return target[node.property];
+      }
       case "index": {
         const target = evaluateAstNode(node.target, scope, hooks);
         if (!Array.isArray(target)) {
@@ -1561,7 +1579,8 @@
             j += 1;
           }
           const token = src.slice(i, j);
-          out += token === from ? to : token;
+          const prev = i > 0 ? src[i - 1] : "";
+          out += token === from && prev !== "." ? to : token;
           i = j;
           continue;
         }
@@ -1680,6 +1699,9 @@
     const incoming = runtimePlan.incoming;
     const stateValueOverrides = options?.stateValueOverrides instanceof Map ? options.stateValueOverrides : null;
     const derivativeStateNodeIds = options?.derivativeStateNodeIds instanceof Set ? options.derivativeStateNodeIds : null;
+    const customNodeEvaluator = typeof options?.customNodeEvaluator === "function"
+      ? options.customNodeEvaluator
+      : null;
     const resolvedStateValue = (node) => {
       if (stateValueOverrides && stateValueOverrides.has(node.id)) {
         return stateValueOverrides.get(node.id);
@@ -1766,7 +1788,10 @@
           continue;
         }
 
-        const result = evaluateValueExpression(node.valueExpression, context);
+        const customResult = customNodeEvaluator
+          ? customNodeEvaluator(node, context, { globals, runtimePlan, predecessors })
+          : null;
+        const result = customResult || evaluateValueExpression(node.valueExpression, context);
         algebraicResults.set(nodeId, result);
         pending.delete(nodeId);
         progressed = true;

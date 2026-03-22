@@ -53,6 +53,26 @@ body {
   text-overflow: ellipsis;
 }
 
+.menu-nav-btn {
+  margin-left: 10px;
+  border: 1px solid var(--line);
+  background: #f7fafc;
+  color: #274357;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
+.menu-breadcrumb {
+  margin-left: 10px;
+  color: #5a6e80;
+  font-size: 0.86rem;
+  white-space: nowrap;
+  max-width: 24vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .menu-time {
   margin-left: 12px;
   color: #3d556b;
@@ -692,11 +712,21 @@ button:disabled {
   font-size: 0.88rem;
 }
 
+.display-only-input {
+  user-select: none;
+  caret-color: transparent;
+}
+
 .expr-inline-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
   align-items: start;
+}
+
+#nodeValueExprRow.hidden,
+#nodeInitialStateRow.hidden {
+  display: none;
 }
 
 .expr-inline-row input {
@@ -777,6 +807,35 @@ button:disabled {
   color: #617689;
   font-size: 0.8rem;
   font-style: italic;
+}
+
+.submodel-bindings {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.submodel-bindings-note {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.submodel-binding-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.submodel-binding-row label {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #314659;
+}
+
+.submodel-binding-row input {
+  min-width: 0;
 }
 
 .node-type-row {
@@ -1126,10 +1185,22 @@ button:disabled {
   cursor: inherit;
 }
 
+.node-shape-inner {
+  fill: none;
+  stroke: #2f4a62;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
 .node.invalid-definition .node-shape {
   fill: #fff5f6;
   stroke: #ba1f36;
   stroke-width: 2.5;
+  stroke-dasharray: 7 4;
+}
+
+.node.invalid-definition .node-shape-inner {
+  stroke: #ba1f36;
   stroke-dasharray: 7 4;
 }
 
@@ -1164,6 +1235,21 @@ button:disabled {
   dominant-baseline: middle;
   pointer-events: none;
   user-select: none;
+}
+
+.submodel-port {
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.submodel-port.input {
+  fill: #2aa876;
+  stroke: #1e7251;
+}
+
+.submodel-port.output {
+  fill: #e67e22;
+  stroke: #a85612;
 }
 
 .node.selected .node-shape {
