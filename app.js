@@ -170,6 +170,7 @@ const ui = {
   tooltipHideTimer: null,
   executionPlan: null,
   activeChartPairByWidgetId: new Map(),
+  sidebarNodeId: null,
 };
 
 const history = {
@@ -739,6 +740,9 @@ function expressionDocMap() {
     getModelProperty: { kind: "function", signature: "getModelProperty(name, fallback)", description: t("expr.help.getModelProperty"), insertText: "getModelProperty()", cursorOffset: 17 },
     setModelProperty: { kind: "function", signature: "setModelProperty(name, value)", description: t("expr.help.setModelProperty"), insertText: "setModelProperty()", cursorOffset: 17 },
     array: { kind: "function", signature: "array(dim | [d0,d1,...], expr)", description: t("expr.help.array"), insertText: "array()", cursorOffset: 6 },
+    map: { kind: "function", signature: "map(expr, array)", description: t("expr.help.map"), insertText: "map()", cursorOffset: 4 },
+    filter: { kind: "function", signature: "filter(cond, array)", description: t("expr.help.filter"), insertText: "filter()", cursorOffset: 7 },
+    reduce: { kind: "function", signature: "reduce(op|fn, vector[, init]) | reduce(op|fn, matrix, axis[, init])", description: t("expr.help.reduce"), insertText: "reduce()", cursorOffset: 7 },
     range: { kind: "function", signature: "range(stop) | range(start, stop[, step])", description: t("expr.help.range"), insertText: "range()", cursorOffset: 6 },
     gaussian: { kind: "probability", signature: "gaussian([params], x, mode)", description: t("expr.help.gaussian"), insertText: "gaussian()", cursorOffset: 9 },
     uniform: { kind: "probability", signature: "uniform([params], x, mode)", description: t("expr.help.uniform"), insertText: "uniform()", cursorOffset: 8 },
@@ -4484,6 +4488,7 @@ function refreshSidebar() {
   }
 
   if (ui.selected?.type === "widget") {
+    ui.sidebarNodeId = null;
     delete propsList.dataset.ownerKey;
     noSelection.classList.add("hidden");
     globalPanel.classList.add("hidden");
@@ -4520,10 +4525,12 @@ function refreshSidebar() {
     nodePanel.classList.remove("hidden");
     edgePanel.classList.add("hidden");
 
-    if (document.activeElement !== nodeNameInput) {
+    const sameSidebarNode = ui.sidebarNodeId === node.id;
+
+    if (!sameSidebarNode || document.activeElement !== nodeNameInput) {
       nodeNameInput.value = node.name;
     }
-    if (document.activeElement !== nodeShapeInput) {
+    if (!sameSidebarNode || document.activeElement !== nodeShapeInput) {
       nodeShapeInput.value = node.shape;
     }
     const showInputToggle = canMarkNodeAsInput(node);
@@ -4541,7 +4548,7 @@ function refreshSidebar() {
         : (stateNode ? t("label.stateTransition") : t("label.behaviorFunction"));
     }
     updateNodeExpressionTooltips(node);
-    if (document.activeElement !== nodeValueExprInput) {
+    if (!sameSidebarNode || document.activeElement !== nodeValueExprInput) {
       nodeValueExprInput.value = node.valueExpression || "";
     }
     updateExpressionFieldState(nodeValueExprInput, nodeValueExprStatus, node.valueExpression || "", false, "value");
@@ -4556,7 +4563,7 @@ function refreshSidebar() {
       if (nodeInitialStateStatus) {
         nodeInitialStateStatus.classList.toggle("hidden", !stateNode);
       }
-      if (stateNode && document.activeElement !== nodeInitialStateInput) {
+      if (stateNode && (!sameSidebarNode || document.activeElement !== nodeInitialStateInput)) {
         nodeInitialStateInput.value = node.initialStateExpression || "";
       }
       if (stateNode) {
@@ -4583,11 +4590,14 @@ function refreshSidebar() {
         node.properties.splice(idx, 1);
       },
     )) {
+      ui.sidebarNodeId = node.id;
       return;
     }
+    ui.sidebarNodeId = node.id;
     return;
   }
 
+  ui.sidebarNodeId = null;
   nodePanel.classList.add("hidden");
   edgePanel.classList.add("hidden");
   widgetPanel.classList.add("hidden");

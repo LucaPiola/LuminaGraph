@@ -2,7 +2,7 @@
 
 Un esperimento: di reimplementazione "moderna" di STGraph (da Java a JavaScript), realizzata interamente in "vibe coding" (con GPT-Codex-5.3).
 
-__Luca Mari, versione 17 marzo 2026__
+__Luca Mari, versione 22 marzo 2026__
 
 (si può provare <a href="https://lmari.github.io/STGraphX" target="_blank" rel="noopener noreferrer">qui</a>)
 
@@ -17,7 +17,7 @@ Al momento implementati (senza librerie esterne!):
 * funzione `integral`, con scelta dell'algoritmo di integrazione, se Eulero o RK4;
 * alcune funzioni per distribuzioni di probabilità;
 * generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione di vettori con la sintassi di Python, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari, per esempio `[1:5]*2`;
-* funzione `array` per la costruzione dinamica di vettori, matrici, ...;
+* funzioni "special form" per operare su vettori e matrici: `array`, `reduce`, `map`, `filter`;
 * gestione di proprietà custom per il modello e i singoli nodi e funzioni `getModelProperty`/`getProperty` e `setModelProperty`/`setProperty`;
 * gestione di nodi di output e di widget di output: grafici e tabelle; pannello di configurazione aggiornato dinamicamente;
 * gestione di nodi di input e di widget di input, anche per parametri: slider; pannello di configurazione aggiornato dinamicamente;
@@ -30,7 +30,6 @@ Al momento implementati (senza librerie esterne!):
 * 
 Al momento non implementati:
 * altri widget e altre opzioni per i widget già presenti, in particolare per la visualizzazione di valori non scalari;
-* estensioni per funzioni a valori non scalari (reduction? array? ...);
 * altre funzioni;
 * nodi di stato con output;
 * stati iniziali senza costanti esplicite;

@@ -790,13 +790,20 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0;
+  gap: 1px;
+  margin-top: 1px;
 }
 
 .node-type-row .menu-check {
   margin: 0;
   padding: 0;
   white-space: nowrap;
+  line-height: 1.05;
+}
+
+.node-flags-col .menu-check input {
+  transform: scale(0.92);
+  transform-origin: left center;
 }
 
 .widget-config-grid {

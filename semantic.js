@@ -36,6 +36,18 @@
     throw new Error("array is a special expression form");
   }
 
+  function unavailableMapOperator() {
+    throw new Error("map is a special expression form");
+  }
+
+  function unavailableFilterOperator() {
+    throw new Error("filter is a special expression form");
+  }
+
+  function unavailableReduceOperator() {
+    throw new Error("reduce is a special expression form");
+  }
+
   function unavailableDistribution(name) {
     return () => {
       throw new Error(`${name} is unavailable`);
@@ -114,6 +126,9 @@
       throw new Error("range expects 1, 2, or 3 arguments");
     },
     array: unavailableArrayConstructor,
+    map: unavailableMapOperator,
+    filter: unavailableFilterOperator,
+    reduce: unavailableReduceOperator,
     gaussian: typeof probability.gaussian === "function" ? probability.gaussian : unavailableDistribution("gaussian"),
     uniform: typeof probability.uniform === "function" ? probability.uniform : unavailableDistribution("uniform"),
     exponential: typeof probability.exponential === "function" ? probability.exponential : unavailableDistribution("exponential"),
@@ -232,6 +247,16 @@
     return value.every((item) => Array.isArray(item) && sameArrayShape(first, item));
   }
 
+  function isNumericNestedArray(value) {
+    if (isFiniteNumber(value)) {
+      return true;
+    }
+    if (!Array.isArray(value)) {
+      return false;
+    }
+    return value.every((item) => isNumericNestedArray(item));
+  }
+
   function validateComputedValue(value) {
     if (isFiniteNumber(value)) {
       return { ok: true, kind: "number", value };
@@ -243,6 +268,9 @@
       return { ok: true, kind: "matrix", value: value.map((row) => row.slice()) };
     }
     if (isNumericTensor(value)) {
+      return { ok: true, kind: "array", value: JSON.parse(JSON.stringify(value)) };
+    }
+    if (isNumericNestedArray(value)) {
       return { ok: true, kind: "array", value: JSON.parse(JSON.stringify(value)) };
     }
     return { ok: false, reason: "type" };
@@ -606,6 +634,99 @@
     return out;
   }
 
+  function scalarBinaryOperation(op, left, right) {
+    switch (op) {
+      case "+":
+        return left + right;
+      case "-":
+        return left - right;
+      case "*":
+        return left * right;
+      case "/":
+        return left / right;
+      case "%":
+        return left % right;
+      case "**":
+        return left ** right;
+      case "<":
+        return left < right;
+      case ">":
+        return left > right;
+      case "<=":
+        return left <= right;
+      case ">=":
+        return left >= right;
+      case "==":
+        return left == right;
+      case "!=":
+        return left != right;
+      case "===":
+        return left === right;
+      case "!==":
+        return left !== right;
+      case "&&":
+        return left && right;
+      case "||":
+        return left || right;
+      default:
+        throw new Error(`Unsupported reducer operator ${op}`);
+    }
+  }
+
+  function applyReducer(accumulator, value, reducer, scope) {
+    if (!reducer || typeof reducer !== "object") {
+      throw new Error("invalid reducer");
+    }
+    if (reducer.refKind === "operator") {
+      return scalarBinaryOperation(reducer.name, accumulator, value);
+    }
+    if (reducer.refKind === "function") {
+      const fn = scope?.[reducer.name];
+      if (typeof fn !== "function") {
+        throw new Error(`${reducer.name} is not callable`);
+      }
+      return fn(accumulator, value);
+    }
+    throw new Error("invalid reducer");
+  }
+
+  function reduceArrayElements(values, reducer, scope, hasInit = false, initValue = null) {
+    if (!Array.isArray(values)) {
+      throw new Error("reduce expects a vector or matrix");
+    }
+    if (hasInit) {
+      return values.reduce((acc, value) => applyReducer(acc, value, reducer, scope), initValue);
+    }
+    if (values.length === 0) {
+      throw new Error("reduce requires a non-empty vector when no initial value is provided");
+    }
+    return values.slice(1).reduce((acc, value) => applyReducer(acc, value, reducer, scope), values[0]);
+  }
+
+  function reduceMatrixAlongAxis(matrix, axis, reducer, scope, hasInit = false, initValue = null) {
+    if (!isNumericMatrix(matrix) && !Array.isArray(matrix)) {
+      throw new Error("reduce expects a vector or matrix");
+    }
+    if (!Array.isArray(matrix) || matrix.length === 0 || !matrix.every((row) => Array.isArray(row))) {
+      throw new Error("reduce axis requires a matrix");
+    }
+    const rowCount = matrix.length;
+    const colCount = matrix[0].length;
+    if (!matrix.every((row) => row.length === colCount)) {
+      throw new Error("reduce axis requires a rectangular matrix");
+    }
+    if (!Number.isInteger(axis) || (axis !== 0 && axis !== 1)) {
+      throw new Error("reduce matrix axis must be 0 or 1");
+    }
+    if (axis === 0) {
+      return Array.from({ length: colCount }, (_, colIdx) => {
+        const values = Array.from({ length: rowCount }, (_, rowIdx) => matrix[rowIdx][colIdx]);
+        return reduceArrayElements(values, reducer, scope, hasInit, initValue);
+      });
+    }
+    return matrix.map((row) => reduceArrayElements(row, reducer, scope, hasInit, initValue));
+  }
+
   function tokenizeExpression(source) {
     const tokens = [];
     let i = 0;
@@ -720,6 +841,25 @@
       return token;
     };
 
+    function parseReduceReference() {
+      const token = peek();
+      if (!token) {
+        throw new SyntaxError("Missing reduce operator");
+      }
+      if (token.type === "identifier") {
+        next();
+        return { type: "callable-ref", refKind: "function", name: token.value };
+      }
+      if (
+        token.type === "op" &&
+        ["+", "-", "*", "/", "%", "**", "<", ">", "<=", ">=", "==", "!=", "===", "!==", "&&", "||"].includes(token.value)
+      ) {
+        next();
+        return { type: "callable-ref", refKind: "operator", name: token.value };
+      }
+      throw new SyntaxError("reduce expects an operator or function as first argument");
+    }
+
     function parseBracketAccessor(target) {
       if (match("]")) {
         throw new SyntaxError("Empty index");
@@ -809,7 +949,15 @@
         const name = token.value;
         if (match("(")) {
           const args = [];
-          if (!match(")")) {
+          if (name === "reduce") {
+            if (!match(")")) {
+              args.push(parseReduceReference());
+              while (match(",")) {
+                args.push(parseLogicalOr());
+              }
+              expect(")");
+            }
+          } else if (!match(")")) {
             do {
               args.push(parseLogicalOr());
             } while (match(","));
@@ -1018,6 +1166,78 @@
             return Array.from({ length: size }, (_, idx) => buildArray(level + 1, [...localIndices, idx]));
           };
           return buildArray(0, []);
+        }
+        if (node.name === "map") {
+          if (node.args.length !== 2) {
+            throw new Error("map expects exactly 2 arguments");
+          }
+          const target = evaluateAstNode(node.args[1], scope, hooks);
+          if (!Array.isArray(target)) {
+            throw new Error("map expects a vector or matrix");
+          }
+          const mapArray = (value, localIndices) => {
+            if (!Array.isArray(value)) {
+              const localScope = { ...scope, $value: value };
+              localIndices.forEach((indexValue, idx) => {
+                localScope[`$${idx}`] = indexValue;
+              });
+              return evaluateAstNode(node.args[0], localScope, hooks);
+            }
+            return value.map((item, idx) => mapArray(item, [...localIndices, idx]));
+          };
+          return mapArray(target, []);
+        }
+        if (node.name === "filter") {
+          if (node.args.length !== 2) {
+            throw new Error("filter expects exactly 2 arguments");
+          }
+          const target = evaluateAstNode(node.args[1], scope, hooks);
+          if (!Array.isArray(target)) {
+            throw new Error("filter expects a vector or matrix");
+          }
+          const filterArray = (value, localIndices) => {
+            if (!Array.isArray(value)) {
+              const localScope = { ...scope, $value: value };
+              localIndices.forEach((indexValue, idx) => {
+                localScope[`$${idx}`] = indexValue;
+              });
+              return coerceBooleanToNumber(evaluateAstNode(node.args[0], localScope, hooks)) ? value : undefined;
+            }
+            const out = value
+              .map((item, idx) => filterArray(item, [...localIndices, idx]))
+              .filter((item) => item !== undefined);
+            return out;
+          };
+          return filterArray(target, []);
+        }
+        if (node.name === "reduce") {
+          if (node.args.length < 2 || node.args.length > 4) {
+            throw new Error("reduce expects 2 to 4 arguments");
+          }
+          const reducer = node.args[0];
+          if (!reducer || reducer.type !== "callable-ref") {
+            throw new Error("reduce expects an operator or function as first argument");
+          }
+          const target = evaluateAstNode(node.args[1], scope, hooks);
+          const isMatrix = Array.isArray(target) && target.length > 0 && target.every((row) => Array.isArray(row));
+          if (!Array.isArray(target)) {
+            throw new Error("reduce expects a vector or matrix");
+          }
+          if (!isMatrix) {
+            const hasInit = node.args.length >= 3;
+            const initValue = hasInit ? evaluateAstNode(node.args[2], scope, hooks) : null;
+            return reduceArrayElements(target, reducer, scope, hasInit, initValue);
+          }
+          if (node.args.length < 3) {
+            throw new Error("reduce on matrices requires an axis argument");
+          }
+          const axis = Number(evaluateAstNode(node.args[2], scope, hooks));
+          if (!Number.isInteger(axis)) {
+            throw new Error("reduce matrix axis must be 0 or 1");
+          }
+          const hasInit = node.args.length >= 4;
+          const initValue = hasInit ? evaluateAstNode(node.args[3], scope, hooks) : null;
+          return reduceMatrixAlongAxis(target, axis, reducer, scope, hasInit, initValue);
         }
         if (!Object.prototype.hasOwnProperty.call(scope, node.name)) {
           throw new ReferenceError(`${node.name} is not defined`);
