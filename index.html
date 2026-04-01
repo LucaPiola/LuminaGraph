@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
     <title data-i18n="app.title">Editor Grafi Orientati</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -206,6 +207,7 @@
                   </label>
                 </div>
               </div>
+
             </div>
 
             <div class="panel-section compact-panel-section">
@@ -271,10 +273,19 @@
           <h3 id="expressionEditorTitle">Espressione</h3>
           <button id="expressionEditorCloseBtn" class="icon-btn modal-close-btn" type="button" aria-label="Chiudi">×</button>
         </div>
-        <textarea id="expressionEditorTextarea" class="expression-editor-textarea" spellcheck="false"></textarea>
-        <div id="expressionAutocomplete" class="expression-autocomplete hidden"></div>
-        <div id="expressionHelp" class="expression-help" data-i18n="expr.help.empty">Seleziona o scrivi un simbolo per vedere l'help contestuale.</div>
-        <div id="expressionEditorHint" class="expression-editor-hint" data-i18n="expr.hint">Tab: indentazione, Shift+Tab: riduci, Ctrl+Enter: applica.</div>
+        <div class="expression-editor-toolbar">
+          <div id="expressionEditorHint" class="expression-editor-hint" data-i18n="expr.hint">Tab: indentazione, Shift+Tab: riduci, Ctrl+Enter: applica.</div>
+        </div>
+        <div class="expression-editor-layout">
+          <div class="expression-editor-main">
+            <textarea id="expressionEditorTextarea" class="expression-editor-textarea" spellcheck="false"></textarea>
+          </div>
+          <aside id="expressionSidebar" class="expression-sidebar">
+            <input id="expressionSymbolsFilter" class="expression-symbols-filter" type="text" data-i18n-placeholder="expr.filter.placeholder" placeholder="Filtra simboli..." />
+            <div id="expressionLibrary" class="expression-library"></div>
+            <div id="expressionHelp" class="expression-help" data-i18n="expr.help.empty">Seleziona o scrivi un simbolo per vedere l'help contestuale.</div>
+          </aside>
+        </div>
         <div id="expressionEditorStatus" class="expr-status hidden"></div>
         <div class="modal-actions">
           <button id="expressionEditorCancelBtn" type="button" data-i18n="action.cancel">Annulla</button>
@@ -299,6 +310,7 @@
 
     <script src="probability.js"></script>
     <script src="semantic.js"></script>
+    <script src="i18n-inline.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

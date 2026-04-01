@@ -100,8 +100,10 @@ const widgetLayer = document.getElementById("widgetLayer");
 const expressionEditorModal = document.getElementById("expressionEditorModal");
 const expressionEditorTitle = document.getElementById("expressionEditorTitle");
 const expressionEditorTextarea = document.getElementById("expressionEditorTextarea");
-const expressionAutocomplete = document.getElementById("expressionAutocomplete");
+const expressionSymbolsFilter = document.getElementById("expressionSymbolsFilter");
+const expressionSidebar = document.getElementById("expressionSidebar");
 const expressionHelp = document.getElementById("expressionHelp");
+const expressionLibrary = document.getElementById("expressionLibrary");
 const expressionEditorHint = document.getElementById("expressionEditorHint");
 const expressionEditorStatus = document.getElementById("expressionEditorStatus");
 const expressionEditorCloseBtn = document.getElementById("expressionEditorCloseBtn");
@@ -138,6 +140,13 @@ const submodelTemplateCache = new Map();
 const submodelFileHandleCache = new Map();
 const submodelSourceCache = new Map();
 const SUBMODEL_DEFERRED_RESOLUTION = "__submodel_deferred_resolution__";
+function descriptionPropertyKey() {
+  return currentLang === "en" ? "description" : "descrizione";
+}
+
+function descriptionPropertyKeys() {
+  return new Set(["descrizione", "description"]);
+}
 let dirtySinceLastSave = false;
 let fileStatusRefreshTimer = null;
 
@@ -184,6 +193,7 @@ const ui = {
   showGraph: true,
   showWidgets: true,
   expressionEditor: null,
+  modalDrag: null,
   tooltipTarget: null,
   tooltipShowTimer: null,
   tooltipHideTimer: null,
@@ -287,24 +297,55 @@ function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
-function parseProperties(text) {
-  const out = {};
-  text.split(/\r?\n/).forEach((lineRaw) => {
-    const line = lineRaw.trim();
-    if (!line || line.startsWith("#") || line.startsWith("!")) {
-      return;
-    }
-    const idx = line.indexOf("=");
-    if (idx < 0) {
-      return;
-    }
-    const key = line.slice(0, idx).trim();
-    const value = line.slice(idx + 1).trim();
-    if (key) {
-      out[key] = value;
-    }
-  });
-  return out;
+function hasPlatformApi(name) {
+  return typeof window.STGraphXPlatform?.[name] === "function";
+}
+
+function supportsOpenFilePicker() {
+  return hasPlatformApi("showOpenFilePicker") || typeof window.showOpenFilePicker === "function";
+}
+
+function supportsSaveFilePicker() {
+  return hasPlatformApi("showSaveFilePicker") || typeof window.showSaveFilePicker === "function";
+}
+
+function supportsDirectoryPicker() {
+  return hasPlatformApi("showDirectoryPicker") || typeof window.showDirectoryPicker === "function";
+}
+
+async function showOpenFilePickerCompat(options) {
+  if (hasPlatformApi("showOpenFilePicker")) {
+    return window.STGraphXPlatform.showOpenFilePicker(options);
+  }
+  if (typeof window.showOpenFilePicker === "function") {
+    return window.showOpenFilePicker(options);
+  }
+  throw new Error("Open file picker not supported");
+}
+
+async function showSaveFilePickerCompat(options) {
+  if (hasPlatformApi("showSaveFilePicker")) {
+    return window.STGraphXPlatform.showSaveFilePicker(options);
+  }
+  if (typeof window.showSaveFilePicker === "function") {
+    return window.showSaveFilePicker(options);
+  }
+  throw new Error("Save file picker not supported");
+}
+
+async function showDirectoryPickerCompat(options) {
+  if (hasPlatformApi("showDirectoryPicker")) {
+    return window.STGraphXPlatform.showDirectoryPicker(options);
+  }
+  if (typeof window.showDirectoryPicker === "function") {
+    return window.showDirectoryPicker(options);
+  }
+  throw new Error(t("error.submodelDirectoryUnsupported"));
+}
+
+function bundledI18nMessages(lang) {
+  const raw = window.STGraphXI18nBundles?.[lang];
+  return raw && typeof raw === "object" ? { ...raw } : null;
 }
 
 function resolveLangFromUrl() {
@@ -778,6 +819,7 @@ function expressionDocMap() {
     map: { kind: "function", signature: "map(expr, array)", description: t("expr.help.map"), insertText: "map()", cursorOffset: 4 },
     filter: { kind: "function", signature: "filter(cond, array)", description: t("expr.help.filter"), insertText: "filter()", cursorOffset: 7 },
     reduce: { kind: "function", signature: "reduce(op|fn, vector[, init]) | reduce(op|fn, matrix, axis[, init])", description: t("expr.help.reduce"), insertText: "reduce()", cursorOffset: 7 },
+    append: { kind: "function", signature: "append(vector, value|vector) | append(matrix, rowVector)", description: t("expr.help.append"), insertText: "append()", cursorOffset: 7 },
     range: { kind: "function", signature: "range(stop) | range(start, stop[, step])", description: t("expr.help.range"), insertText: "range()", cursorOffset: 6 },
     gaussian: { kind: "probability", signature: "gaussian([params], x, mode)", description: t("expr.help.gaussian"), insertText: "gaussian()", cursorOffset: 9 },
     uniform: { kind: "probability", signature: "uniform([params], x, mode)", description: t("expr.help.uniform"), insertText: "uniform()", cursorOffset: 8 },
@@ -876,6 +918,170 @@ function renderFunctionsHelp() {
   });
 }
 
+function renderExpressionLibrary() {
+  if (!expressionLibrary) {
+    return;
+  }
+  const entries = expressionCatalogForEditor();
+  const manualFilter = String(expressionSymbolsFilter?.value || "").trim().toLowerCase();
+  const autoFilter = String(ui.expressionEditor?.autoFilter || "").trim().toLowerCase();
+  const filter = manualFilter || autoFilter;
+  const selectedName = String(ui.expressionEditor?.librarySelectedName || "").trim();
+  const filteredEntries = entries
+    .filter((entry) => {
+      if (!filter) {
+        return true;
+      }
+      return entry.name.toLowerCase().includes(filter) || String(entry.signature || "").toLowerCase().includes(filter);
+    })
+    .sort((left, right) => {
+      const leftName = left.name.toLowerCase();
+      const rightName = right.name.toLowerCase();
+      const leftStarts = filter ? leftName.startsWith(filter) : false;
+      const rightStarts = filter ? rightName.startsWith(filter) : false;
+      if (leftStarts !== rightStarts) {
+        return leftStarts ? -1 : 1;
+      }
+      const kindDelta = expressionEntryKindOrder(left.kind) - expressionEntryKindOrder(right.kind);
+      return kindDelta || left.name.localeCompare(right.name);
+    });
+  if (!selectedName && filteredEntries.length > 0 && ui.expressionEditor) {
+    ui.expressionEditor.librarySelectedName = filteredEntries[0].name;
+  } else if (selectedName && !filteredEntries.some((entry) => entry.name === selectedName) && ui.expressionEditor) {
+    ui.expressionEditor.librarySelectedName = filteredEntries[0]?.name || "";
+  }
+  const effectiveSelectedName = String(ui.expressionEditor?.librarySelectedName || "").trim();
+
+  expressionLibrary.innerHTML = "";
+  expressionSidebar?.classList.remove("hidden");
+  const groups = new Map();
+  filteredEntries.forEach((entry) => {
+    const key = entry.kind || "function";
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(entry);
+  });
+  const visibleEntries = [];
+  Array.from(groups.keys())
+    .sort((left, right) => expressionEntryKindOrder(left) - expressionEntryKindOrder(right))
+    .forEach((kind) => {
+      const group = document.createElement("section");
+      group.className = "expression-library-group";
+      const title = document.createElement("h4");
+      title.className = "expression-library-title";
+      title.textContent = t(`expr.help.kind.${kind}`);
+      const list = document.createElement("div");
+      list.className = "expression-library-list";
+      groups.get(kind)
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .forEach((entry) => {
+          visibleEntries.push(entry);
+          const item = document.createElement("div");
+          item.className = "expression-library-item";
+          item.classList.toggle("active", entry.name === effectiveSelectedName);
+          item.dataset.entryName = entry.name;
+          item.tabIndex = 0;
+          const name = document.createElement("div");
+          name.className = "expression-library-name";
+          if (filter) {
+            const lowerName = entry.name.toLowerCase();
+            const idx = lowerName.indexOf(filter);
+            if (idx >= 0) {
+              const before = entry.name.slice(0, idx);
+              const match = entry.name.slice(idx, idx + filter.length);
+              const after = entry.name.slice(idx + filter.length);
+              if (before) {
+                name.appendChild(document.createTextNode(before));
+              }
+              const mark = document.createElement("mark");
+              mark.textContent = match;
+              name.appendChild(mark);
+              if (after) {
+                name.appendChild(document.createTextNode(after));
+              }
+            } else {
+              name.textContent = entry.name;
+            }
+          } else {
+            name.textContent = entry.name;
+          }
+          item.appendChild(name);
+          const selectEntry = () => {
+            setSelectedLibraryEntry(entry.name, entry);
+          };
+          const activate = () => {
+            selectEntry();
+            insertSelectedLibraryEntry();
+          };
+          item.addEventListener("mousedown", (evt) => {
+            evt.preventDefault();
+          });
+          item.addEventListener("click", (evt) => {
+            if (evt.detail >= 2) {
+              activate();
+              return;
+            }
+            selectEntry();
+          });
+          item.addEventListener("keydown", (evt) => {
+            if (evt.key === "Enter") {
+              evt.preventDefault();
+              activate();
+            } else if (evt.key === " ") {
+              evt.preventDefault();
+              selectEntry();
+            }
+          });
+          item.addEventListener("focus", () => {
+            selectEntry();
+          });
+          list.appendChild(item);
+        });
+      group.appendChild(title);
+      group.appendChild(list);
+      expressionLibrary.appendChild(group);
+    });
+  expressionLibrary.classList.remove("hidden");
+  if (!groups.size) {
+    const empty = document.createElement("div");
+    empty.className = "empty-props";
+    empty.textContent = t("text.noMatches");
+    expressionLibrary.appendChild(empty);
+    return;
+  }
+  if (effectiveSelectedName) {
+    window.requestAnimationFrame(() => {
+      const active = expressionLibrary.querySelector(`.expression-library-item[data-entry-name="${CSS.escape(effectiveSelectedName)}"]`);
+      active?.scrollIntoView({ block: "nearest" });
+    });
+  }
+}
+
+function setSelectedLibraryEntry(name, entry = null) {
+  if (!ui.expressionEditor || !expressionLibrary) {
+    return;
+  }
+  const nextName = String(name || "").trim();
+  if (!nextName) {
+    return;
+  }
+  ui.expressionEditor.librarySelectedName = nextName;
+  const resolvedEntry = entry || expressionCatalogForEditor().find((item) => item.name === nextName) || null;
+  if (resolvedEntry) {
+    setExpressionHelp(resolvedEntry);
+  }
+  expressionLibrary.querySelectorAll(".expression-library-item.active").forEach((item) => {
+    item.classList.remove("active");
+  });
+  const active = expressionLibrary.querySelector(`.expression-library-item[data-entry-name="${CSS.escape(nextName)}"]`);
+  if (active) {
+    active.classList.add("active");
+    active.scrollIntoView({ block: "nearest" });
+  }
+}
+
 function openFunctionsHelp() {
   if (!functionsHelpModal) {
     return;
@@ -925,10 +1131,11 @@ function expressionCatalogForEditor() {
       .map((edge) => getNodeById(edge.from))
       .filter(Boolean)
       .forEach((depNode) => {
+        const nodeDescription = getNodeDescription(depNode);
         pushEntry(depNode.name, {
-          kind: "node",
+          kind: "variable",
           signature: depNode.name,
-          description: depNode.name,
+          description: nodeDescription || depNode.name,
           insertText: depNode.name,
           cursorOffset: depNode.name.length,
         });
@@ -939,9 +1146,11 @@ function expressionCatalogForEditor() {
           outputs.forEach((outputName) => {
             const qualifiedName = `${depNode.name}.${outputName}`;
             pushEntry(qualifiedName, {
-              kind: "node",
+              kind: "variable",
               signature: qualifiedName,
-              description: t("text.submodelOutputEntry", { node: depNode.name, output: outputName }),
+              description: nodeDescription
+                ? `${nodeDescription} · ${t("text.submodelOutputEntry", { node: depNode.name, output: outputName })}`
+                : t("text.submodelOutputEntry", { node: depNode.name, output: outputName }),
               insertText: qualifiedName,
               cursorOffset: qualifiedName.length,
             });
@@ -1017,12 +1226,10 @@ function setExpressionHelp(entry = null) {
 }
 
 function renderExpressionAutocomplete() {
-  if (!expressionAutocomplete || !expressionEditorTextarea) {
+  if (!expressionEditorTextarea) {
     return;
   }
   if (!ui.expressionEditor) {
-    expressionAutocomplete.innerHTML = "";
-    expressionAutocomplete.classList.add("hidden");
     setExpressionHelp(null);
     return;
   }
@@ -1032,6 +1239,7 @@ function renderExpressionAutocomplete() {
   const exactToken = identifierAtCaret(expressionEditorTextarea.value, caret);
   const allEntries = expressionCatalogForEditor();
   ui.expressionEditor.catalog = allEntries;
+  ui.expressionEditor.autoFilter = tokenInfo?.prefix || exactToken || "";
 
   let helpEntry = null;
   if (tokenInfo && tokenInfo.prefix.length > 0) {
@@ -1049,45 +1257,14 @@ function renderExpressionAutocomplete() {
       activeIndex: 0,
     };
     if (ui.expressionEditor.completion.entries.length > 0) {
-      expressionAutocomplete.innerHTML = "";
-      let previousKind = null;
-      ui.expressionEditor.completion.entries.forEach((entry, idx) => {
-        if (entry.kind !== previousKind) {
-          previousKind = entry.kind;
-          const header = document.createElement("div");
-          header.className = "expr-suggest-group";
-          header.textContent = t(`expr.help.kind.${entry.kind || "function"}`);
-          expressionAutocomplete.appendChild(header);
-        }
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.classList.toggle("active", idx === ui.expressionEditor.completion.activeIndex);
-        btn.innerHTML = `<span class="expr-suggest-name">${entry.name}</span><span class="expr-suggest-meta">${entry.signature || ""}</span>`;
-        btn.addEventListener("mouseenter", () => {
-          if (!ui.expressionEditor?.completion) {
-            return;
-          }
-          ui.expressionEditor.completion.activeIndex = idx;
-          renderExpressionAutocomplete();
-        });
-        btn.addEventListener("mousedown", (evt) => {
-          evt.preventDefault();
-          acceptExpressionAutocomplete(idx);
-        });
-        expressionAutocomplete.appendChild(btn);
-      });
-      expressionAutocomplete.classList.remove("hidden");
       if (!exactToken) {
         helpEntry = ui.expressionEditor.completion.entries[ui.expressionEditor.completion.activeIndex] || null;
       }
     } else {
-      expressionAutocomplete.innerHTML = "";
-      expressionAutocomplete.classList.add("hidden");
+      ui.expressionEditor.completion = null;
     }
   } else {
     ui.expressionEditor.completion = null;
-    expressionAutocomplete.innerHTML = "";
-    expressionAutocomplete.classList.add("hidden");
   }
 
   if (!helpEntry) {
@@ -1095,31 +1272,98 @@ function renderExpressionAutocomplete() {
       helpEntry = allEntries.find((entry) => entry.name === exactToken) || null;
     }
   }
+  const preferred = exactToken
+    ? (allEntries.find((entry) => entry.name === exactToken) || null)
+    : (ui.expressionEditor.completion?.entries?.[ui.expressionEditor.completion.activeIndex] || null);
+  if (preferred && ui.expressionEditor.librarySelectedName !== preferred.name) {
+    ui.expressionEditor.librarySelectedName = preferred.name;
+  }
+  if (!helpEntry && ui.expressionEditor?.librarySelectedName) {
+    helpEntry = allEntries.find((entry) => entry.name === ui.expressionEditor.librarySelectedName) || null;
+  }
   setExpressionHelp(helpEntry);
+  renderExpressionLibrary();
 }
 
-function acceptExpressionAutocomplete(index = null) {
-  if (!ui.expressionEditor?.completion || !expressionEditorTextarea) {
+function insertSelectedLibraryEntry() {
+  if (!ui.expressionEditor || !expressionEditorTextarea) {
     return false;
   }
-  const { entries, activeIndex, tokenStart, tokenEnd } = ui.expressionEditor.completion;
-  if (!entries.length) {
+  const selectedName = String(ui.expressionEditor.librarySelectedName || "").trim();
+  if (!selectedName) {
     return false;
   }
-  const chosen = entries[index == null ? activeIndex : index];
-  if (!chosen) {
+  const entry = expressionCatalogForEditor().find((item) => item.name === selectedName);
+  if (!entry) {
     return false;
   }
-  const replacement = chosen.insertText || chosen.name;
-  const before = expressionEditorTextarea.value.slice(0, tokenStart);
-  const after = expressionEditorTextarea.value.slice(tokenEnd);
-  expressionEditorTextarea.value = `${before}${replacement}${after}`;
-  const caret = tokenStart + (chosen.cursorOffset == null ? replacement.length : chosen.cursorOffset);
+  const replacement = entry.insertText || entry.name;
+  const caret = expressionEditorTextarea.selectionStart ?? 0;
+  const tokenInfo = identifierPrefixAtCaret(expressionEditorTextarea.value, caret);
+  const tokenAtCaret = identifierAtCaret(expressionEditorTextarea.value, caret);
+  if (tokenInfo && (tokenInfo.prefix || tokenAtCaret)) {
+    const tokenEnd = tokenInfo.end + Math.max(0, tokenAtCaret.length - tokenInfo.prefix.length);
+    const before = expressionEditorTextarea.value.slice(0, tokenInfo.start);
+    const after = expressionEditorTextarea.value.slice(tokenEnd);
+    expressionEditorTextarea.value = `${before}${replacement}${after}`;
+    const nextCaret = tokenInfo.start + (entry.cursorOffset ?? replacement.length);
+    expressionEditorTextarea.focus();
+    expressionEditorTextarea.setSelectionRange(nextCaret, nextCaret);
+  } else {
+    insertExpressionSnippet(replacement, entry.cursorOffset ?? replacement.length);
+  }
+  refreshExpressionEditorValidation();
+  return true;
+}
+
+function insertExpressionSnippet(snippet, cursorOffset = null) {
+  if (!expressionEditorTextarea) {
+    return false;
+  }
+  const value = expressionEditorTextarea.value;
+  const start = expressionEditorTextarea.selectionStart ?? 0;
+  const end = expressionEditorTextarea.selectionEnd ?? start;
+  const text = String(snippet ?? "");
+  expressionEditorTextarea.value = `${value.slice(0, start)}${text}${value.slice(end)}`;
+  const caret = start + (cursorOffset == null ? text.length : cursorOffset);
   expressionEditorTextarea.focus();
   expressionEditorTextarea.setSelectionRange(caret, caret);
   refreshExpressionEditorValidation();
-  renderExpressionAutocomplete();
   return true;
+}
+
+function visibleLibraryEntryNames() {
+  if (!expressionLibrary) {
+    return [];
+  }
+  return Array.from(expressionLibrary.querySelectorAll(".expression-library-item[data-entry-name]"))
+    .map((item) => String(item.dataset.entryName || "").trim())
+    .filter(Boolean);
+}
+
+function moveLibrarySelection(direction) {
+  if (!ui.expressionEditor) {
+    return false;
+  }
+  const names = visibleLibraryEntryNames();
+  if (!names.length) {
+    return false;
+  }
+  const current = String(ui.expressionEditor.librarySelectedName || "").trim();
+  const currentIndex = Math.max(0, names.indexOf(current));
+  const nextIndex = (currentIndex + direction + names.length) % names.length;
+  setSelectedLibraryEntry(names[nextIndex]);
+  return true;
+}
+
+function resetExpressionEditorCardPosition() {
+  const card = expressionEditorModal?.querySelector(".expression-editor-card");
+  if (!card) {
+    return;
+  }
+  card.style.left = "50%";
+  card.style.top = "50%";
+  card.style.transform = "translate(-50%, -50%)";
 }
 
 function closeExpressionEditor() {
@@ -1128,16 +1372,22 @@ function closeExpressionEditor() {
   }
   expressionEditorModal.classList.add("hidden");
   ui.expressionEditor = null;
+  ui.modalDrag = null;
   if (expressionEditorTextarea) {
     expressionEditorTextarea.value = "";
     expressionEditorTextarea.classList.remove("invalid");
   }
-  if (expressionAutocomplete) {
-    expressionAutocomplete.innerHTML = "";
-    expressionAutocomplete.classList.add("hidden");
+  if (expressionLibrary) {
+    expressionLibrary.innerHTML = "";
+    expressionLibrary.classList.add("hidden");
   }
+  if (expressionSymbolsFilter) {
+    expressionSymbolsFilter.value = "";
+  }
+  expressionSidebar?.classList.remove("hidden");
   setExpressionHelp(null);
   hideExpressionStatus(expressionEditorStatus);
+  resetExpressionEditorCardPosition();
 }
 
 function refreshExpressionEditorValidation() {
@@ -1243,10 +1493,12 @@ function openExpressionEditor(fieldKey) {
     syntaxOk: true,
     baseTitle: meta.title,
     initialValue: meta.value,
+    librarySelectedName: "",
   };
   expressionEditorTitle.textContent = meta.title;
   expressionEditorTextarea.value = meta.value;
   expressionEditorModal.classList.remove("hidden");
+  resetExpressionEditorCardPosition();
   refreshExpressionEditorValidation();
   expressionEditorTextarea.focus();
   expressionEditorTextarea.select();
@@ -1263,10 +1515,12 @@ function openCustomExpressionEditor(title, initialValue, onApply) {
     baseTitle: String(title ?? ""),
     initialValue: String(initialValue ?? ""),
     onApplyCustom: typeof onApply === "function" ? onApply : null,
+    librarySelectedName: "",
   };
   expressionEditorTitle.textContent = String(title ?? "");
   expressionEditorTextarea.value = String(initialValue ?? "");
   expressionEditorModal.classList.remove("hidden");
+  resetExpressionEditorCardPosition();
   refreshExpressionEditorValidation();
   expressionEditorTextarea.focus();
   expressionEditorTextarea.select();
@@ -1326,6 +1580,13 @@ function applyI18nToDom() {
     }
     setTooltipText(el, t(key));
   });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-placeholder");
+    if (!key || !("placeholder" in el)) {
+      return;
+    }
+    el.placeholder = t(key);
+  });
   updateFileStatusLabel(dirtySinceLastSave);
 }
 
@@ -1344,24 +1605,14 @@ function applyI18nTooltipsToSubtree(root) {
 
 async function loadI18n() {
   currentLang = resolveLangFromUrl();
-  try {
-    const resp = await fetch(`i18n/messages_${currentLang}.properties`, { cache: "no-store" });
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}`);
-    }
-    i18n = parseProperties(await resp.text());
-  } catch (_err) {
-    if (currentLang !== "it") {
-      currentLang = "it";
-      try {
-        const fallback = await fetch("i18n/messages_it.properties", { cache: "no-store" });
-        i18n = fallback.ok ? parseProperties(await fallback.text()) : {};
-      } catch (_fallbackErr) {
-        i18n = {};
-      }
-    } else {
-      i18n = {};
-    }
+  const bundledCurrent = bundledI18nMessages(currentLang);
+  if (bundledCurrent) {
+    i18n = bundledCurrent;
+  } else if (currentLang !== "it") {
+    currentLang = "it";
+    i18n = bundledI18nMessages("it") || {};
+  } else {
+    i18n = {};
   }
   applyI18nToDom();
   if (!expressionEditorModal?.classList.contains("hidden")) {
@@ -1626,8 +1877,8 @@ async function chooseSubmodelFileForNode(node) {
     return false;
   }
   let entry = null;
-  if (window.showOpenFilePicker) {
-    const handles = await window.showOpenFilePicker({
+  if (supportsOpenFilePicker()) {
+    const handles = await showOpenFilePickerCompat({
       multiple: false,
       types: [{
         description: "JSON",
@@ -2233,6 +2484,7 @@ function exportGraphData() {
       strictDefinitions: Boolean(graph.execution.strictDefinitions),
     },
     nodes: graph.nodes.map((n) => {
+      normalizeNodeDescriptionProperty(n);
       const type = serializeNodeType(n.shape);
       const out = {
         id: n.id,
@@ -2398,7 +2650,7 @@ function applyGraphData(data) {
 
   graph.nodes = data.nodes.map((n) => {
     const shape = deserializeNodeType(n.type);
-    return {
+    const node = {
       id: n.id,
       name: n.name,
       input: shape === "ellipse" ? Boolean(n.input) : false,
@@ -2435,6 +2687,8 @@ function applyGraphData(data) {
       pendingStateError: "",
       properties: n.properties.map((p) => ({ key: p.key, value: p.value })),
     };
+    normalizeNodeDescriptionProperty(node);
+    return node;
   });
   graph.edges = data.edges.map((e) => ({
     id: e.id,
@@ -2699,6 +2953,7 @@ function pasteFromClipboard() {
         pendingStateError: String(n.pendingStateError ?? ""),
         properties: (n.properties || []).map((p) => ({ key: String(p.key), value: String(p.value) })),
       };
+      normalizeNodeDescriptionProperty(node);
       graph.nodes.push(node);
       idMap.set(n.id, newId);
       newNodeIds.push(newId);
@@ -2902,6 +3157,7 @@ function addNode(shape, atPoint = null) {
     pendingStateError: "",
     properties: [],
   };
+  normalizeNodeDescriptionProperty(node);
   graph.nodes.push(node);
   selectSingleNode(node.id);
 }
@@ -4450,7 +4706,42 @@ function nodesInRect(rect) {
     .map((n) => n.id);
 }
 
-function renderPropertiesEditor(container, items, ownerKey, deleteHandler) {
+function normalizeNodeDescriptionProperty(node) {
+  if (!node) {
+    return null;
+  }
+  if (!Array.isArray(node.properties)) {
+    node.properties = [];
+  }
+  const canonicalKey = descriptionPropertyKey();
+  const acceptedKeys = descriptionPropertyKeys();
+  const legacyValue = node.description == null ? "" : String(node.description);
+  const matches = node.properties.filter((prop) => acceptedKeys.has(String(prop?.key ?? "").trim().toLowerCase()));
+  let target = matches[0] || null;
+  if (!target) {
+    target = { key: canonicalKey, value: legacyValue };
+    node.properties.unshift(target);
+  } else {
+    target.key = canonicalKey;
+    if ((target.value == null || target.value === "") && legacyValue) {
+      target.value = legacyValue;
+    }
+  }
+  for (let i = node.properties.length - 1; i >= 0; i -= 1) {
+    const prop = node.properties[i];
+    if (prop !== target && acceptedKeys.has(String(prop?.key ?? "").trim().toLowerCase())) {
+      node.properties.splice(i, 1);
+    }
+  }
+  delete node.description;
+  return target;
+}
+
+function getNodeDescription(node) {
+  return String(normalizeNodeDescriptionProperty(node)?.value ?? "").trim();
+}
+
+function renderPropertiesEditor(container, items, ownerKey, deleteHandler, options = {}) {
   const activeEl = document.activeElement;
   const activeInPropsEditor =
     container.contains(activeEl) &&
@@ -4469,16 +4760,27 @@ function renderPropertiesEditor(container, items, ownerKey, deleteHandler) {
     return false;
   }
 
+  const isLockedKey = typeof options.isLockedKey === "function" ? options.isLockedKey : () => false;
   items.forEach((prop, idx) => {
     const row = document.createElement("div");
     row.className = "prop-row";
+    const locked = isLockedKey(prop, idx);
+    if (locked) {
+      row.classList.add("prop-row-locked");
+    }
 
     const keyInput = document.createElement("input");
     keyInput.placeholder = t("prop.keyPlaceholder");
     keyInput.value = prop.key;
-    keyInput.addEventListener("input", () => {
-      prop.key = keyInput.value;
-    });
+    if (locked) {
+      keyInput.readOnly = true;
+      keyInput.tabIndex = -1;
+      keyInput.classList.add("display-only-input");
+    } else {
+      keyInput.addEventListener("input", () => {
+        prop.key = keyInput.value;
+      });
+    }
 
     const valueInput = document.createElement("input");
     valueInput.placeholder = t("prop.valuePlaceholder");
@@ -4486,16 +4788,24 @@ function renderPropertiesEditor(container, items, ownerKey, deleteHandler) {
     valueInput.addEventListener("input", () => {
       prop.value = valueInput.value;
     });
+    if (locked) {
+      setTooltipText(valueInput, t("tooltip.node.description"));
+    }
 
     const delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.textContent = "X";
-    delBtn.addEventListener("click", () => {
-      delete container.dataset.ownerKey;
-      runAction(() => {
-        deleteHandler(idx);
+    if (locked) {
+      delBtn.disabled = true;
+      delBtn.classList.add("hidden");
+    } else {
+      delBtn.addEventListener("click", () => {
+        delete container.dataset.ownerKey;
+        runAction(() => {
+          deleteHandler(idx);
+        });
       });
-    });
+    }
 
     row.appendChild(keyInput);
     row.appendChild(valueInput);
@@ -5243,12 +5553,16 @@ function refreshSidebar() {
       nodeValueOutput.textContent = formatComputedValue(node.computedValue);
     }
 
+    normalizeNodeDescriptionProperty(node);
     if (renderPropertiesEditor(
       propsList,
       node.properties,
       `node:${node.id}`,
       (idx) => {
         node.properties.splice(idx, 1);
+      },
+      {
+        isLockedKey: (prop) => descriptionPropertyKeys().has(String(prop?.key ?? "").trim().toLowerCase()),
       },
     )) {
       ui.sidebarNodeId = node.id;
@@ -5511,6 +5825,7 @@ function render() {
     const g = document.createElementNS(SVG_NS, "g");
     g.classList.add("node");
     g.dataset.nodeId = node.id;
+    setTooltipText(g, getNodeDescription(node));
     g.addEventListener("contextmenu", (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
@@ -5763,7 +6078,7 @@ function importGraphData(data) {
         throw new Error(t("error.invalidJson"));
       }
       const shape = deserializeNodeType(n.type);
-      return {
+      const node = {
         id: n.id,
         name: typeof n.name === "string" ? n.name : t("node.defaultName", { id: n.id }),
         input: shape === "ellipse" ? Boolean(n.input) : false,
@@ -5803,6 +6118,8 @@ function importGraphData(data) {
           ? n.properties.map((p) => ({ key: String(p?.key ?? ""), value: String(p?.value ?? "") }))
           : [],
       };
+      normalizeNodeDescriptionProperty(node);
+      return node;
     });
   const nodesWithValidNames = semantics.sanitizeNodeNames(nodes, "n");
 
@@ -5913,6 +6230,64 @@ function normalizeJsonFilename(name) {
   return trimmed.toLowerCase().endsWith(".json") ? trimmed : `${trimmed}.json`;
 }
 
+function tryDeriveDirectoryHandleFromFileHandle(fileHandle) {
+  const filePath = String(fileHandle?.path ?? "").trim();
+  if (!filePath || !hasPlatformApi("createDirectoryHandleFromPath")) {
+    return null;
+  }
+  try {
+    return window.STGraphXPlatform.createDirectoryHandleFromPath(filePath);
+  } catch (_err) {
+    return null;
+  }
+}
+
+async function deriveDirectoryHandleFromFileHandle(fileHandle) {
+  if (!fileHandle) {
+    return null;
+  }
+  if (
+    typeof fileHandle.getParentDirectoryPath === "function" &&
+    hasPlatformApi("createDirectoryHandleFromDirectoryPath")
+  ) {
+    try {
+      const directoryPath = String(await fileHandle.getParentDirectoryPath()).trim();
+      if (directoryPath) {
+        return window.STGraphXPlatform.createDirectoryHandleFromDirectoryPath(directoryPath);
+      }
+    } catch (_err) {
+      // Fall back to other derivation strategies below.
+    }
+  }
+  if (typeof fileHandle.getPath === "function" && hasPlatformApi("createDirectoryHandleFromPath")) {
+    try {
+      const filePath = String(await fileHandle.getPath()).trim();
+      if (filePath) {
+        return window.STGraphXPlatform.createDirectoryHandleFromPath(filePath);
+      }
+    } catch (_err) {
+      // Fall back to any remaining strategies below.
+    }
+  }
+  if (typeof fileHandle.getParentDirectoryHandle === "function") {
+    try {
+      const handle = await fileHandle.getParentDirectoryHandle();
+      if (handle) {
+        return handle;
+      }
+    } catch (_err) {
+      // Fall back to any path-based derivation below.
+    }
+  }
+  return tryDeriveDirectoryHandleFromFileHandle(fileHandle);
+}
+
+function derivedDirectoryHandleDisplayName(handle) {
+  const name = String(handle?.name ?? "").trim();
+  const rawPath = String(handle?.path ?? "").trim();
+  return name || rawPath || "";
+}
+
 function loadGraphFromJsonText(jsonText, sourceName = "", fileHandle = null, directoryHandle = null, preserveSubmodelCache = false) {
   stopTimedExecution(false);
   try {
@@ -5926,7 +6301,8 @@ function loadGraphFromJsonText(jsonText, sourceName = "", fileHandle = null, dir
       importGraphData(data);
     });
     currentFileHandle = fileHandle || null;
-    currentModelDirectoryHandle = directoryHandle || null;
+    const effectiveDirectoryHandle = directoryHandle || tryDeriveDirectoryHandleFromFileHandle(fileHandle) || null;
+    currentModelDirectoryHandle = effectiveDirectoryHandle;
     currentFileName = sourceName || currentFileName || defaultGraphFilename();
     history.undo = [];
     history.redo = [];
@@ -5934,7 +6310,16 @@ function loadGraphFromJsonText(jsonText, sourceName = "", fileHandle = null, dir
     markSavedSnapshot();
     ui.submodelsPrepared = false;
     updateModelBreadcrumb();
-    setStatusKey("status.loaded");
+    if (effectiveDirectoryHandle) {
+      const label = derivedDirectoryHandleDisplayName(effectiveDirectoryHandle);
+      if (label) {
+        setStatus(`Cartella modello derivata automaticamente: ${label}`);
+      } else {
+        setStatusKey("status.loaded");
+      }
+    } else {
+      setStatusKey("status.loaded");
+    }
     window.requestAnimationFrame(() => {
       fitToContent();
     });
@@ -5958,12 +6343,17 @@ async function ensureCurrentModelDirectoryHandle() {
   if (currentModelDirectoryHandle) {
     return currentModelDirectoryHandle;
   }
+  const derivedFromCurrentFile = await deriveDirectoryHandleFromFileHandle(currentFileHandle);
+  if (derivedFromCurrentFile) {
+    currentModelDirectoryHandle = derivedFromCurrentFile;
+    return currentModelDirectoryHandle;
+  }
   if (supportsDirectoryInputSelection()) {
     currentModelDirectoryHandle = await pickModelDirectoryWithInput();
     return currentModelDirectoryHandle;
   }
-  if (typeof window.showDirectoryPicker === "function") {
-    currentModelDirectoryHandle = await window.showDirectoryPicker({ mode: "read" });
+  if (supportsDirectoryPicker()) {
+    currentModelDirectoryHandle = await showDirectoryPickerCompat({ mode: "read" });
     return currentModelDirectoryHandle;
   }
   throw new Error(t("error.submodelDirectoryUnsupported"));
@@ -6094,18 +6484,25 @@ async function parseSelectedJsonEntry(entry) {
   }
   if (typeof entry.getFile === "function") {
     const file = await entry.getFile();
+    const directoryHandle = await deriveDirectoryHandleFromFileHandle(entry);
     return {
       name: String(file?.name || entry.name || ""),
       text: await file.text(),
       file,
       fileHandle: entry,
+      directoryHandle,
     };
   }
+  const filePath = String(entry?.path || entry?.webkitRelativePath || "").trim();
+  const directoryHandle = filePath && hasPlatformApi("createDirectoryHandleFromPath")
+    ? window.STGraphXPlatform.createDirectoryHandleFromPath(filePath)
+    : null;
   return {
     name: String(entry?.name || ""),
     text: await entry.text(),
     file: entry,
     fileHandle: null,
+    directoryHandle,
   };
 }
 
@@ -6132,10 +6529,18 @@ async function maybeSelectModelDirectoryForSubmodels(data) {
   if (!rootModelHasSubmodels(data)) {
     return null;
   }
+  const derivedFromCurrentFile = await deriveDirectoryHandleFromFileHandle(currentFileHandle);
+  if (derivedFromCurrentFile) {
+    currentModelDirectoryHandle = derivedFromCurrentFile;
+    return currentModelDirectoryHandle;
+  }
+  if (currentModelDirectoryHandle) {
+    return currentModelDirectoryHandle;
+  }
   if (!rootModelHasUnresolvedSubmodels(data)) {
     return null;
   }
-  if (!supportsDirectoryInputSelection() && typeof window.showDirectoryPicker !== "function") {
+  if (!supportsDirectoryInputSelection() && !supportsDirectoryPicker()) {
     return null;
   }
   const shouldSelect = window.confirm(t("confirm.selectModelFolder"));
@@ -6223,8 +6628,8 @@ async function promptForMissingSubmodelFiles(missingPaths) {
     return false;
   }
   try {
-    if (window.showOpenFilePicker) {
-      const handles = await window.showOpenFilePicker({
+    if (supportsOpenFilePicker()) {
+      const handles = await showOpenFilePickerCompat({
         multiple: true,
         types: [{
           description: "JSON",
@@ -6293,14 +6698,14 @@ async function resolveSubmodelFileByPath(modelPath, options = {}) {
     throw new Error(SUBMODEL_DEFERRED_RESOLUTION);
   }
 
-  if (supportsDirectoryInputSelection() || typeof window.showDirectoryPicker === "function") {
+  if (supportsDirectoryInputSelection() || supportsDirectoryPicker()) {
     const directoryHandle = await ensureCurrentModelDirectoryHandle();
     const fileHandle = await directoryHandle.getFileHandle(normalizedPath);
     return readFromFileHandle(fileHandle, directoryHandle);
   }
 
-  if (typeof window.showOpenFilePicker === "function") {
-    const handles = await window.showOpenFilePicker({
+  if (supportsOpenFilePicker()) {
+    const handles = await showOpenFilePickerCompat({
       multiple: false,
       types: [{
         description: "JSON",
@@ -6530,11 +6935,12 @@ async function openSubmodelNode(node) {
     const { text, fileHandle, file, directoryHandle } = await resolveSubmodelFileByPath(modelPath);
     submodelTemplateCache.set(modelPath, buildRuntimeModelFromData(JSON.parse(text)));
     modelContextStack.push(captureCurrentModelContext(node.name));
+    const effectiveDirectoryHandle = directoryHandle || await deriveDirectoryHandleFromFileHandle(fileHandle) || null;
     loadGraphFromJsonText(
       text,
       (fileHandle && fileHandle.name) || (file && file.name) || modelPath,
       fileHandle,
-      directoryHandle,
+      effectiveDirectoryHandle,
       true,
     );
     await preloadSubmodelsAfterLoad();
@@ -6579,8 +6985,8 @@ async function writeJsonToFileHandle(fileHandle, json) {
 }
 
 async function pickSaveAsHandle(suggestedName) {
-  if (window.showSaveFilePicker) {
-    return window.showSaveFilePicker({
+  if (supportsSaveFilePicker()) {
+    return showSaveFilePickerCompat({
       suggestedName: normalizeJsonFilename(suggestedName),
       types: [
         {
@@ -6614,6 +7020,7 @@ async function saveGraphJson(forceSaveAs = false) {
     }
     filename = currentFileHandle.name || filename;
     currentFileName = filename;
+    currentModelDirectoryHandle = currentModelDirectoryHandle || await deriveDirectoryHandleFromFileHandle(currentFileHandle) || null;
     submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
     markSavedSnapshot();
     setStatusKey("status.saved");
@@ -6630,6 +7037,7 @@ async function saveGraphJson(forceSaveAs = false) {
           setStatusKey("error.saveFailed");
           return false;
         }
+        currentModelDirectoryHandle = await deriveDirectoryHandleFromFileHandle(currentFileHandle) || currentModelDirectoryHandle || null;
         submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
         markSavedSnapshot();
         setStatusKey("status.saved");
@@ -6661,7 +7069,7 @@ async function saveGraphJson(forceSaveAs = false) {
   }
 
   if (forceSaveAs) {
-    const hasNativeSavePicker = typeof window.showSaveFilePicker === "function";
+    const hasNativeSavePicker = supportsSaveFilePicker();
     try {
       currentFileHandle = await pickSaveAsHandle(filename);
       if (currentFileHandle) {
@@ -6686,6 +7094,7 @@ async function saveGraphJson(forceSaveAs = false) {
       } else {
         filename = currentFileHandle.name || filename;
         currentFileName = filename;
+        currentModelDirectoryHandle = await deriveDirectoryHandleFromFileHandle(currentFileHandle) || currentModelDirectoryHandle || null;
         submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
         markSavedSnapshot();
         setStatusKey("status.savedAs");
@@ -6730,7 +7139,10 @@ async function loadGraphJsonFile(file) {
     }
     const text = rootEntry.text;
     const rootData = rootEntry.data || JSON.parse(text);
-    loadGraphFromJsonText(text, rootEntry.name || file?.name || "graph.json", null, null, true);
+    const fileHandle = rootEntry.fileHandle || null;
+    const directoryHandle = rootEntry.directoryHandle || await deriveDirectoryHandleFromFileHandle(fileHandle) || null;
+    loadGraphFromJsonText(text, rootEntry.name || file?.name || "graph.json", fileHandle, directoryHandle, true);
+    await preloadSubmodelsAfterLoad();
     await maybeSelectModelDirectoryForSubmodels(rootData);
     await preloadSubmodelsAfterLoad();
   } catch (_err) {
@@ -6741,9 +7153,9 @@ async function loadGraphJsonFile(file) {
 
 async function openGraphJson() {
   modelContextStack.length = 0;
-  if (window.showOpenFilePicker) {
+  if (supportsOpenFilePicker()) {
     try {
-      const handles = await window.showOpenFilePicker({
+      const handles = await showOpenFilePickerCompat({
         multiple: true,
         types: [
           {
@@ -6766,13 +7178,15 @@ async function openGraphJson() {
       const file = rootEntry.file;
       const text = rootEntry.text;
       const rootData = rootEntry.data || JSON.parse(text);
+      const directoryHandle = rootEntry.directoryHandle || await deriveDirectoryHandleFromFileHandle(handle) || null;
       loadGraphFromJsonText(
         text,
         rootEntry.name || (handle && handle.name) || (file && file.name) || "graph.json",
         handle || null,
-        null,
+        directoryHandle,
         true,
       );
+      await preloadSubmodelsAfterLoad();
       await maybeSelectModelDirectoryForSubmodels(rootData);
       await preloadSubmodelsAfterLoad();
       return;
@@ -6970,7 +7384,7 @@ function buildRuntimeModelFromData(data) {
         throw new Error(t("error.invalidJson"));
       }
       const shape = deserializeNodeType(n.type);
-      return {
+      const node = {
         id: n.id,
         name: typeof n.name === "string" ? n.name : t("node.defaultName", { id: n.id }),
         input: shape === "ellipse" ? Boolean(n.input) : false,
@@ -7011,6 +7425,8 @@ function buildRuntimeModelFromData(data) {
           ? n.properties.map((p) => ({ key: String(p?.key ?? ""), value: String(p?.value ?? "") }))
           : [],
       };
+      normalizeNodeDescriptionProperty(node);
+      return node;
     });
   const nodesWithValidNames = semantics.sanitizeNodeNames(nodes, "n");
   const nodeIds = new Set(nodesWithValidNames.map((node) => node.id));
@@ -7851,7 +8267,7 @@ async function prepareSubmodelsForExecution() {
   let ready = await ensureSubmodelTemplatesReady({ allowPrompt: false });
   if (!ready) {
     const hasSubmodels = graph.nodes.some((node) => isSubmodelNode(node) && String(node.modelPath ?? "").trim());
-    if (hasSubmodels && !currentModelDirectoryHandle && (supportsDirectoryInputSelection() || typeof window.showDirectoryPicker === "function")) {
+    if (hasSubmodels && !currentModelDirectoryHandle && (supportsDirectoryInputSelection() || supportsDirectoryPicker())) {
       try {
         await ensureCurrentModelDirectoryHandle();
         await preloadSubmodelsAfterLoad();
@@ -8089,6 +8505,15 @@ async function toggleTimedExecution() {
 }
 
 window.addEventListener("pointermove", (evt) => {
+  if (ui.modalDrag && evt.pointerId === ui.modalDrag.pointerId) {
+    const card = ui.modalDrag.card;
+    if (card) {
+      card.style.transform = "none";
+      card.style.left = `${evt.clientX - ui.modalDrag.offsetX}px`;
+      card.style.top = `${evt.clientY - ui.modalDrag.offsetY}px`;
+    }
+    return;
+  }
   if (ui.widgetDrag && evt.pointerId === ui.widgetDrag.pointerId) {
     const widget = graph.widgets.find((w) => w.id === ui.widgetDrag.widgetId);
     if (widget) {
@@ -8231,6 +8656,10 @@ window.addEventListener("mousemove", (evt) => {
 window.addEventListener("pointerup", (evt) => {
   let needsRender = false;
 
+  if (ui.modalDrag && evt.pointerId === ui.modalDrag.pointerId) {
+    ui.modalDrag = null;
+  }
+
   if (ui.widgetDrag && evt.pointerId === ui.widgetDrag.pointerId) {
     const widget = graph.widgets.find((w) => w.id === ui.widgetDrag.widgetId);
     const moved = widget && (widget.x !== ui.widgetDrag.startX || widget.y !== ui.widgetDrag.startY);
@@ -8323,35 +8752,11 @@ window.addEventListener("mouseup", (evt) => {
 });
 
 svg.addEventListener("pointerleave", () => {
-  let movedCount = 0;
-  let resized = false;
-  if (ui.drag) {
-    movedCount = ui.drag.nodeIds.filter((id) => {
-      const node = getNodeById(id);
-      const start = ui.drag.startMap.get(id);
-      return node && start && (node.x !== start.x || node.y !== start.y);
-    }).length;
-  }
-  if (ui.resize) {
-    const node = getNodeById(ui.resize.nodeId);
-    resized =
-      Boolean(node) &&
-      (node.width !== ui.resize.startWidth || node.height !== ui.resize.startHeight);
-  }
-  if (ui.drag || ui.resize || ui.controlPointDrag) {
-    commitTransaction();
-  }
-  if (movedCount > 0) {
-    setStatusKey("status.nodesMoved", { count: movedCount });
-  } else if (resized) {
-    setStatusKey("status.nodeResized");
-  }
-  ui.drag = null;
-  ui.resize = null;
-  ui.controlPointDrag = null;
   ui.edgeCreateHoverId = null;
   ui.edgeCreateLastPoint = null;
-  svg.style.cursor = "";
+  if (!ui.drag && !ui.resize && !ui.controlPointDrag && !ui.edgeCreate && !ui.marquee && !ui.widgetDrag && !ui.widgetResize) {
+    svg.style.cursor = "";
+  }
 });
 
 svg.addEventListener("pointerdown", (evt) => {
@@ -8902,29 +9307,26 @@ if (expressionEditorTextarea) {
     refreshExpressionEditorValidation();
   });
   expressionEditorTextarea.addEventListener("keydown", (evt) => {
-    if (ui.expressionEditor?.completion?.entries?.length) {
-      if (evt.key === "ArrowDown") {
+    const hasFilterContext = Boolean(String(expressionSymbolsFilter?.value || "").trim() || String(ui.expressionEditor?.autoFilter || "").trim());
+    if (hasFilterContext && evt.key === "ArrowDown") {
+      evt.preventDefault();
+      moveLibrarySelection(1);
+      return;
+    }
+    if (hasFilterContext && evt.key === "ArrowUp") {
+      evt.preventDefault();
+      moveLibrarySelection(-1);
+      return;
+    }
+    if (evt.key === "Tab" && !evt.shiftKey) {
+      if (hasFilterContext && insertSelectedLibraryEntry()) {
         evt.preventDefault();
-        const completion = ui.expressionEditor.completion;
-        completion.activeIndex = (completion.activeIndex + 1) % completion.entries.length;
-        renderExpressionAutocomplete();
         return;
       }
-      if (evt.key === "ArrowUp") {
+    }
+    if (evt.key === "Enter" && !evt.ctrlKey && !evt.metaKey && hasFilterContext) {
+      if (insertSelectedLibraryEntry()) {
         evt.preventDefault();
-        const completion = ui.expressionEditor.completion;
-        completion.activeIndex = (completion.activeIndex - 1 + completion.entries.length) % completion.entries.length;
-        renderExpressionAutocomplete();
-        return;
-      }
-      if (evt.key === "Tab" && !evt.shiftKey) {
-        evt.preventDefault();
-        acceptExpressionAutocomplete();
-        return;
-      }
-      if (evt.key === "Enter" && !evt.ctrlKey && !evt.metaKey) {
-        evt.preventDefault();
-        acceptExpressionAutocomplete();
         return;
       }
     }
@@ -8956,12 +9358,42 @@ if (expressionEditorCancelBtn) {
 if (expressionEditorApplyBtn) {
   expressionEditorApplyBtn.addEventListener("click", applyExpressionEditor);
 }
+if (expressionSymbolsFilter) {
+  expressionSymbolsFilter.addEventListener("input", () => {
+    renderExpressionLibrary();
+  });
+  expressionSymbolsFilter.addEventListener("keydown", (evt) => {
+    if (evt.key === "Escape") {
+      evt.preventDefault();
+      expressionEditorTextarea?.focus();
+    }
+  });
+}
 if (expressionEditorModal) {
   expressionEditorModal.addEventListener("pointerdown", (evt) => {
     if (evt.target === expressionEditorModal) {
       closeExpressionEditor();
     }
   });
+  const modalHead = expressionEditorModal.querySelector(".modal-head");
+  const modalCard = expressionEditorModal.querySelector(".expression-editor-card");
+  if (modalHead && modalCard) {
+    modalHead.addEventListener("pointerdown", (evt) => {
+      if (evt.target.closest("button")) {
+        return;
+      }
+      const rect = modalCard.getBoundingClientRect();
+      modalCard.style.transform = "none";
+      modalCard.style.left = `${rect.left}px`;
+      modalCard.style.top = `${rect.top}px`;
+      ui.modalDrag = {
+        pointerId: evt.pointerId,
+        offsetX: evt.clientX - rect.left,
+        offsetY: evt.clientY - rect.top,
+        card: modalCard,
+      };
+    });
+  }
 }
 if (functionsHelpBtn) {
   functionsHelpBtn.addEventListener("click", () => {

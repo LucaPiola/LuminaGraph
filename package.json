@@ -1,0 +1,61 @@
+{
+  "name": "stgraphx",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.js",
+  "description": "STGraphX desktop and web shell",
+  "scripts": {
+    "start": "npm run start:desktop",
+    "start:desktop": "electron .",
+    "start:web": "node scripts/dev-server.js",
+    "check": "node --check app.js && node --check semantic.js && node --check probability.js && node --check electron/main.js && node --check electron/preload.js && node --check scripts/dev-server.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "dist:mac": "electron-builder --mac"
+  },
+  "build": {
+    "appId": "org.lmari.stgraphx",
+    "productName": "STGraphX",
+    "asar": true,
+    "files": [
+      "app.js",
+      "semantic.js",
+      "probability.js",
+      "index.html",
+      "styles.css",
+      "i18n-inline.js",
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ],
+      "category": "Development"
+    }
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^24.13.3"
+  }
+}

@@ -48,6 +48,10 @@
     throw new Error("reduce is a special expression form");
   }
 
+  function unavailableAppendOperator() {
+    throw new Error("append is a special expression form");
+  }
+
   function unavailableDistribution(name) {
     return () => {
       throw new Error(`${name} is unavailable`);
@@ -129,6 +133,7 @@
     map: unavailableMapOperator,
     filter: unavailableFilterOperator,
     reduce: unavailableReduceOperator,
+    append: unavailableAppendOperator,
     gaussian: typeof probability.gaussian === "function" ? probability.gaussian : unavailableDistribution("gaussian"),
     uniform: typeof probability.uniform === "function" ? probability.uniform : unavailableDistribution("uniform"),
     exponential: typeof probability.exponential === "function" ? probability.exponential : unavailableDistribution("exponential"),
@@ -727,6 +732,30 @@
     return matrix.map((row) => reduceArrayElements(row, reducer, scope, hasInit, initValue));
   }
 
+  function appendArrayValues(target, value) {
+    if (!Array.isArray(target)) {
+      throw new Error("append expects a vector or matrix as first argument");
+    }
+    const isMatrix = target.length > 0 && target.every((row) => Array.isArray(row));
+    if (!isMatrix) {
+      if (Array.isArray(value)) {
+        return [...target, ...value];
+      }
+      return [...target, value];
+    }
+    if (!Array.isArray(value) || value.some((item) => Array.isArray(item))) {
+      throw new Error("append on matrices expects a vector row as second argument");
+    }
+    const columnCount = target.length > 0 ? target[0].length : value.length;
+    if (!target.every((row) => row.length === columnCount)) {
+      throw new Error("append requires a rectangular matrix");
+    }
+    if (value.length !== columnCount) {
+      throw new Error("appended row length does not match matrix column count");
+    }
+    return [...target.map((row) => row.slice()), value.slice()];
+  }
+
   function tokenizeExpression(source) {
     const tokens = [];
     let i = 0;
@@ -1256,6 +1285,14 @@
           const hasInit = node.args.length >= 4;
           const initValue = hasInit ? evaluateAstNode(node.args[3], scope, hooks) : null;
           return reduceMatrixAlongAxis(target, axis, reducer, scope, hasInit, initValue);
+        }
+        if (node.name === "append") {
+          if (node.args.length !== 2) {
+            throw new Error("append expects exactly 2 arguments");
+          }
+          const target = evaluateAstNode(node.args[0], scope, hooks);
+          const value = evaluateAstNode(node.args[1], scope, hooks);
+          return appendArrayValues(target, value);
         }
         if (!Object.prototype.hasOwnProperty.call(scope, node.name)) {
           throw new ReferenceError(`${node.name} is not defined`);

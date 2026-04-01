@@ -1,0 +1,227 @@
+# STGraphX: readme tecnico
+
+_Luca Mari, versione 1 aprile 2026_
+
+STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
+
+## Architettura
+
+STGraphX mantiene un unico codice applicativo per due shell:
+- web, per accesso da browser via `http:` (e con qualche limitazione anche `file:`);
+- desktop, mediante `Electron`.
+
+L'obiettivo è evitare duplicazione del codice applicativo e isolare le differenze di piattaforma, relative solo al layer di accesso a file e cartelle.
+
+## Struttura del progetto
+
+Frontend condiviso:
+- `index.html`
+- `styles.css`
+- `app.js`
+- `semantic.js`
+- `probability.js`
+- `i18n-inline.js`
+
+Shell Electron:
+- `electron/main.js`
+- `electron/preload.js`
+
+Supporto sviluppo:
+- `scripts/dev-server.js`
+- `package.json`
+
+## i18n
+
+La localizzazione runtime è concentrata in:
+- `i18n-inline.js`
+
+Il renderer legge i testi tramite:
+- `window.STGraphXI18nBundles`
+
+Questo evita dipendenze da `fetch(...)` e riduce i problemi in esecuzione locale o in ambienti con policy diverse sui file.
+
+## Separazione delle responsabilità
+
+### Renderer condiviso
+
+Il renderer contiene:
+- editor del grafo
+- pannelli di configurazione
+- runtime dei modelli
+- gestione dei widget
+- semantica delle espressioni
+- risoluzione dei sottomodelli a livello logico
+
+### Layer di piattaforma
+
+`app.js` usa wrapper compatibili per:
+- apertura file
+- salvataggio file
+- scelta cartella
+
+API usate dal renderer:
+- `showOpenFilePickerCompat(...)`
+- `showSaveFilePickerCompat(...)`
+- `showDirectoryPickerCompat(...)`
+
+Questi wrapper preferiscono:
+1. `window.STGraphXPlatform` se disponibile
+2. API native del browser come fallback
+3. fallback HTML input dove necessario
+
+## Electron bridge
+
+### Main process
+
+`electron/main.js` crea la finestra e gestisce tre canali IPC:
+- `stgraphx:show-open-dialog`
+- `stgraphx:show-save-dialog`
+- `stgraphx:show-directory-dialog`
+
+### Preload
+
+`electron/preload.js` espone nel renderer:
+- `window.STGraphXPlatform.showOpenFilePicker(...)`
+- `window.STGraphXPlatform.showSaveFilePicker(...)`
+- `window.STGraphXPlatform.showDirectoryPicker(...)`
+
+Le API esposte imitano il più possibile gli handle del File System Access API del browser, così il renderer non deve conoscere la piattaforma concreta.
+
+## Packaging
+
+Il packaging desktop usa `electron-builder` via `package.json`.
+
+### Primo packaging, passo per passo
+
+La procedura consigliata è questa.
+
+1. Verifica la versione di Node:
+
+```bash
+node -v
+npm -v
+```
+
+2. Installa le dipendenze del progetto:
+
+```bash
+npm install
+```
+
+3. Controlla che il codice sia sintatticamente coerente:
+
+```bash
+npm run check
+```
+
+4. Avvia l'app in modalità desktop, prima di impacchettarla:
+
+```bash
+npm run start:desktop
+```
+
+5. Genera una build unpacked di prova:
+
+```bash
+npm run pack
+```
+
+Questo produce una versione non installer, utile per capire se la shell Electron funziona correttamente.
+Provala con un comando come
+
+```bash
+./dist/linux-unpacked/stgraphx
+```
+
+6. Genera il pacchetto distribuibile per la piattaforma corrente:
+
+```bash
+npm run dist
+```
+
+7. Se vuoi forzare una piattaforma specifica:
+
+```bash
+npm run dist:win
+npm run dist:linux
+npm run dist:mac
+```
+
+### Cosa aspettarsi nella cartella `dist/`
+
+A seconda del sistema operativo, `electron-builder` produrrà file diversi:
+- Windows: installer `nsis` e pacchetto `portable`
+- Linux: `AppImage` e archivio `tar.gz`
+- macOS: `dmg` e `zip`
+
+### Risorse opzionali ma consigliate
+
+La cartella `build/` è predisposta per contenere risorse di packaging, in particolare:
+- icone applicative
+- eventuali immagini usate dagli installer
+
+Se non inserisci icone personalizzate, il packaging funziona comunque, ma userà i default di Electron o di `electron-builder`.
+
+### Nota sui target cross-platform
+
+In generale, il packaging funziona meglio quando viene eseguito sulla piattaforma destinazione:
+- build Windows su Windows
+- build macOS su macOS
+- build Linux su Linux
+
+Alcuni target possono essere generati anche da altri sistemi, ma per una prima esperienza conviene evitare cross-build aggressivi.
+
+Output previsto:
+- cartella `dist/`
+
+### Estensioni possibili
+
+Passi successivi plausibili:
+1. icone dedicate per Windows/macOS/Linux
+2. packaging firmato
+3. eventuale layer di persistenza più esplicito per preferenze applicative
+4. eventuale toolbar o splash specifici per la shell desktop
+
+## Avvio
+
+### Versione web
+
+Modalità consigliata:
+
+```bash
+npm run start:web
+```
+
+In alternativa puoi usare un altro server statico, per esempio:
+
+```bash
+python3 -m http.server
+```
+
+Note pratiche:
+- con Firefox e Chrome funziona spesso anche `file:`, mentre Opera può essere meno affidabile;
+- per un uso regolare è preferibile `http:`.
+
+## Note applicative
+
+### Sottomodelli
+
+STGraphX supporta i `sottomodelli` come nodi speciali che referenziano un altro modello salvato in un file JSON separato.
+
+Principi d'uso:
+- un `sottomodello` è un nodo del modello padre
+- il file del `sottomodello` è esterno, non incorporato inline nel JSON del modello padre
+- il file padre e i file figlio devono stare nella stessa cartella
+- l'interfaccia del `sottomodello` è definita dai nodi `input` e `output` del modello figlio
+- gli input del `sottomodello` possono avere binding espliciti nel modello padre, oppure restare vuoti e usare i default definiti nel modello figlio
+
+Uso pratico:
+1. crea o seleziona un nodo di tipo `sottomodello`
+2. usa `Apri` per scegliere il file JSON del `sottomodello` oppure per aggiornarlo
+3. una volta disponibile, usa `Mostra` per aprire il modello figlio
+4. quando carichi un modello padre che contiene `sottomodelli`, l'app può chiedere anche la cartella del modello per risolvere automaticamente i file figlio
+
+Note:
+- le uscite del `sottomodello` sono accessibili nel modello padre con la notazione `nomeSottomodello.nomeOutput`
+- lo stato interno dei nodi di stato del `sottomodello` resta locale al modello figlio
+- padre e figli condividono la stessa base dei tempi: `time`, `t0`, `t1`, `dt`

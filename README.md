@@ -1,18 +1,29 @@
-# STGraphX: un esperimento
+# STGraphX: readme
 
-Un esperimento: di reimplementazione "moderna" di STGraph (da Java a JavaScript), realizzata interamente in "vibe coding" (con GPT-Codex-5.3).
+_Luca Mari, versione 1 aprile 2026_
 
-__Luca Mari, versione 22 marzo 2026__
+## Contesto
+
+STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
+
+È un esperimento di reimplementazione di STGraph, da Java a JavaScript, realizzata interamente in _vibe coding_ con GPT-Codex-5.x.
 
 (si può provare <a href="https://lmari.github.io/STGraphX" target="_blank" rel="noopener noreferrer">qui</a>)
 
-Al momento implementati (senza librerie esterne!):
+## Stato del progetto
+
+Applicazione JavaScript con doppia shell e logica condivisa:
+* web, per accesso da browser via `http:` (e con qualche limitazione anche `file:`);
+* desktop, mediante `Electron`.
+
+__Al momento implementati (senza librerie esterne!):__
 * editor per grafi orientati, con nodi di forme diverse, frecce spline, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard, undo e redo, ...;
 * menu, menu contestuale e pannello di configurazione aggiornato dinamicamente, con tooltip;
-* gestione dei testi in italiano e inglese in file di configurazione e scelta in extraURL;
+* gestione dei testi in italiano e inglese in file di configurazione e scelta in extraURL (`?lang=it|en`);
 * gestione dei nodi algebrici, di stato, parametri e sottomodelli, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale); controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo del numero di cifre decimali visualizzate;
 * gestione di esecuzione completa, passo-passo, temporizzata;
 * gestione opzionale di blocco di esecuzione ed evidenziazione per nodi non definiti;
+* editor per espressioni, con help contestuale e controllo sintattico
 * varie funzioni definite; mapping da valori booleani a valori numerici e funzione `if`;
 * funzione `integral`, con scelta dell'algoritmo di integrazione, se Eulero o RK4;
 * alcune funzioni per distribuzioni di probabilità;
@@ -29,7 +40,7 @@ Al momento implementati (senza librerie esterne!):
 * menu di help;
 * ...
 
-Al momento non implementati:
+__Al momento non implementati:__
 * altri widget e altre opzioni per i widget già presenti, in particolare per la visualizzazione di valori non scalari;
 * altre funzioni;
 * nodi di stato con output;
@@ -37,15 +48,18 @@ Al momento non implementati:
 * interfaccia a tab per più modelli;
 * ...
 
----
+## Appunti sul progetto
 
-Qualche riflessione sull'esperienza
+- Comprende le richieste molto bene e la qualità del codice prodotto è quasi sempre eccellente
+- Controlla sempre il lavoro svolto e quasi sempre lo corregge da sé se trova degli errori
+- Nel caso di estensioni a parti già realizzate, si fa carico automaticamente di mantenere la coerenza
+- Le spiegazioni del lavoro compiuto sono chiare e corrette
+- A volte prende iniziative implementando estensioni a quanto richiesto
+- È in grado di fare refactoring e ottimizzazione
+- Si possono chiedere pareri o comunque indicazioni su come si potrebbero risolvere problemi
+- È come un dialogo con uno sviluppatore esperto (inclusi suoi commenti come "Il patch è saltato su un punto di contesto nel CSS. Lo rifaccio in blocchi più piccoli così non rischiamo di lasciare roba a metà.")
+- ...
 
-* Comprende le richieste molto bene e la qualità del codice prodotto è quasi sempre eccellente
-* Controlla sempre il lavoro svolto e quasi sempre lo corregge da sé se trova degli errori
-* Nel caso di estensioni a parti già realizzate, si fa carico automaticamente di mantenere la coerenza
-* Le spiegazioni del lavoro compiuto sono chiare e corrette
-* A volte prende iniziative implementando estensioni a quanto richiesto
-* È in grado di fare refactoring e ottimizzazione
-* Si possono chiedere pareri o comunque indicazioni su come si potrebbero risolvere problemi
-* ...
+## Documentazione aggiuntiva
+
+Per l'architettura tecnica e per le istruzioni su come sviluppare il progetto, si veda `README-ARCHITECTURE.md`.
