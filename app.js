@@ -2557,6 +2557,8 @@ function exportGraphData() {
         ? w.xyPairs.map((pair, idx) => ({
           xSource: String(pair.xSource ?? "time"),
           ySource: String(pair.ySource ?? ""),
+          showTimeSeries: normalizeChartSeriesToggle(pair?.showTimeSeries, pair?.seriesMode !== "instant"),
+          showInstantProfile: normalizeChartSeriesToggle(pair?.showInstantProfile, pair?.seriesMode === "instant" ? true : false),
           color: /^#[0-9a-fA-F]{6}$/.test(String(pair?.color ?? "")) ? String(pair.color) : defaultChartSeriesColor(idx),
           showLine: pair?.showLine !== false,
           pointMode: normalizeChartPointMode(pair?.pointMode, pair?.showPoints),
@@ -2729,6 +2731,8 @@ function applyGraphData(data) {
           ? w.xyPairs.map((pair, idx) => ({
             xSource: String(pair.xSource ?? "time"),
             ySource: String(pair.ySource ?? ""),
+            showTimeSeries: normalizeChartSeriesToggle(pair?.showTimeSeries, pair?.seriesMode !== "instant"),
+            showInstantProfile: normalizeChartSeriesToggle(pair?.showInstantProfile, pair?.seriesMode === "instant" ? true : false),
             color: /^#[0-9a-fA-F]{6}$/.test(String(pair?.color ?? "")) ? String(pair.color) : defaultChartSeriesColor(idx),
             showLine: pair?.showLine !== false,
             pointMode: normalizeChartPointMode(pair?.pointMode, pair?.showPoints),
@@ -2743,6 +2747,8 @@ function applyGraphData(data) {
             return legacyYNodes.map((yNode, idx) => ({
               xSource: legacyX,
               ySource: yNode,
+              showTimeSeries: true,
+              showInstantProfile: false,
               color: defaultChartSeriesColor(idx),
               showLine: true,
               pointMode: "all",
@@ -3271,6 +3277,8 @@ function addXYChartWidget(at = null) {
       {
         xSource: "time",
         ySource: nodeNames[0] || "",
+        showTimeSeries: true,
+        showInstantProfile: false,
         color: defaultChartSeriesColor(0),
         showLine: true,
         pointMode: "all",
@@ -3316,6 +3324,10 @@ function normalizeChartPointMode(value, legacyShowPoints = null) {
   return "all";
 }
 
+function normalizeChartSeriesToggle(value, fallback = false) {
+  return value == null ? Boolean(fallback) : value !== false;
+}
+
 function sanitizeWidgetColumns(widget) {
   if (!Array.isArray(widget.columns)) {
     widget.columns = [];
@@ -3337,12 +3349,24 @@ function sanitizeWidgetXYPairs(widget) {
     .map((pair, idx) => ({
       xSource: String(pair?.xSource ?? "time"),
       ySource: String(pair?.ySource ?? ""),
+      showTimeSeries: normalizeChartSeriesToggle(pair?.showTimeSeries, pair?.seriesMode !== "instant"),
+      showInstantProfile: normalizeChartSeriesToggle(pair?.showInstantProfile, pair?.seriesMode === "instant" ? true : false),
       color: /^#[0-9a-fA-F]{6}$/.test(String(pair?.color ?? "")) ? String(pair.color) : defaultChartSeriesColor(idx),
       showLine: pair?.showLine !== false,
       pointMode: normalizeChartPointMode(pair?.pointMode, pair?.showPoints),
       pointSize: Number.isFinite(Number(pair?.pointSize)) ? clamp(Number(pair.pointSize), 1, 12) : 2.4,
       seriesData: Array.isArray(pair?.seriesData)
         ? pair.seriesData.map((series) => ({
+          label: String(series?.label ?? ""),
+          points: Array.isArray(series?.points)
+            ? series.points
+              .map((p) => ({ x: Number(p?.x), y: Number(p?.y) }))
+              .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+            : [],
+        }))
+        : [],
+      instantSeriesData: Array.isArray(pair?.instantSeriesData)
+        ? pair.instantSeriesData.map((series) => ({
           label: String(series?.label ?? ""),
           points: Array.isArray(series?.points)
             ? series.points
@@ -3402,6 +3426,28 @@ function buildChartPairSeriesDefinitions(pair, xValue, yValue) {
       label: `${pair.xSource} -> ${pair.ySource}`,
       point: { x: xItem, y: yValue[idx] },
     }));
+  }
+
+  return [];
+}
+
+function buildChartPairInstantSeriesDefinitions(pair, xValue, yValue) {
+  if (isFiniteScalar(xValue) && isFiniteVector(yValue)) {
+    return [
+      {
+        label: `${pair.xSource} -> ${pair.ySource}`,
+        points: yValue.map((item) => ({ x: xValue, y: item })),
+      },
+    ];
+  }
+
+  if (isFiniteVector(xValue) && isFiniteVector(yValue) && xValue.length === yValue.length) {
+    return [
+      {
+        label: `${pair.xSource} -> ${pair.ySource}`,
+        points: xValue.map((xItem, idx) => ({ x: xItem, y: yValue[idx] })),
+      },
+    ];
   }
 
   return [];
@@ -3715,21 +3761,30 @@ function updateXYWidgetsFromComputedValues(timeValue = null, nodeMap = buildNode
       const yVal = pair.ySource === "time"
         ? currentTime
         : nodeMap.get(pair.ySource)?.computedValue;
-      const seriesDefs = buildChartPairSeriesDefinitions(pair, xVal, yVal);
-      if (seriesDefs.length === 0) {
-        return;
+      if (pair.showInstantProfile) {
+        pair.instantSeriesData = buildChartPairInstantSeriesDefinitions(pair, xVal, yVal);
+      } else {
+        pair.instantSeriesData = [];
       }
-      if (!Array.isArray(pair.seriesData)) {
-        pair.seriesData = [];
-      }
-      seriesDefs.forEach((seriesDef, idx) => {
-        if (!pair.seriesData[idx] || pair.seriesData[idx].label !== seriesDef.label) {
-          pair.seriesData[idx] = { label: seriesDef.label, points: [] };
+      if (pair.showTimeSeries) {
+        const seriesDefs = buildChartPairSeriesDefinitions(pair, xVal, yVal);
+        if (seriesDefs.length === 0) {
+          return;
         }
-        pair.seriesData[idx].points.push(seriesDef.point);
-      });
-      if (pair.seriesData.length > seriesDefs.length) {
-        pair.seriesData = pair.seriesData.slice(0, seriesDefs.length);
+        if (!Array.isArray(pair.seriesData)) {
+          pair.seriesData = [];
+        }
+        seriesDefs.forEach((seriesDef, idx) => {
+          if (!pair.seriesData[idx] || pair.seriesData[idx].label !== seriesDef.label) {
+            pair.seriesData[idx] = { label: seriesDef.label, points: [] };
+          }
+          pair.seriesData[idx].points.push(seriesDef.point);
+        });
+        if (pair.seriesData.length > seriesDefs.length) {
+          pair.seriesData = pair.seriesData.slice(0, seriesDefs.length);
+        }
+      } else {
+        pair.seriesData = [];
       }
     });
   });
@@ -3779,6 +3834,7 @@ function clearAllXYChartPoints() {
       widget.xyPairs.forEach((pair) => {
         pair.points = [];
         pair.seriesData = [];
+        pair.instantSeriesData = [];
       });
     }
   });
@@ -3931,17 +3987,34 @@ function refreshChartWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap(
     })
     : widget.xyPairs;
   const seriesList = displayedPairs.flatMap((pair) => {
-    const seriesData = Array.isArray(pair.seriesData) && pair.seriesData.length > 0
-      ? pair.seriesData
-      : [{ label: `${pair.xSource} -> ${pair.ySource}`, points: pair.points || [] }];
-    return seriesData.map((series, idx) => ({
-      label: series.label || `${pair.xSource} -> ${pair.ySource}${seriesData.length > 1 ? ` [${idx}]` : ""}`,
-      color: pair.color,
-      showLine: pair.showLine,
-      pointMode: pair.pointMode,
-      pointSize: pair.pointSize,
-      points: series.points || [],
-    }));
+    const out = [];
+    if (pair.showTimeSeries) {
+      const seriesData = Array.isArray(pair.seriesData) && pair.seriesData.length > 0
+        ? pair.seriesData
+        : [{ label: `${pair.xSource} -> ${pair.ySource}`, points: pair.points || [] }];
+      out.push(...seriesData.map((series, idx) => ({
+        label: series.label || `${pair.xSource} -> ${pair.ySource}${seriesData.length > 1 ? ` [${idx}]` : ""}`,
+        color: pair.color,
+        showLine: pair.showLine,
+        pointMode: pair.pointMode,
+        pointSize: pair.pointSize,
+        points: series.points || [],
+      })));
+    }
+    if (pair.showInstantProfile) {
+      const instantSeriesData = Array.isArray(pair.instantSeriesData) && pair.instantSeriesData.length > 0
+        ? pair.instantSeriesData
+        : [];
+      out.push(...instantSeriesData.map((series) => ({
+        label: series.label || `${pair.xSource} -> ${pair.ySource}`,
+        color: pair.color,
+        showLine: pair.showLine,
+        pointMode: pair.pointMode === "last" ? "all" : pair.pointMode,
+        pointSize: pair.pointSize,
+        points: series.points || [],
+      })));
+    }
+    return out;
   });
   drawXYChart(canvas, seriesList, widget);
 }
@@ -4150,17 +4223,34 @@ function renderWidgets() {
         })
         : widget.xyPairs;
       const seriesList = displayedPairs.flatMap((pair) => {
-        const seriesData = Array.isArray(pair.seriesData) && pair.seriesData.length > 0
-          ? pair.seriesData
-          : [{ label: `${pair.xSource} -> ${pair.ySource}`, points: pair.points || [] }];
-        return seriesData.map((series, idx) => ({
-          label: series.label || `${pair.xSource} -> ${pair.ySource}${seriesData.length > 1 ? ` [${idx}]` : ""}`,
-          color: pair.color,
-          showLine: pair.showLine,
-          pointMode: pair.pointMode,
-          pointSize: pair.pointSize,
-          points: series.points || [],
-        }));
+        const out = [];
+        if (pair.showTimeSeries) {
+          const seriesData = Array.isArray(pair.seriesData) && pair.seriesData.length > 0
+            ? pair.seriesData
+            : [{ label: `${pair.xSource} -> ${pair.ySource}`, points: pair.points || [] }];
+          out.push(...seriesData.map((series, idx) => ({
+            label: series.label || `${pair.xSource} -> ${pair.ySource}${seriesData.length > 1 ? ` [${idx}]` : ""}`,
+            color: pair.color,
+            showLine: pair.showLine,
+            pointMode: pair.pointMode,
+            pointSize: pair.pointSize,
+            points: series.points || [],
+          })));
+        }
+        if (pair.showInstantProfile) {
+          const instantSeriesData = Array.isArray(pair.instantSeriesData) && pair.instantSeriesData.length > 0
+            ? pair.instantSeriesData
+            : [];
+          out.push(...instantSeriesData.map((series) => ({
+            label: series.label || `${pair.xSource} -> ${pair.ySource}`,
+            color: pair.color,
+            showLine: pair.showLine,
+            pointMode: pair.pointMode === "last" ? "all" : pair.pointMode,
+            pointSize: pair.pointSize,
+            points: series.points || [],
+          })));
+        }
+        return out;
       });
       drawXYChart(canvas, seriesList, widget);
       canvasWrap.appendChild(canvas);
@@ -5095,6 +5185,8 @@ function refreshWidgetConfigPanel(widget) {
       widget.xyPairs.push({
         xSource: "time",
         ySource: defaultY,
+        showTimeSeries: true,
+        showInstantProfile: false,
         color: defaultChartSeriesColor(widget.xyPairs.length),
         showLine: true,
         pointMode: "all",
@@ -5128,9 +5220,10 @@ function refreshWidgetConfigPanel(widget) {
     setTooltipText(xSel, t("widget.xSourceLabel"));
     xSel.addEventListener("change", () => {
       runAction(() => {
-      widget.xyPairs[activePairIndex].xSource = xSel.value;
-      widget.xyPairs[activePairIndex].points = [];
-      widget.xyPairs[activePairIndex].seriesData = [];
+        widget.xyPairs[activePairIndex].xSource = xSel.value;
+        widget.xyPairs[activePairIndex].points = [];
+        widget.xyPairs[activePairIndex].seriesData = [];
+        widget.xyPairs[activePairIndex].instantSeriesData = [];
       });
     });
 
@@ -5145,9 +5238,10 @@ function refreshWidgetConfigPanel(widget) {
     setTooltipText(ySel, t("widget.ySeriesLabel"));
     ySel.addEventListener("change", () => {
       runAction(() => {
-      widget.xyPairs[activePairIndex].ySource = ySel.value;
-      widget.xyPairs[activePairIndex].points = [];
-      widget.xyPairs[activePairIndex].seriesData = [];
+        widget.xyPairs[activePairIndex].ySource = ySel.value;
+        widget.xyPairs[activePairIndex].points = [];
+        widget.xyPairs[activePairIndex].seriesData = [];
+        widget.xyPairs[activePairIndex].instantSeriesData = [];
       });
     });
 
@@ -5157,6 +5251,50 @@ function refreshWidgetConfigPanel(widget) {
 
     const bottomRow = document.createElement("div");
     bottomRow.className = "chart-pair-bottom";
+    const modesRow = document.createElement("div");
+    modesRow.className = "chart-pair-modes";
+
+    const timeSeriesLabel = document.createElement("label");
+    timeSeriesLabel.className = "menu-check compact-bool";
+    setTooltipText(timeSeriesLabel, t("widget.showTimeSeries"));
+    const timeSeriesInput = document.createElement("input");
+    timeSeriesInput.type = "checkbox";
+    timeSeriesInput.checked = pair.showTimeSeries !== false;
+    timeSeriesInput.addEventListener("change", () => {
+      runAction(() => {
+        widget.xyPairs[activePairIndex].showTimeSeries = timeSeriesInput.checked;
+        widget.xyPairs[activePairIndex].points = [];
+        widget.xyPairs[activePairIndex].seriesData = [];
+      });
+    });
+    const timeSeriesText = document.createElement("span");
+    timeSeriesText.textContent = t("widget.showTimeSeries");
+    timeSeriesLabel.appendChild(timeSeriesInput);
+    timeSeriesLabel.appendChild(timeSeriesText);
+
+    const instantProfileLabel = document.createElement("label");
+    instantProfileLabel.className = "menu-check compact-bool";
+    setTooltipText(instantProfileLabel, t("widget.showInstantProfile"));
+    const instantProfileInput = document.createElement("input");
+    instantProfileInput.type = "checkbox";
+    instantProfileInput.checked = pair.showInstantProfile === true;
+    instantProfileInput.addEventListener("change", () => {
+      runAction(() => {
+        widget.xyPairs[activePairIndex].showInstantProfile = instantProfileInput.checked;
+        widget.xyPairs[activePairIndex].instantSeriesData = [];
+      });
+    });
+    const instantProfileText = document.createElement("span");
+    instantProfileText.textContent = t("widget.showInstantProfile");
+    instantProfileLabel.appendChild(instantProfileInput);
+    instantProfileLabel.appendChild(instantProfileText);
+
+    modesRow.appendChild(timeSeriesLabel);
+    modesRow.appendChild(instantProfileLabel);
+    activePairSection.appendChild(modesRow);
+
+    const styleRow = document.createElement("div");
+    styleRow.className = "chart-pair-style-row";
 
     const colorInput = document.createElement("input");
     colorInput.type = "color";
@@ -5212,11 +5350,11 @@ function refreshWidgetConfigPanel(widget) {
       });
     });
 
-    bottomRow.appendChild(colorInput);
-    bottomRow.appendChild(lineLabel);
-    bottomRow.appendChild(pointsSelect);
-    bottomRow.appendChild(pointSizeInput);
-    activePairSection.appendChild(bottomRow);
+    styleRow.appendChild(colorInput);
+    styleRow.appendChild(lineLabel);
+    styleRow.appendChild(pointsSelect);
+    styleRow.appendChild(pointSizeInput);
+    activePairSection.appendChild(styleRow);
   } else {
     const emptyPairs = document.createElement("div");
     emptyPairs.className = "empty-props";

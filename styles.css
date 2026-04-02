@@ -961,14 +961,21 @@ button:disabled {
   gap: 4px;
 }
 
-.chart-pair-bottom {
+.chart-pair-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  align-items: center;
+}
+
+.chart-pair-style-row {
   display: grid;
   grid-template-columns: auto auto 1fr 84px;
   gap: 4px;
   align-items: center;
 }
 
-.chart-pair-bottom input[type="color"] {
+.chart-pair-style-row input[type="color"] {
   width: 32px;
   min-width: 32px;
   padding: 2px;

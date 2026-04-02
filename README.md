@@ -1,6 +1,6 @@
 # STGraphX: readme
 
-_Luca Mari, versione 1 aprile 2026_
+_Luca Mari, versione 2 aprile 2026_
 
 ## Contesto
 
@@ -27,7 +27,7 @@ __Al momento implementati (senza librerie esterne!):__
 * varie funzioni definite; mapping da valori booleani a valori numerici e funzione `if`;
 * funzione `integral`, con scelta dell'algoritmo di integrazione, se Eulero o RK4;
 * alcune funzioni per distribuzioni di probabilità;
-* generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione di vettori con la sintassi di Python, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari;
+* generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione/slicing di vettori e matrici con la sintassi di NumPy, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari;
 * funzioni "special form" per operare su vettori e matrici: `array`, `reduce`, `map`, `filter`;
 * gestione di proprietà custom per il modello e i singoli nodi e funzioni `getModelProperty`/`getProperty` e `setModelProperty`/`setProperty`;
 * gestione di nodi di output e di widget di output: grafici e tabelle; pannello di configurazione aggiornato dinamicamente;
@@ -57,6 +57,7 @@ __Al momento non implementati:__
 - A volte prende iniziative implementando estensioni a quanto richiesto
 - È in grado di fare refactoring e ottimizzazione
 - Si possono chiedere pareri o comunque indicazioni su come si potrebbero risolvere problemi
+- Scrive ottima documentazione a partire dal codice, e aggiorna automaticamente la documentazione
 - È come un dialogo con uno sviluppatore esperto (inclusi suoi commenti come "Il patch è saltato su un punto di contesto nel CSS. Lo rifaccio in blocchi più piccoli così non rischiamo di lasciare roba a metà.")
 - ...
 

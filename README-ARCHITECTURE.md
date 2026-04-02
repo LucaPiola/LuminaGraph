@@ -1,6 +1,6 @@
 # STGraphX: readme tecnico
 
-_Luca Mari, versione 1 aprile 2026_
+_Luca Mari, versione 2 aprile 2026_
 
 STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
 
@@ -201,27 +201,3 @@ python3 -m http.server
 Note pratiche:
 - con Firefox e Chrome funziona spesso anche `file:`, mentre Opera può essere meno affidabile;
 - per un uso regolare è preferibile `http:`.
-
-## Note applicative
-
-### Sottomodelli
-
-STGraphX supporta i `sottomodelli` come nodi speciali che referenziano un altro modello salvato in un file JSON separato.
-
-Principi d'uso:
-- un `sottomodello` è un nodo del modello padre
-- il file del `sottomodello` è esterno, non incorporato inline nel JSON del modello padre
-- il file padre e i file figlio devono stare nella stessa cartella
-- l'interfaccia del `sottomodello` è definita dai nodi `input` e `output` del modello figlio
-- gli input del `sottomodello` possono avere binding espliciti nel modello padre, oppure restare vuoti e usare i default definiti nel modello figlio
-
-Uso pratico:
-1. crea o seleziona un nodo di tipo `sottomodello`
-2. usa `Apri` per scegliere il file JSON del `sottomodello` oppure per aggiornarlo
-3. una volta disponibile, usa `Mostra` per aprire il modello figlio
-4. quando carichi un modello padre che contiene `sottomodelli`, l'app può chiedere anche la cartella del modello per risolvere automaticamente i file figlio
-
-Note:
-- le uscite del `sottomodello` sono accessibili nel modello padre con la notazione `nomeSottomodello.nomeOutput`
-- lo stato interno dei nodi di stato del `sottomodello` resta locale al modello figlio
-- padre e figli condividono la stessa base dei tempi: `time`, `t0`, `t1`, `dt`

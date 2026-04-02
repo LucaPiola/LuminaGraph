@@ -889,59 +889,78 @@
       throw new SyntaxError("reduce expects an operator or function as first argument");
     }
 
-    function parseBracketAccessor(target) {
-      if (match("]")) {
-        throw new SyntaxError("Empty index");
-      }
-
+    function parseSingleBracketAccessor() {
       let start = null;
       let end = null;
       let step = null;
 
       if (match(":")) {
-        if (!match("]")) {
-          if (!match(":")) {
-            end = parseLogicalOr();
-            if (match(":")) {
-              if (!match("]")) {
-                step = parseLogicalOr();
-                expect("]");
-              }
-            } else {
-              expect("]");
-            }
-          } else if (!match("]")) {
-            step = parseLogicalOr();
-            expect("]");
-          }
+        if (!peek() || (peek().type === "op" && [",", "]"].includes(peek().value))) {
+          return { kind: "slice", start, end, step };
         }
-        return { type: "slice", target, start, end, step };
+        if (!match(":")) {
+          end = parseLogicalOr();
+          if (match(":")) {
+            if (!peek() || (peek().type === "op" && [",", "]"].includes(peek().value))) {
+              return { kind: "slice", start, end, step };
+            }
+            step = parseLogicalOr();
+          }
+        } else if (!peek() || (peek().type === "op" && [",", "]"].includes(peek().value))) {
+          return { kind: "slice", start, end, step };
+        } else {
+          step = parseLogicalOr();
+        }
+        return { kind: "slice", start, end, step };
       }
 
       const first = parseLogicalOr();
       if (!match(":")) {
-        expect("]");
-        return { type: "index", target, index: first };
+        return { kind: "index", index: first };
       }
 
       start = first;
-      if (!match("]")) {
-        if (!match(":")) {
-          end = parseLogicalOr();
-          if (match(":")) {
-            if (!match("]")) {
-              step = parseLogicalOr();
-              expect("]");
-            }
-          } else {
-            expect("]");
-          }
-        } else if (!match("]")) {
-          step = parseLogicalOr();
-          expect("]");
-        }
+      if (!peek() || (peek().type === "op" && [",", "]"].includes(peek().value))) {
+        return { kind: "slice", start, end, step };
       }
-      return { type: "slice", target, start, end, step };
+      if (!match(":")) {
+        end = parseLogicalOr();
+        if (match(":")) {
+          if (!peek() || (peek().type === "op" && [",", "]"].includes(peek().value))) {
+            return { kind: "slice", start, end, step };
+          }
+          step = parseLogicalOr();
+        }
+      } else if (!peek() || (peek().type === "op" && [",", "]"].includes(peek().value))) {
+        return { kind: "slice", start, end, step };
+      } else {
+        step = parseLogicalOr();
+      }
+      return { kind: "slice", start, end, step };
+    }
+
+    function parseBracketAccessor(target) {
+      if (match("]")) {
+        throw new SyntaxError("Empty index");
+      }
+
+      const accessors = [parseSingleBracketAccessor()];
+      while (match(",")) {
+        if (match("]")) {
+          throw new SyntaxError("Empty index after ','");
+        }
+        accessors.push(parseSingleBracketAccessor());
+      }
+      expect("]");
+
+      if (accessors.length === 1) {
+        const accessor = accessors[0];
+        if (accessor.kind === "index") {
+          return { type: "index", target, index: accessor.index };
+        }
+        return { type: "slice", target, start: accessor.start, end: accessor.end, step: accessor.step };
+      }
+      return { type: "multi-access", target, accessors };
     }
 
     function parsePrimary() {
@@ -1112,6 +1131,63 @@
   }
 
   function evaluateAstNode(node, scope, hooks = null) {
+    const applySliceAccessor = (target, accessor) => {
+      const step = accessor.step == null ? 1 : Number(evaluateAstNode(accessor.step, scope, hooks));
+      if (!Number.isInteger(step) || step === 0) {
+        throw new Error("slice step must be a non-zero integer");
+      }
+      const size = target.length;
+      const start = step > 0
+        ? normalizeSliceIndex(accessor.start == null ? null : evaluateAstNode(accessor.start, scope, hooks), size, 0)
+        : normalizeSliceIndex(accessor.start == null ? null : evaluateAstNode(accessor.start, scope, hooks), size, size - 1);
+      const end = step > 0
+        ? normalizeSliceIndex(accessor.end == null ? null : evaluateAstNode(accessor.end, scope, hooks), size, size)
+        : normalizeSliceIndex(accessor.end == null ? null : evaluateAstNode(accessor.end, scope, hooks), size, -1);
+      const out = [];
+      if (step > 0) {
+        for (let idx = Math.max(0, start); idx < Math.min(size, end); idx += step) {
+          out.push(target[idx]);
+        }
+      } else {
+        for (let idx = Math.min(size - 1, start); idx > Math.max(-1, end); idx += step) {
+          out.push(target[idx]);
+        }
+      }
+      return out;
+    };
+
+    const applyIndexAccessor = (target, accessor) => {
+      let idx = Number(evaluateAstNode(accessor.index, scope, hooks));
+      if (!Number.isInteger(idx)) {
+        throw new Error("array index must be an integer");
+      }
+      if (idx < 0) {
+        idx += target.length;
+      }
+      if (idx < 0 || idx >= target.length) {
+        throw new Error("array index out of range");
+      }
+      return target[idx];
+    };
+
+    const applyAccessors = (target, accessors) => {
+      if (!accessors.length) {
+        return target;
+      }
+      if (!Array.isArray(target)) {
+        throw new Error("indexing requires an array or matrix");
+      }
+      const [first, ...rest] = accessors;
+      if (first.kind === "index") {
+        return applyAccessors(applyIndexAccessor(target, first), rest);
+      }
+      const sliced = applySliceAccessor(target, first);
+      if (!rest.length) {
+        return sliced;
+      }
+      return sliced.map((item) => applyAccessors(item, rest));
+    };
+
     switch (node.type) {
       case "literal":
         return node.value;
@@ -1137,45 +1213,18 @@
         if (!Array.isArray(target)) {
           throw new Error("indexing requires an array or matrix");
         }
-        let idx = Number(evaluateAstNode(node.index, scope, hooks));
-        if (!Number.isInteger(idx)) {
-          throw new Error("array index must be an integer");
-        }
-        if (idx < 0) {
-          idx += target.length;
-        }
-        if (idx < 0 || idx >= target.length) {
-          throw new Error("array index out of range");
-        }
-        return target[idx];
+        return applyIndexAccessor(target, { kind: "index", index: node.index });
       }
       case "slice": {
         const target = evaluateAstNode(node.target, scope, hooks);
         if (!Array.isArray(target)) {
           throw new Error("slicing requires an array or matrix");
         }
-        const step = node.step == null ? 1 : Number(evaluateAstNode(node.step, scope, hooks));
-        if (!Number.isInteger(step) || step === 0) {
-          throw new Error("slice step must be a non-zero integer");
-        }
-        const size = target.length;
-        const start = step > 0
-          ? normalizeSliceIndex(node.start == null ? null : evaluateAstNode(node.start, scope, hooks), size, 0)
-          : normalizeSliceIndex(node.start == null ? null : evaluateAstNode(node.start, scope, hooks), size, size - 1);
-        const end = step > 0
-          ? normalizeSliceIndex(node.end == null ? null : evaluateAstNode(node.end, scope, hooks), size, size)
-          : normalizeSliceIndex(node.end == null ? null : evaluateAstNode(node.end, scope, hooks), size, -1);
-        const out = [];
-        if (step > 0) {
-          for (let idx = Math.max(0, start); idx < Math.min(size, end); idx += step) {
-            out.push(target[idx]);
-          }
-        } else {
-          for (let idx = Math.min(size - 1, start); idx > Math.max(-1, end); idx += step) {
-            out.push(target[idx]);
-          }
-        }
-        return out;
+        return applySliceAccessor(target, { kind: "slice", start: node.start, end: node.end, step: node.step });
+      }
+      case "multi-access": {
+        const target = evaluateAstNode(node.target, scope, hooks);
+        return applyAccessors(target, node.accessors);
       }
       case "call": {
         if (node.name === "integral" && hooks?.onIntegralCall) {
