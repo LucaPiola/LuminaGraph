@@ -4,6 +4,7 @@ const path = require('path');
 function createWindow() {
   const win = new BrowserWindow({
     title: 'STGraphX',
+    icon: path.join(__dirname, '..', 'icon.png'),
     show: false,
     width: 1600,
     height: 980,

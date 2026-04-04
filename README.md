@@ -1,6 +1,6 @@
 # STGraphX: readme
 
-_Luca Mari, versione 2 aprile 2026_
+_Luca Mari, versione 4 aprile 2026_
 
 ## Contesto
 
@@ -17,13 +17,13 @@ Applicazione JavaScript con doppia shell e logica condivisa:
 * desktop, mediante `Electron`.
 
 __Al momento implementati (senza librerie esterne!):__
-* editor per grafi orientati, con nodi di forme diverse, frecce spline, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard, undo e redo, ...;
+* editor per grafi orientati, con nodi di forme diverse e tooltip, frecce spline, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard, undo e redo, ...;
 * menu, menu contestuale e pannello di configurazione aggiornato dinamicamente, con tooltip;
 * gestione dei testi in italiano e inglese in file di configurazione e scelta in extraURL (`?lang=it|en`);
-* gestione dei nodi algebrici, di stato, parametri e sottomodelli, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale); controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo del numero di cifre decimali visualizzate;
-* gestione di esecuzione completa, passo-passo, temporizzata;
+* gestione dei nodi algebrici, di stato, parametri e sottomodelli, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale); controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo sullo stato iniziale: solo espressioni locali o riferimenti a parametri; controllo del numero di cifre decimali visualizzate;
+* gestione di esecuzione completa, passo-passo, temporizzata, con modello in modalità read-only durante l'esecuzione;
 * gestione opzionale di blocco di esecuzione ed evidenziazione per nodi non definiti;
-* editor per espressioni, con help contestuale e controllo sintattico
+* editor per espressioni, con gestione ed help contestuale e controllo sintattico
 * varie funzioni definite; mapping da valori booleani a valori numerici e funzione `if`;
 * funzione `integral`, con scelta dell'algoritmo di integrazione, se Eulero o RK4;
 * alcune funzioni per distribuzioni di probabilità;
@@ -44,7 +44,7 @@ __Al momento non implementati:__
 * altri widget e altre opzioni per i widget già presenti, in particolare per la visualizzazione di valori non scalari;
 * altre funzioni;
 * nodi di stato con output;
-* stati iniziali senza costanti esplicite;
+* lettura e scrittura di file dati (xls, csv, ...);
 * interfaccia a tab per più modelli;
 * ...
 

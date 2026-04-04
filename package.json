@@ -4,6 +4,7 @@
   "private": true,
   "main": "electron/main.js",
   "description": "STGraphX desktop and web shell",
+  "author": "Luca Mari",
   "scripts": {
     "start": "npm run start:desktop",
     "start:desktop": "electron .",
@@ -26,6 +27,9 @@
       "index.html",
       "styles.css",
       "i18n-inline.js",
+      "icon.svg",
+      "icon.png",
+      "icon.ico",
       "electron/**/*",
       "package.json"
     ],
@@ -34,6 +38,7 @@
       "buildResources": "build"
     },
     "mac": {
+      "icon": "icon.png",
       "target": [
         "dmg",
         "zip"
@@ -41,12 +46,14 @@
       "category": "public.app-category.developer-tools"
     },
     "win": {
+      "icon": "icon.ico",
       "target": [
         "nsis",
         "portable"
       ]
     },
     "linux": {
+      "icon": "icon.png",
       "target": [
         "AppImage",
         "tar.gz"

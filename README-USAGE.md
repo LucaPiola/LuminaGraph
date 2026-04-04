@@ -1,6 +1,6 @@
 # STGraphX: readme di uso
 
-_Luca Mari, versione 2 aprile 2026_
+_Luca Mari, versione 4 aprile 2026_
 
 STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
 
@@ -84,6 +84,25 @@ La forma con `map(...)` resta comunque valida e puo essere utile quando si vuole
 
 - `map($value[1], m)` -> `[2,5,8]`
 
+### Dimensioni
+
+- `size(vettore)`
+  - restituisce la lunghezza del vettore
+
+- `size(matrice)`
+  - restituisce `[righe, colonne]`
+
+- `size(matrice, asse)`
+  - con `asse = 0` restituisce il numero di righe
+  - con `asse = 1` restituisce il numero di colonne
+
+Esempi:
+
+- `size([1,2,3])` -> `3`
+- `size([[1,2,3],[4,5,6]])` -> `[2,3]`
+- `size([[1,2,3],[4,5,6]], 0)` -> `2`
+- `size([[1,2,3],[4,5,6]], 1)` -> `3`
+
 ### Trasformazione
 
 - `map(expr, array)`
@@ -144,9 +163,92 @@ Esempi:
 - `append([1,2], [3,4])` -> `[1,2,3,4]`
 - `append([[1,2],[3,4]], [5,6])` -> `[[1,2],[3,4],[5,6]]`
 
+### Operazioni insiemistiche e flatten
+
+- `set(vettore)`
+  - elimina i duplicati mantenendo l'ordine di prima apparizione
+
+- `union(vettoreA, vettoreB)`
+  - unisce due vettori eliminando i duplicati
+
+- `intersection(vettoreA, vettoreB)`
+  - restituisce solo gli elementi presenti in entrambi i vettori
+
+- `flatten(matrice)`
+  - trasforma una matrice in un vettore concatenando le righe
+
+Esempi:
+
+- `set([3,1,3,2,1])` -> `[3,1,2]`
+- `union([1,2], [2,3])` -> `[1,2,3]`
+- `intersection([1,2,2,3], [2,3,4])` -> `[2,3]`
+- `flatten([[1,2],[3,4]])` -> `[1,2,3,4]`
+
+### Estrazione, permutazione e ordinamento
+
+- `choice(vettore)`
+  - estrae casualmente un elemento da un vettore non vuoto
+
+- `shuffle(vettore)`
+  - restituisce una copia del vettore con gli elementi mescolati casualmente
+
+- `sort(vettore)`
+  - restituisce una copia del vettore ordinata in senso crescente
+
+Esempi:
+
+- `choice([10,20,30])`
+- `shuffle([1,2,3,4])`
+- `sort([3,1,2])` -> `[1,2,3]`
+
 ### Nota semantica
 
 Le funzioni e gli operatori non scalari sono pensati per lavorare in modo coerente su numeri, vettori e matrici numeriche. In presenza di forme non compatibili, per esempio vettori di lunghezza diversa o matrici non rettangolari, l'espressione fallisce con errore di valutazione.
+
+## Numeri casuali
+
+- `rand()`
+  - numero casuale uniforme tra `0` e `1`
+
+- `rand(max)`
+  - numero casuale uniforme tra `0` e `max`
+
+- `rand(min, max)`
+  - numero casuale uniforme tra `min` e `max`
+
+- `randInt(max)`
+  - intero casuale uniforme tra `0` e `max`, con `max` incluso
+
+- `randInt(min, max)`
+  - intero casuale uniforme tra `min` e `max`, con `max` incluso
+
+Esempi:
+
+- `rand()`
+- `rand(10)`
+- `rand(-1, 1)`
+- `randInt(5)`
+- `randInt(2, 7)`
+
+## Stato iniziale dei nodi di stato
+
+Per un nodo di stato, l'espressione di `stato iniziale`:
+
+- puo usare costanti, funzioni, proprieta del nodo e variabili globali come `time`, `t0`, `t1`, `dt`
+- puo usare anche i parametri entranti collegati al nodo
+- non puo invece riferirsi a nodi di stato, nodi algebrici o altre quantita dinamiche
+
+Quindi, se un nodo di stato `x` ha in ingresso un parametro `p`, sono ammessi per esempio:
+
+- `p`
+- `2*p`
+- `if(p > 0, p, 0)`
+
+La regola resta la stessa del resto del linguaggio del modello:
+
+- un nodo vede solo cio che entra in esso
+
+Nel pannello `Modifica...`, per il campo `stato iniziale`, l'elenco dei simboli disponibili mostra appunto solo i parametri entranti ammessi in quel contesto.
 
 ## Sottomodelli
 

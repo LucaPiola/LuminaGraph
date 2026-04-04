@@ -100,6 +100,7 @@ const widgetLayer = document.getElementById("widgetLayer");
 const expressionEditorModal = document.getElementById("expressionEditorModal");
 const expressionEditorTitle = document.getElementById("expressionEditorTitle");
 const expressionEditorTextarea = document.getElementById("expressionEditorTextarea");
+const expressionEditorHighlight = document.getElementById("expressionEditorHighlight");
 const expressionSymbolsFilter = document.getElementById("expressionSymbolsFilter");
 const expressionSidebar = document.getElementById("expressionSidebar");
 const expressionHelp = document.getElementById("expressionHelp");
@@ -195,6 +196,7 @@ const ui = {
   expressionEditor: null,
   modalDrag: null,
   tooltipTarget: null,
+  tooltipPointer: null,
   tooltipShowTimer: null,
   tooltipHideTimer: null,
   executionPlan: null,
@@ -380,13 +382,29 @@ function setTooltipText(el, text) {
     return;
   }
   const value = String(text ?? "").trim();
+  const isSvgElement = typeof SVGElement !== "undefined" && el instanceof SVGElement;
+  const existingSvgTitle = isSvgElement
+    ? Array.from(el.children || []).find((child) => child.tagName?.toLowerCase?.() === "title" && child.getAttribute("data-generated-tooltip") === "1")
+    : null;
   if (!value) {
-    delete el.dataset.tooltip;
+    el.removeAttribute("data-tooltip");
     el.removeAttribute("title");
+    if (existingSvgTitle) {
+      existingSvgTitle.remove();
+    }
     return;
   }
-  el.dataset.tooltip = value;
-  el.removeAttribute("title");
+  el.setAttribute("data-tooltip", value);
+  el.setAttribute("title", value);
+  if (isSvgElement) {
+    if (existingSvgTitle) {
+      existingSvgTitle.remove();
+    }
+    const titleEl = document.createElementNS(SVG_NS, "title");
+    titleEl.setAttribute("data-generated-tooltip", "1");
+    titleEl.textContent = value;
+    el.appendChild(titleEl);
+  }
 }
 
 function cancelTooltipTimers() {
@@ -404,7 +422,14 @@ function activeTooltipTarget(target) {
   if (!target || !(target instanceof Element)) {
     return null;
   }
-  return target.closest("[data-tooltip]");
+  return target.closest("[data-node-tooltip], [data-tooltip]");
+}
+
+function nodeTooltipTarget(target) {
+  if (!target || !(target instanceof Element)) {
+    return null;
+  }
+  return target.closest("[data-node-tooltip][data-node-id]");
 }
 
 function hideAppTooltip() {
@@ -415,6 +440,7 @@ function hideAppTooltip() {
   appTooltip.classList.add("hidden");
   appTooltip.setAttribute("aria-hidden", "true");
   ui.tooltipTarget = null;
+  ui.tooltipPointer = null;
 }
 
 function scheduleHideAppTooltip(delay = 90) {
@@ -459,15 +485,16 @@ function showAppTooltip(target, clientX, clientY) {
   if (!appTooltip || !target) {
     return;
   }
-  const text = String(target.dataset.tooltip || "").trim();
+  const { text, tone } = tooltipInfoForTarget(target);
   if (!text) {
     hideAppTooltip();
     return;
   }
-  appTooltip.textContent = text;
+  applyTooltipState(text, tone);
   appTooltip.classList.remove("hidden");
   appTooltip.setAttribute("aria-hidden", "false");
   ui.tooltipTarget = target;
+  ui.tooltipPointer = { x: clientX, y: clientY };
   positionAppTooltip(clientX, clientY);
 }
 
@@ -480,6 +507,73 @@ function scheduleShowAppTooltip(target, clientX, clientY, delay = 280) {
     ui.tooltipShowTimer = null;
     showAppTooltip(target, clientX, clientY);
   }, delay);
+}
+
+function tooltipInfoForTarget(target) {
+  if (!target) {
+    return { text: "", tone: "" };
+  }
+  const nodeEl = nodeTooltipTarget(target);
+  if (nodeEl) {
+    const node = getNodeById(String(nodeEl.dataset.nodeId || ""));
+    return buildNodeTooltipText(node);
+  }
+  return { text: String(target.dataset.tooltip || "").trim(), tone: "" };
+}
+
+function applyTooltipState(text, tone = "") {
+  if (!appTooltip) {
+    return;
+  }
+  appTooltip.textContent = text;
+  appTooltip.classList.remove("value", "error");
+  if (tone) {
+    appTooltip.classList.add(tone);
+  }
+}
+
+function refreshNodeTooltipElement(target) {
+  const nodeEl = nodeTooltipTarget(target);
+  if (!nodeEl) {
+    return;
+  }
+  const node = getNodeById(String(nodeEl.getAttribute("data-node-id") || ""));
+  if (!node) {
+    return;
+  }
+  setTooltipText(nodeEl, buildNodeTooltipText(node).text);
+}
+
+function refreshRenderedNodeTooltipElements() {
+  const renderedNodes = document.querySelectorAll(".node[data-node-id]");
+  renderedNodes.forEach((nodeEl) => {
+    const node = getNodeById(String(nodeEl.getAttribute("data-node-id") || ""));
+    if (!node) {
+      return;
+    }
+    setTooltipText(nodeEl, buildNodeTooltipText(node).text);
+  });
+}
+
+function refreshActiveTooltip() {
+  if (!appTooltip || appTooltip.classList.contains("hidden") || !ui.tooltipTarget) {
+    return;
+  }
+  const nodeId = nodeTooltipTarget(ui.tooltipTarget)?.dataset?.nodeId;
+  let target = ui.tooltipTarget;
+  if (nodeId) {
+    target = document.querySelector(`.node[data-node-id="${CSS.escape(String(nodeId))}"]`) || target;
+    ui.tooltipTarget = target;
+  }
+  refreshNodeTooltipElement(target);
+  const { text, tone } = tooltipInfoForTarget(target);
+  if (!text) {
+    hideAppTooltip();
+    return;
+  }
+  applyTooltipState(text, tone);
+  const point = ui.tooltipPointer || { x: 24, y: 24 };
+  positionAppTooltip(point.x, point.y);
 }
 
 function nodeExpressionTooltipKey(node) {
@@ -541,6 +635,21 @@ function localizeExpressionErrorMessage(message) {
     return t("error.evalReason.syntax");
   }
   const lower = raw.toLowerCase();
+  if (["syntax", "syntaxerror"].includes(lower)) {
+    return t("error.evalReason.syntax");
+  }
+  if (["runtime", "runtimeerror"].includes(lower)) {
+    return t("error.evalReason.runtime");
+  }
+  if (["reference", "referenceerror"].includes(lower)) {
+    return t("error.evalReason.reference");
+  }
+  if (["dependency"].includes(lower)) {
+    return t("error.evalReason.dependency");
+  }
+  if (["type", "typeerror"].includes(lower)) {
+    return t("error.evalReason.type");
+  }
   if (lower === "'this' is only available in state transitions") {
     return t("expr.error.thisOnlyState");
   }
@@ -820,11 +929,20 @@ function expressionDocMap() {
     filter: { kind: "function", signature: "filter(cond, array)", description: t("expr.help.filter"), insertText: "filter()", cursorOffset: 7 },
     reduce: { kind: "function", signature: "reduce(op|fn, vector[, init]) | reduce(op|fn, matrix, axis[, init])", description: t("expr.help.reduce"), insertText: "reduce()", cursorOffset: 7 },
     append: { kind: "function", signature: "append(vector, value|vector) | append(matrix, rowVector)", description: t("expr.help.append"), insertText: "append()", cursorOffset: 7 },
+    set: { kind: "function", signature: "set(vector)", description: t("expr.help.set"), insertText: "set()", cursorOffset: 4 },
+    union: { kind: "function", signature: "union(vectorA, vectorB)", description: t("expr.help.union"), insertText: "union()", cursorOffset: 6 },
+    intersection: { kind: "function", signature: "intersection(vectorA, vectorB)", description: t("expr.help.intersection"), insertText: "intersection()", cursorOffset: 13 },
+    flatten: { kind: "function", signature: "flatten(matrix)", description: t("expr.help.flatten"), insertText: "flatten()", cursorOffset: 8 },
+    choice: { kind: "function", signature: "choice(vector)", description: t("expr.help.choice"), insertText: "choice()", cursorOffset: 7 },
+    shuffle: { kind: "function", signature: "shuffle(vector)", description: t("expr.help.shuffle"), insertText: "shuffle()", cursorOffset: 8 },
+    sort: { kind: "function", signature: "sort(vector)", description: t("expr.help.sort"), insertText: "sort()", cursorOffset: 5 },
+    size: { kind: "function", signature: "size(array[, axis])", description: t("expr.help.size"), insertText: "size()", cursorOffset: 5 },
     range: { kind: "function", signature: "range(stop) | range(start, stop[, step])", description: t("expr.help.range"), insertText: "range()", cursorOffset: 6 },
     gaussian: { kind: "probability", signature: "gaussian([params], x, mode)", description: t("expr.help.gaussian"), insertText: "gaussian()", cursorOffset: 9 },
     uniform: { kind: "probability", signature: "uniform([params], x, mode)", description: t("expr.help.uniform"), insertText: "uniform()", cursorOffset: 8 },
     exponential: { kind: "probability", signature: "exponential([params], x, mode)", description: t("expr.help.exponential"), insertText: "exponential()", cursorOffset: 12 },
-    rand: { kind: "probability", signature: "rand()", description: t("expr.help.rand"), insertText: "rand()", cursorOffset: 4 },
+    rand: { kind: "probability", signature: "rand([max]) | rand(min, max)", description: t("expr.help.rand"), insertText: "rand()", cursorOffset: 5 },
+    randInt: { kind: "probability", signature: "randInt(max) | randInt(min, max)", description: t("expr.help.randInt"), insertText: "randInt()", cursorOffset: 8 },
     sin: { kind: "math", signature: "sin(x)", description: t("expr.help.sin"), insertText: "sin()", cursorOffset: 4 },
     cos: { kind: "math", signature: "cos(x)", description: t("expr.help.cos"), insertText: "cos()", cursorOffset: 4 },
     tan: { kind: "math", signature: "tan(x)", description: t("expr.help.tan"), insertText: "tan()", cursorOffset: 4 },
@@ -1125,11 +1243,12 @@ function expressionCatalogForEditor() {
     pushEntry(name, entry);
   });
 
-  if (meta.key === "value" && node) {
+  if ((meta.key === "value" || meta.key === "initial") && node) {
     graph.edges
       .filter((edge) => edge.to === node.id)
       .map((edge) => getNodeById(edge.from))
       .filter(Boolean)
+      .filter((depNode) => meta.key !== "initial" || depNode.shape === "diamond")
       .forEach((depNode) => {
         const nodeDescription = getNodeDescription(depNode);
         pushEntry(depNode.name, {
@@ -1139,7 +1258,7 @@ function expressionCatalogForEditor() {
           insertText: depNode.name,
           cursorOffset: depNode.name.length,
         });
-        if (isSubmodelNode(depNode)) {
+        if (meta.key === "value" && isSubmodelNode(depNode)) {
           const outputs = Array.isArray(depNode.interfaceCache?.outputs)
             ? depNode.interfaceCache.outputs.map((value) => String(value).trim()).filter(Boolean)
             : [];
@@ -1205,6 +1324,190 @@ function identifierAtCaret(text, caret) {
   }
   const name = src.slice(start, end);
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : "";
+}
+
+function escapeHtml(text) {
+  return String(text ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function expressionTokenClass(name, entryMap) {
+  if (name === "true" || name === "false" || name === "null") {
+    return "expression-token-keyword";
+  }
+  if (/^\$[0-9]+$/u.test(name) || name === "$value") {
+    return "expression-token-variable";
+  }
+  const entry = entryMap.get(name);
+  if (!entry) {
+    return "";
+  }
+  if (entry.kind === "variable") {
+    return entry.name?.includes(".") ? "expression-token-node" : "expression-token-variable";
+  }
+  return "expression-token-function";
+}
+
+function expressionBracketStateMap(text, caret) {
+  const src = String(text ?? "");
+  const stack = [];
+  const pairs = new Map();
+  const unmatched = new Set();
+  const openingFor = { ")": "(", "]": "[", "}": "{" };
+  const closingFor = { "(": ")", "[": "]", "{": "}" };
+
+  let inString = false;
+  let stringQuote = "";
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    const prev = src[i - 1];
+    if (inString) {
+      if (ch === stringQuote && prev !== "\\") {
+        inString = false;
+        stringQuote = "";
+      }
+      continue;
+    }
+    if (ch === "\"" || ch === "'") {
+      inString = true;
+      stringQuote = ch;
+      continue;
+    }
+    if (closingFor[ch]) {
+      stack.push({ ch, index: i });
+      continue;
+    }
+    if (openingFor[ch]) {
+      const last = stack.pop();
+      if (last && last.ch === openingFor[ch]) {
+        pairs.set(last.index, i);
+        pairs.set(i, last.index);
+      } else {
+        unmatched.add(i);
+        if (last) {
+          unmatched.add(last.index);
+        }
+      }
+    }
+  }
+  stack.forEach((item) => unmatched.add(item.index));
+
+  const candidateIndexes = [];
+  if (caret > 0) {
+    candidateIndexes.push(caret - 1);
+  }
+  if (caret < src.length) {
+    candidateIndexes.push(caret);
+  }
+  const active = new Set();
+  for (const idx of candidateIndexes) {
+    const ch = src[idx];
+    if (!"()[]{}".includes(ch)) {
+      continue;
+    }
+    active.add(idx);
+    if (pairs.has(idx)) {
+      active.add(pairs.get(idx));
+    }
+    break;
+  }
+  return { active, unmatched };
+}
+
+function renderExpressionHighlight() {
+  if (!expressionEditorHighlight || !expressionEditorTextarea) {
+    return;
+  }
+  const text = expressionEditorTextarea.value || "";
+  const caret = expressionEditorTextarea.selectionStart ?? 0;
+  const bracketState = expressionBracketStateMap(text, caret);
+  const catalogMap = new Map(expressionCatalogForEditor().map((entry) => [entry.name, entry]));
+  let out = "";
+  let i = 0;
+
+  while (i < text.length) {
+    const ch = text[i];
+
+    if (ch === "\n") {
+      out += "\n";
+      i += 1;
+      continue;
+    }
+
+    if (/\s/u.test(ch)) {
+      let j = i + 1;
+      while (j < text.length && /\s/u.test(text[j]) && text[j] !== "\n") {
+        j += 1;
+      }
+      out += escapeHtml(text.slice(i, j));
+      i = j;
+      continue;
+    }
+
+    if (ch === "\"" || ch === "'") {
+      let j = i + 1;
+      while (j < text.length) {
+        if (text[j] === ch && text[j - 1] !== "\\") {
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+      out += `<span class="expression-token-string">${escapeHtml(text.slice(i, j))}</span>`;
+      i = j;
+      continue;
+    }
+
+    if (/[0-9]/u.test(ch) || (ch === "." && /[0-9]/u.test(text[i + 1] || ""))) {
+      let j = i + 1;
+      while (j < text.length && /[0-9._eE]/u.test(text[j])) {
+        j += 1;
+      }
+      out += `<span class="expression-token-number">${escapeHtml(text.slice(i, j))}</span>`;
+      i = j;
+      continue;
+    }
+
+    if (/[A-Za-z_$]/u.test(ch)) {
+      let j = i + 1;
+      while (j < text.length && /[A-Za-z0-9_$]/u.test(text[j])) {
+        j += 1;
+      }
+      const name = text.slice(i, j);
+      const cls = expressionTokenClass(name, catalogMap);
+      out += cls ? `<span class="${cls}">${escapeHtml(name)}</span>` : escapeHtml(name);
+      i = j;
+      continue;
+    }
+
+    if ("()[]{}".includes(ch)) {
+      const classes = ["expression-token-bracket"];
+      if (bracketState.unmatched.has(i)) {
+        classes.push("expression-token-bracket-unmatched");
+      } else if (bracketState.active.has(i)) {
+        classes.push("expression-token-bracket-active");
+      }
+      out += `<span class="${classes.join(" ")}">${escapeHtml(ch)}</span>`;
+      i += 1;
+      continue;
+    }
+
+    if (/[+\-*/%=!<>?:&,.;|^~]/u.test(ch)) {
+      out += `<span class="expression-token-operator">${escapeHtml(ch)}</span>`;
+      i += 1;
+      continue;
+    }
+
+    out += escapeHtml(ch);
+    i += 1;
+  }
+
+  expressionEditorHighlight.innerHTML = `${out || " "}\n`;
+  expressionEditorHighlight.classList.toggle("invalid", expressionEditorTextarea.classList.contains("invalid"));
+  expressionEditorHighlight.scrollTop = expressionEditorTextarea.scrollTop;
+  expressionEditorHighlight.scrollLeft = expressionEditorTextarea.scrollLeft;
 }
 
 function setExpressionHelp(entry = null) {
@@ -1377,6 +1680,10 @@ function closeExpressionEditor() {
     expressionEditorTextarea.value = "";
     expressionEditorTextarea.classList.remove("invalid");
   }
+  if (expressionEditorHighlight) {
+    expressionEditorHighlight.innerHTML = "";
+    expressionEditorHighlight.classList.remove("invalid");
+  }
   if (expressionLibrary) {
     expressionLibrary.innerHTML = "";
     expressionLibrary.classList.add("hidden");
@@ -1407,6 +1714,7 @@ function refreshExpressionEditorValidation() {
   );
   expressionEditorApplyBtn.disabled = !syntaxResult.ok;
   ui.expressionEditor.syntaxOk = syntaxResult.ok;
+  renderExpressionHighlight();
   renderExpressionAutocomplete();
   return syntaxResult;
 }
@@ -1487,6 +1795,9 @@ function openExpressionEditor(fieldKey) {
   if (!node || !meta || !expressionEditorModal || !expressionEditorTextarea || !expressionEditorTitle) {
     return;
   }
+  if (isExecutionFrozen()) {
+    return;
+  }
   ui.expressionEditor = {
     nodeId: node.id,
     fieldKey: meta.key,
@@ -1508,6 +1819,9 @@ function openCustomExpressionEditor(title, initialValue, onApply) {
   if (!expressionEditorModal || !expressionEditorTextarea || !expressionEditorTitle) {
     return;
   }
+  if (isExecutionFrozen()) {
+    return;
+  }
   ui.expressionEditor = {
     nodeId: null,
     fieldKey: "__custom__",
@@ -1527,7 +1841,7 @@ function openCustomExpressionEditor(title, initialValue, onApply) {
 }
 
 function applyExpressionEditor() {
-  if (!ui.expressionEditor || !ui.expressionEditor.syntaxOk) {
+  if (!ui.expressionEditor || !ui.expressionEditor.syntaxOk || isExecutionFrozen()) {
     return;
   }
   if (ui.expressionEditor.fieldKey === "__custom__") {
@@ -1625,6 +1939,7 @@ async function loadI18n() {
 
 function setStatus(text) {
   statusText.textContent = text;
+  refreshActiveTooltip();
 }
 
 function setStatusKey(key, vars = null) {
@@ -2820,6 +3135,9 @@ function cancelTransaction() {
 }
 
 function runAction(mutator) {
+  if (isExecutionFrozen()) {
+    resetExecution();
+  }
   beginTransaction();
   mutator();
   commitTransaction();
@@ -2827,9 +3145,10 @@ function runAction(mutator) {
 }
 
 function updateHistoryButtons() {
-  undoBtn.disabled = history.undo.length === 0;
-  redoBtn.disabled = history.redo.length === 0;
-  pasteBtn.disabled = !clipboard.data;
+  const frozen = isExecutionFrozen();
+  undoBtn.disabled = frozen || history.undo.length === 0;
+  redoBtn.disabled = frozen || history.redo.length === 0;
+  pasteBtn.disabled = frozen || !clipboard.data;
 }
 
 function hasClipboardSelection() {
@@ -2846,17 +3165,95 @@ function hasAnySelection() {
 }
 
 function updateEditActionButtons() {
+  const frozen = isExecutionFrozen();
   if (selectAllBtn) {
     selectAllBtn.disabled = graph.nodes.length === 0;
   }
   if (cutBtn) {
-    cutBtn.disabled = !hasClipboardSelection();
+    cutBtn.disabled = frozen || !hasClipboardSelection();
   }
   if (copyBtn) {
     copyBtn.disabled = !hasClipboardSelection();
   }
   if (deleteBtn) {
-    deleteBtn.disabled = !hasAnySelection();
+    deleteBtn.disabled = frozen || !hasAnySelection();
+  }
+}
+
+function isExecutionFrozen() {
+  if (ui.timedRunHandle != null || ui.timedStepRunning) {
+    return true;
+  }
+  if (graph.execution.currentTime == null) {
+    return false;
+  }
+  const t0 = Number(graph.execution.t0);
+  const dt = Number(graph.execution.dt);
+  const t1 = Number(graph.execution.t1);
+  if (!Number.isFinite(t0) || !Number.isFinite(dt) || !Number.isFinite(t1) || dt === 0) {
+    return false;
+  }
+  if ((dt > 0 && t0 > t1) || (dt < 0 && t0 < t1)) {
+    return false;
+  }
+  return !isExecutionEnded({ t0, dt, t1 });
+}
+
+function setControlsDisabled(root, disabled, allowedControls = []) {
+  if (!root) {
+    return;
+  }
+  const allowed = new Set((allowedControls || []).filter(Boolean));
+  root.querySelectorAll("input, select, textarea, button").forEach((control) => {
+    if (allowed.has(control)) {
+      return;
+    }
+    if (disabled) {
+      if (!control.disabled) {
+        control.dataset.executionDisabled = "1";
+        control.disabled = true;
+      }
+      return;
+    }
+    if (control.dataset.executionDisabled === "1") {
+      control.disabled = false;
+      delete control.dataset.executionDisabled;
+    }
+  });
+}
+
+function updateEditingLockUi() {
+  const frozen = isExecutionFrozen();
+  [
+    addRectNodeItem,
+    addEllipseNodeItem,
+    addDiamondNodeItem,
+    addSubmodelNodeItem,
+    addSliderWidgetItem,
+    addTableWidgetItem,
+    addXYChartWidgetItem,
+  ].forEach((btn) => {
+    if (btn) {
+      btn.disabled = frozen;
+    }
+  });
+
+  setControlsDisabled(globalPanel, frozen, [runFullModelBtn, manualStepBtn, timedToggleBtn, resetExecBtn]);
+  setControlsDisabled(nodePanel, frozen);
+  setControlsDisabled(edgePanel, frozen);
+  setControlsDisabled(widgetPanel, frozen);
+
+  if (expressionEditorTextarea) {
+    expressionEditorTextarea.disabled = frozen;
+  }
+  if (expressionSymbolsFilter) {
+    expressionSymbolsFilter.disabled = frozen;
+  }
+  if (expressionEditorApplyBtn) {
+    expressionEditorApplyBtn.disabled = frozen || Boolean(ui.expressionEditor && !ui.expressionEditor.syntaxOk);
+  }
+  if (runStrictDefinitionsInput) {
+    runStrictDefinitionsInput.disabled = frozen;
   }
 }
 
@@ -2926,6 +3323,9 @@ function pasteFromClipboard() {
   if (!clipboard.data || !Array.isArray(clipboard.data.nodes) || clipboard.data.nodes.length === 0) {
     setStatusKey("status.clipboardEmpty");
     return;
+  }
+  if (isExecutionFrozen()) {
+    resetExecution();
   }
 
   const offset = 30 * (clipboard.pasteCount + 1);
@@ -2999,6 +3399,9 @@ function undo() {
   if (history.undo.length === 0) {
     return;
   }
+  if (isExecutionFrozen()) {
+    resetExecution();
+  }
   const current = exportGraphData();
   history.redo.push(current);
   const prev = history.undo.pop();
@@ -3011,6 +3414,9 @@ function undo() {
 function redo() {
   if (history.redo.length === 0) {
     return;
+  }
+  if (isExecutionFrozen()) {
+    resetExecution();
   }
   const current = exportGraphData();
   pushUndoState(current);
@@ -4089,7 +4495,10 @@ function refreshRuntimeView() {
   } else {
     applyWidgetDrivenNodeValues();
   }
+  refreshRenderedNodeTooltipElements();
   refreshSidebar();
+  refreshActiveTooltip();
+  updateEditingLockUi();
 }
 
 function renderWidgets() {
@@ -4138,6 +4547,9 @@ function renderWidgets() {
     root.addEventListener("contextmenu", (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
+      if (isExecutionFrozen()) {
+        return;
+      }
       if (!(ui.selected?.type === "widget" && ui.selected.id === widget.id)) {
         selectWidget(widget.id);
         render();
@@ -4159,6 +4571,9 @@ function renderWidgets() {
       evt.stopPropagation();
     });
     minBtn.addEventListener("click", (evt) => {
+      if (isExecutionFrozen()) {
+        return;
+      }
       evt.stopPropagation();
       runAction(() => {
         widget.minimized = !widget.minimized;
@@ -4173,6 +4588,9 @@ function renderWidgets() {
       evt.stopPropagation();
     });
     delBtn.addEventListener("click", (evt) => {
+      if (isExecutionFrozen()) {
+        return;
+      }
       evt.stopPropagation();
       runAction(() => {
         graph.widgets = graph.widgets.filter((w) => w.id !== widget.id);
@@ -4190,6 +4608,10 @@ function renderWidgets() {
       evt.stopPropagation();
       if (!(ui.selected?.type === "widget" && ui.selected.id === widget.id)) {
         selectWidget(widget.id);
+      }
+      if (isExecutionFrozen()) {
+        render();
+        return;
       }
       ui.widgetDrag = {
         widgetId: widget.id,
@@ -4379,6 +4801,9 @@ function renderWidgets() {
     resize.className = "value-widget-resize";
     resize.addEventListener("pointerdown", (evt) => {
       evt.stopPropagation();
+      if (isExecutionFrozen()) {
+        return;
+      }
       ui.widgetResize = {
         widgetId: widget.id,
         pointerId: evt.pointerId,
@@ -4586,6 +5011,9 @@ function nodeIdAtGraphPoint(p) {
 }
 
 function openBackgroundContextMenu(evt) {
+  if (isExecutionFrozen()) {
+    return;
+  }
   const p = svgPointFromClient(evt.clientX, evt.clientY);
   showContextMenu(evt.clientX, evt.clientY, [
     {
@@ -4642,6 +5070,9 @@ function openBackgroundContextMenu(evt) {
 }
 
 function openNodeContextMenu(evt, node) {
+  if (isExecutionFrozen()) {
+    return;
+  }
   const useSelectionDelete = ui.selectedNodes.has(node.id) && ui.selectedNodes.size > 0;
   showContextMenu(evt.clientX, evt.clientY, [
     {
@@ -4706,6 +5137,9 @@ function openNodeContextMenu(evt, node) {
 }
 
 function openWidgetContextMenu(evt, widget) {
+  if (isExecutionFrozen()) {
+    return;
+  }
   const wasMinimized = Boolean(widget.minimized);
   showContextMenu(evt.clientX, evt.clientY, [
     {
@@ -4829,6 +5263,22 @@ function normalizeNodeDescriptionProperty(node) {
 
 function getNodeDescription(node) {
   return String(normalizeNodeDescriptionProperty(node)?.value ?? "").trim();
+}
+
+function buildNodeTooltipText(node) {
+  if (!node) {
+    return { text: "", tone: "" };
+  }
+  const description = getNodeDescription(node);
+  if (node.computedValue != null) {
+    const valueText = formatComputedValue(node.computedValue);
+    return { text: description ? `${description}: ${valueText}` : valueText, tone: "value" };
+  }
+  if (String(node.computedError || "").trim()) {
+    const errorText = localizeExpressionErrorMessage(node.computedError);
+    return { text: description ? `${description}: ${errorText}` : errorText, tone: "error" };
+  }
+  return { text: description, tone: "" };
 }
 
 function renderPropertiesEditor(container, items, ownerKey, deleteHandler, options = {}) {
@@ -5683,12 +6133,17 @@ function refreshSidebar() {
       }
     }
     const definitionIssue = validateNodeDefinition(node);
+    nodeValueOutput.classList.remove("ok", "error");
     if (graph.execution.strictDefinitions && !definitionIssue.ok) {
       nodeValueOutput.textContent = "-";
     } else if (node.computedError) {
       nodeValueOutput.textContent = t("text.valueError", { reason: evalReasonText(node.computedError) });
+      nodeValueOutput.classList.add("error");
     } else {
       nodeValueOutput.textContent = formatComputedValue(node.computedValue);
+      if (node.computedValue != null) {
+        nodeValueOutput.classList.add("ok");
+      }
     }
 
     normalizeNodeDescriptionProperty(node);
@@ -5852,6 +6307,9 @@ function render() {
     const onEdgeContextMenu = (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
+      if (isExecutionFrozen()) {
+        return;
+      }
       selectEdge(edge.id);
       render();
       const p = svgPointFromClient(evt.clientX, evt.clientY);
@@ -5867,6 +6325,9 @@ function render() {
       if (!isSelected) {
         selectEdge(edge.id);
         render();
+        return;
+      }
+      if (isExecutionFrozen()) {
         return;
       }
 
@@ -5902,6 +6363,10 @@ function render() {
         cpCircle.addEventListener("pointerdown", (evt) => {
           evt.stopPropagation();
           selectEdge(edge.id);
+          if (isExecutionFrozen()) {
+            render();
+            return;
+          }
           const now = Date.now();
           if (
             ui.lastControlPointTap &&
@@ -5962,14 +6427,30 @@ function render() {
   graph.nodes.forEach((node) => {
     const g = document.createElementNS(SVG_NS, "g");
     g.classList.add("node");
-    g.dataset.nodeId = node.id;
-    setTooltipText(g, getNodeDescription(node));
+    g.setAttribute("data-node-id", node.id);
+    g.setAttribute("data-node-tooltip", "1");
+    setTooltipText(g, buildNodeTooltipText(node).text);
+    g.addEventListener("pointerenter", () => {
+      refreshNodeTooltipElement(g);
+    });
+    g.addEventListener("pointermove", () => {
+      refreshNodeTooltipElement(g);
+    });
+    g.addEventListener("pointerleave", () => {
+      refreshNodeTooltipElement(g);
+    });
     g.addEventListener("contextmenu", (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
+      if (isExecutionFrozen()) {
+        return;
+      }
       openNodeContextMenu(evt, node);
     });
     g.addEventListener("dblclick", (evt) => {
+      if (isExecutionFrozen()) {
+        return;
+      }
       if (!isSubmodelNode(node)) {
         return;
       }
@@ -6018,12 +6499,18 @@ function render() {
     shapeEl.classList.add("node-shape");
 
     const startEdgeCreate = (evt) => {
+      if (isExecutionFrozen()) {
+        return;
+      }
       evt.stopPropagation();
       startEdgeCreateFromNode(node.id, evt.pointerId, svgPoint(evt));
       render();
     };
 
     const startEdgeCreateMouse = (evt) => {
+      if (isExecutionFrozen()) {
+        return;
+      }
       evt.stopPropagation();
       startEdgeCreateFromMouse(node.id, evt);
     };
@@ -6042,6 +6529,10 @@ function render() {
 
       if (!ui.selectedNodes.has(node.id)) {
         selectSingleNode(node.id);
+      }
+      if (isExecutionFrozen()) {
+        render();
+        return;
       }
 
       const dragIds = ui.selectedNodes.size > 0 ? [...ui.selectedNodes] : [node.id];
@@ -6160,6 +6651,10 @@ function render() {
       if (!ui.selectedNodes.has(node.id)) {
         selectSingleNode(node.id);
       }
+      if (isExecutionFrozen()) {
+        render();
+        return;
+      }
       ui.resize = {
         nodeId: node.id,
         startPointer: svgPoint(evt),
@@ -6190,6 +6685,8 @@ function render() {
     nodesLayer.appendChild(g);
   });
 
+  refreshActiveTooltip();
+
   updateCanvasSize();
   if (ui.sliderInteraction == null) {
     renderWidgets();
@@ -6198,6 +6695,7 @@ function render() {
   }
   refreshSidebar();
   updateHistoryButtons();
+  updateEditingLockUi();
 }
 
 function isValidPoint(p) {
@@ -7663,11 +8161,122 @@ function buildExecutionGlobalsForModel(model, rootExecution, timeValue) {
   };
 }
 
+function nodePropertyAccessForContext(node) {
+  return {
+    getProperty: (key, fallback = null) => {
+      const found = node.properties.find((prop) => String(prop?.key ?? "") === String(key ?? ""));
+      return found ? parseNodePropertyStoredValue(found.value) : fallback;
+    },
+    setProperty: (key, value) => {
+      const name = String(key ?? "");
+      const stored = serializeNodePropertyStoredValue(value);
+      const found = node.properties.find((prop) => String(prop?.key ?? "") === name);
+      if (found) {
+        found.value = stored;
+      } else {
+        node.properties.push({ key: name, value: stored });
+      }
+      return value;
+    },
+  };
+}
+
+function evaluateParameterNodesForModel(model, timeValue, rootExecution) {
+  const globals = buildExecutionGlobalsForModel(model, rootExecution, timeValue);
+  const parameterNodes = (model?.nodes || []).filter((node) => node?.shape === "diamond");
+  const pending = new Set(parameterNodes.map((node) => node.id));
+  const resolved = new Set();
+
+  parameterNodes.forEach((node) => {
+    node.pendingStateValue = null;
+    node.pendingStateError = "";
+  });
+
+  while (pending.size > 0) {
+    let progressed = false;
+    for (const nodeId of [...pending]) {
+      const node = getModelNodeById(model, nodeId);
+      if (!node) {
+        pending.delete(nodeId);
+        continue;
+      }
+      const context = {
+        ...globals,
+        ...nodePropertyAccessForContext(node),
+      };
+      let blockedByDependency = false;
+      (model.edges || [])
+        .filter((edge) => edge.to === node.id)
+        .forEach((edge) => {
+          const fromNode = getModelNodeById(model, edge.from);
+          if (!fromNode || fromNode.shape !== "diamond") {
+            return;
+          }
+          if (!resolved.has(fromNode.id)) {
+            blockedByDependency = true;
+            return;
+          }
+          context[fromNode.name] = fromNode.computedValue;
+        });
+      if (blockedByDependency) {
+        continue;
+      }
+
+      const expr = String(node.valueExpression ?? "0");
+      const result = semantics.evaluateValueExpression(expr, context);
+      if (result.ok) {
+        node.computedValue = result.value;
+        node.computedError = "";
+      } else {
+        node.computedValue = null;
+        node.computedError = result.reason || "runtime";
+      }
+      pending.delete(nodeId);
+      resolved.add(nodeId);
+      progressed = true;
+    }
+
+    if (progressed) {
+      continue;
+    }
+
+    pending.forEach((nodeId) => {
+      const node = getModelNodeById(model, nodeId);
+      if (!node) {
+        return;
+      }
+      node.computedValue = null;
+      node.computedError = "dependency";
+    });
+    break;
+  }
+}
+
+function buildInitialStateContextForModel(model, node, timeValue, rootExecution) {
+  const context = {
+    ...buildExecutionGlobalsForModel(model, rootExecution, timeValue),
+    ...nodePropertyAccessForContext(node),
+  };
+  (model.edges || [])
+    .filter((edge) => edge.to === node.id)
+    .forEach((edge) => {
+      const fromNode = getModelNodeById(model, edge.from);
+      if (!fromNode || fromNode.shape !== "diamond" || fromNode.computedError) {
+        return;
+      }
+      context[fromNode.name] = fromNode.computedValue;
+    });
+  return context;
+}
+
 function initializeStateNodesForModel(model, timeValue, rootExecution) {
+  evaluateParameterNodesForModel(model, timeValue, rootExecution);
   model.nodes.forEach((node) => {
     if (!isStateNode(node)) {
-      node.computedValue = null;
-      node.computedError = "";
+      if (node.shape !== "diamond") {
+        node.computedValue = null;
+        node.computedError = "";
+      }
       node.pendingStateValue = null;
       node.pendingStateError = "";
       return;
@@ -7675,7 +8284,7 @@ function initializeStateNodesForModel(model, timeValue, rootExecution) {
     const initExpr = String(node.initialStateExpression ?? "0");
     const initResult = semantics.evaluateValueExpression(
       initExpr,
-      buildExecutionGlobalsForModel(model, rootExecution, timeValue),
+      buildInitialStateContextForModel(model, node, timeValue, rootExecution),
     );
     if (initResult.ok) {
       node.computedValue = initResult.value;
@@ -8326,16 +8935,22 @@ function evaluateTransitionResultsWithIntegralValues(timeValue, integralStateIds
 }
 
 function initializeStateNodes(timeValue) {
+  evaluateParameterNodesForModel(graph, timeValue, graph.execution);
   graph.nodes.forEach((node) => {
     if (!isStateNode(node)) {
-      node.computedValue = null;
-      node.computedError = "";
+      if (node.shape !== "diamond") {
+        node.computedValue = null;
+        node.computedError = "";
+      }
       node.pendingStateValue = null;
       node.pendingStateError = "";
       return;
     }
     const initExpr = String(node.initialStateExpression ?? "0");
-    const initResult = semantics.evaluateValueExpression(initExpr, buildExecutionGlobals(timeValue));
+    const initResult = semantics.evaluateValueExpression(
+      initExpr,
+      buildInitialStateContextForModel(graph, node, timeValue, graph.execution),
+    );
     if (initResult.ok) {
       node.computedValue = initResult.value;
       node.computedError = "";
@@ -9444,6 +10059,9 @@ if (expressionEditorTextarea) {
   expressionEditorTextarea.addEventListener("input", () => {
     refreshExpressionEditorValidation();
   });
+  expressionEditorTextarea.addEventListener("scroll", () => {
+    renderExpressionHighlight();
+  });
   expressionEditorTextarea.addEventListener("keydown", (evt) => {
     const hasFilterContext = Boolean(String(expressionSymbolsFilter?.value || "").trim() || String(ui.expressionEditor?.autoFilter || "").trim());
     if (hasFilterContext && evt.key === "ArrowDown") {
@@ -9482,6 +10100,7 @@ if (expressionEditorTextarea) {
   });
   ["click", "keyup", "mouseup"].forEach((eventName) => {
     expressionEditorTextarea.addEventListener(eventName, () => {
+      renderExpressionHighlight();
       renderExpressionAutocomplete();
     });
   });
@@ -9559,6 +10178,7 @@ document.addEventListener("pointerover", (evt) => {
     scheduleHideAppTooltip(60);
     return;
   }
+  ui.tooltipPointer = { x: evt.clientX, y: evt.clientY };
   scheduleShowAppTooltip(target, evt.clientX, evt.clientY);
 });
 
@@ -9568,6 +10188,7 @@ document.addEventListener("pointermove", (evt) => {
     scheduleHideAppTooltip(60);
     return;
   }
+  ui.tooltipPointer = { x: evt.clientX, y: evt.clientY };
   if (ui.tooltipTarget !== target) {
     scheduleShowAppTooltip(target, evt.clientX, evt.clientY);
     return;
@@ -9698,6 +10319,10 @@ document.addEventListener("keydown", (evt) => {
   }
 
   if (evt.altKey && !evt.ctrlKey && !evt.metaKey && !evt.shiftKey && !isTypingTarget(evt.target)) {
+    if (isExecutionFrozen() && ["1", "2", "3", "4"].includes(evt.key)) {
+      evt.preventDefault();
+      return;
+    }
     if (evt.key === "1") {
       evt.preventDefault();
       runAction(() => {
@@ -9741,6 +10366,10 @@ document.addEventListener("keydown", (evt) => {
       return;
     }
     if (key === "x" && !typingTarget) {
+      if (isExecutionFrozen()) {
+        evt.preventDefault();
+        return;
+      }
       evt.preventDefault();
       cutSelectionToClipboard();
       return;
@@ -9751,6 +10380,10 @@ document.addEventListener("keydown", (evt) => {
       return;
     }
     if (key === "v" && !typingTarget) {
+      if (isExecutionFrozen()) {
+        evt.preventDefault();
+        return;
+      }
       evt.preventDefault();
       pasteFromClipboard();
       return;
@@ -9792,6 +10425,10 @@ document.addEventListener("keydown", (evt) => {
   }
 
   if ((evt.ctrlKey || evt.metaKey) && !evt.shiftKey && evt.key.toLowerCase() === "z") {
+    if (isExecutionFrozen()) {
+      evt.preventDefault();
+      return;
+    }
     evt.preventDefault();
     undo();
     return;
@@ -9801,12 +10438,20 @@ document.addEventListener("keydown", (evt) => {
     (evt.ctrlKey || evt.metaKey) &&
     (evt.key.toLowerCase() === "y" || (evt.shiftKey && evt.key.toLowerCase() === "z"))
   ) {
+    if (isExecutionFrozen()) {
+      evt.preventDefault();
+      return;
+    }
     evt.preventDefault();
     redo();
     return;
   }
 
   if (evt.key === "Delete") {
+    if (isExecutionFrozen()) {
+      evt.preventDefault();
+      return;
+    }
     removeSelected();
   }
 

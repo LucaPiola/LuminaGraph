@@ -52,6 +52,162 @@
     throw new Error("append is a special expression form");
   }
 
+  function normalizeCollectionValueKey(value) {
+    if (Array.isArray(value)) {
+      return `a:${JSON.stringify(value)}`;
+    }
+    return `${typeof value}:${String(value)}`;
+  }
+
+  function setArrayValues(values) {
+    if (!Array.isArray(values) || values.some((item) => Array.isArray(item))) {
+      throw new Error("set expects a vector");
+    }
+    const seen = new Set();
+    const out = [];
+    values.forEach((item) => {
+      const key = normalizeCollectionValueKey(item);
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(item);
+      }
+    });
+    return out;
+  }
+
+  function unionArrayValues(left, right) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.some((item) => Array.isArray(item)) || right.some((item) => Array.isArray(item))) {
+      throw new Error("union expects two vectors");
+    }
+    return setArrayValues([...left, ...right]);
+  }
+
+  function intersectArrayValues(left, right) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.some((item) => Array.isArray(item)) || right.some((item) => Array.isArray(item))) {
+      throw new Error("intersection expects two vectors");
+    }
+    const rightKeys = new Set(right.map((item) => normalizeCollectionValueKey(item)));
+    const seen = new Set();
+    const out = [];
+    left.forEach((item) => {
+      const key = normalizeCollectionValueKey(item);
+      if (rightKeys.has(key) && !seen.has(key)) {
+        seen.add(key);
+        out.push(item);
+      }
+    });
+    return out;
+  }
+
+  function flattenMatrixValues(value) {
+    if (!Array.isArray(value) || !value.every((row) => Array.isArray(row))) {
+      throw new Error("flatten expects a matrix");
+    }
+    return value.flat();
+  }
+
+  function ensureFlatVector(value, fnName) {
+    if (!Array.isArray(value) || value.some((item) => Array.isArray(item))) {
+      throw new Error(`${fnName} expects a vector`);
+    }
+    return value;
+  }
+
+  function chooseRandomElement(values) {
+    const vector = ensureFlatVector(values, "choice");
+    if (!vector.length) {
+      throw new Error("choice expects a non-empty vector");
+    }
+    return vector[Math.floor(Math.random() * vector.length)];
+  }
+
+  function shuffleVectorValues(values) {
+    const vector = ensureFlatVector(values, "shuffle").slice();
+    for (let idx = vector.length - 1; idx > 0; idx -= 1) {
+      const swapIdx = Math.floor(Math.random() * (idx + 1));
+      [vector[idx], vector[swapIdx]] = [vector[swapIdx], vector[idx]];
+    }
+    return vector;
+  }
+
+  function sortVectorValues(values) {
+    const vector = ensureFlatVector(values, "sort").slice();
+    return vector.sort((left, right) => {
+      if (left === right) {
+        return 0;
+      }
+      return left < right ? -1 : 1;
+    });
+  }
+
+  function sizeOfValue(value, axis = null) {
+    if (!Array.isArray(value)) {
+      throw new Error("size expects a vector or matrix");
+    }
+    const isMatrix = value.every((row) => Array.isArray(row));
+    if (!isMatrix) {
+      if (axis == null) {
+        return value.length;
+      }
+      if (!Number.isInteger(axis) || axis !== 0) {
+        throw new Error("size axis for vectors must be 0");
+      }
+      return value.length;
+    }
+    const rowCount = value.length;
+    const colCount = rowCount > 0 ? value[0].length : 0;
+    if (!value.every((row) => row.length === colCount)) {
+      throw new Error("size expects a rectangular matrix");
+    }
+    if (axis == null) {
+      return [rowCount, colCount];
+    }
+    if (!Number.isInteger(axis) || (axis !== 0 && axis !== 1)) {
+      throw new Error("size axis for matrices must be 0 or 1");
+    }
+    return axis === 0 ? rowCount : colCount;
+  }
+
+  function normalizeRandomBounds(args, fnName) {
+    if (args.length > 2) {
+      throw new Error(`${fnName} expects 0, 1, or 2 arguments`);
+    }
+    if (args.length === 0) {
+      return { min: 0, max: 1 };
+    }
+    if (args.length === 1) {
+      const max = Number(args[0]);
+      if (!Number.isFinite(max)) {
+        throw new Error(`${fnName} expects finite numeric bounds`);
+      }
+      return { min: 0, max };
+    }
+    const min = Number(args[0]);
+    const max = Number(args[1]);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      throw new Error(`${fnName} expects finite numeric bounds`);
+    }
+    return { min, max };
+  }
+
+  function randomFloatInRange(...args) {
+    const { min, max } = normalizeRandomBounds(args, "rand");
+    return min + Math.random() * (max - min);
+  }
+
+  function randomIntInRange(...args) {
+    if (args.length < 1 || args.length > 2) {
+      throw new Error("randInt expects 1 or 2 arguments");
+    }
+    const bounds = normalizeRandomBounds(args, "randInt");
+    const min = Math.ceil(bounds.min);
+    const max = Math.floor(bounds.max);
+    if (max < min) {
+      throw new Error("randInt expects min <= max");
+    }
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
   function unavailableDistribution(name) {
     return () => {
       throw new Error(`${name} is unavailable`);
@@ -116,7 +272,8 @@
     trunc: vectorizeFunction(Math.trunc),
     int: vectorizeFunction(Math.trunc),
     sign: vectorizeFunction(Math.sign),
-    rand: Math.random,
+    rand: randomFloatInRange,
+    randInt: randomIntInRange,
     range: (...args) => {
       if (args.length === 1) {
         return buildNumericRange(0, args[0], 1);
@@ -134,6 +291,14 @@
     filter: unavailableFilterOperator,
     reduce: unavailableReduceOperator,
     append: unavailableAppendOperator,
+    set: setArrayValues,
+    union: unionArrayValues,
+    intersection: intersectArrayValues,
+    flatten: flattenMatrixValues,
+    choice: chooseRandomElement,
+    shuffle: shuffleVectorValues,
+    sort: sortVectorValues,
+    size: sizeOfValue,
     gaussian: typeof probability.gaussian === "function" ? probability.gaussian : unavailableDistribution("gaussian"),
     uniform: typeof probability.uniform === "function" ? probability.uniform : unavailableDistribution("uniform"),
     exponential: typeof probability.exponential === "function" ? probability.exponential : unavailableDistribution("exponential"),
