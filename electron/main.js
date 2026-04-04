@@ -1,6 +1,26 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 
+function resolveSupportedLang(raw) {
+  const value = String(raw || '').trim().toLowerCase();
+  if (!value) {
+    return '';
+  }
+  const base = value.split('-')[0];
+  if (base === 'it' || base === 'en') {
+    return base;
+  }
+  return '';
+}
+
+function resolveStartupLang() {
+  const cliArg = process.argv.find((arg) => /^--lang=/i.test(String(arg)));
+  if (cliArg) {
+    return resolveSupportedLang(cliArg.split('=').slice(1).join('='));
+  }
+  return resolveSupportedLang(app.getLocale());
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     title: 'STGraphX',
@@ -19,7 +39,8 @@ function createWindow() {
     },
   });
 
-  win.loadFile(path.join(__dirname, '..', 'index.html'));
+  const startupLang = resolveStartupLang();
+  win.loadFile(path.join(__dirname, '..', 'index.html'), startupLang ? { query: { lang: startupLang } } : undefined);
   win.once('ready-to-show', () => {
     win.show();
   });

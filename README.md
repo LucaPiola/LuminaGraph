@@ -19,7 +19,7 @@ Applicazione JavaScript con doppia shell e logica condivisa:
 __Al momento implementati (senza librerie esterne!):__
 * editor per grafi orientati, con nodi di forme diverse e tooltip, frecce spline, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard, undo e redo, ...;
 * menu, menu contestuale e pannello di configurazione aggiornato dinamicamente, con tooltip;
-* gestione dei testi in italiano e inglese in file di configurazione e scelta in extraURL (`?lang=it|en`);
+* gestione dei testi in italiano e inglese, con scelta via query string nella shell web (`?lang=it|en`) e via parametro `--lang=it|en` nella shell Electron;
 * gestione dei nodi algebrici, di stato, parametri e sottomodelli, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale); controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo sullo stato iniziale: solo espressioni locali o riferimenti a parametri; controllo del numero di cifre decimali visualizzate;
 * gestione di esecuzione completa, passo-passo, temporizzata, con modello in modalità read-only durante l'esecuzione;
 * gestione opzionale di blocco di esecuzione ed evidenziazione per nodi non definiti;

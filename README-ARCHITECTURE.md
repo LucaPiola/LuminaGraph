@@ -120,6 +120,20 @@ npm run check
 npm run start:desktop
 ```
 
+Se vuoi forzare la lingua della UI nella shell Electron:
+
+```bash
+npm run start:desktop -- --lang=en
+```
+
+oppure:
+
+```bash
+npm run start:desktop -- --lang=it
+```
+
+Se non passi `--lang`, la shell Electron prova a usare la lingua del sistema operativo.
+
 5. Genera una build unpacked di prova:
 
 ```bash
