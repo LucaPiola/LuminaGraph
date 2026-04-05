@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <title data-i18n="app.title">Editor Grafi Orientati</title>
+    <title data-i18n="app.title">STGraphX</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -13,11 +13,11 @@
         <div class="menu-root">
           <button class="menu-title" type="button" data-menu="fileMenu" data-i18n="menu.file" data-title-i18n="tooltip.menu.file">File</button>
           <div class="menu-panel" id="fileMenu">
-            <button id="newGraphBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.new"><span data-i18n="menu.file.new">Nuovo modello</span><span class="menu-shortcut">Alt+N</span></button>
+            <button id="newGraphBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.new"><span data-i18n="menu.file.new">Crea modello</span><span class="menu-shortcut">Alt+N</span></button>
+            <button id="loadJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.load"><span data-i18n="menu.file.load">Carica modello...</span><span class="menu-shortcut">Alt+O</span></button>
             <hr class="menu-sep" />
             <button id="saveJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.save"><span data-i18n="menu.file.save">Salva</span><span class="menu-shortcut">Ctrl+S</span></button>
             <button id="saveAsJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.saveAs"><span data-i18n="menu.file.saveAs">Salva con nome...</span><span class="menu-shortcut">Ctrl+Shift+S</span></button>
-            <button id="loadJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.load"><span data-i18n="menu.file.load">Carica modello...</span><span class="menu-shortcut">Alt+O</span></button>
             <input id="loadJsonInput" type="file" accept="application/json" class="hidden-file" />
           </div>
         </div>
@@ -94,6 +94,7 @@
           <button class="menu-title" type="button" data-menu="helpMenu" data-i18n="menu.help" data-title-i18n="tooltip.menu.help">Help</button>
           <div class="menu-panel" id="helpMenu">
             <button id="functionsHelpBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.help.functions"><span data-i18n="menu.help.functions">Funzioni disponibili...</span><span class="menu-shortcut">F1</span></button>
+            <button id="aboutAppBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.help.about"><span data-i18n="menu.help.about">About...</span></button>
           </div>
         </div>
 
@@ -306,6 +307,37 @@
         <div id="functionsHelpContent" class="functions-help-content"></div>
         <div class="modal-actions">
           <button id="functionsHelpDismissBtn" type="button" data-i18n="action.close">Chiudi</button>
+        </div>
+      </div>
+    </div>
+    <div id="aboutAppModal" class="modal-backdrop hidden">
+      <div class="modal-card about-app-card" role="dialog" aria-modal="true" aria-labelledby="aboutAppTitle">
+        <div class="modal-head">
+          <h3 id="aboutAppTitle" data-i18n="about.title">About STGraphX</h3>
+          <button id="aboutAppCloseBtn" class="icon-btn modal-close-btn" type="button" aria-label="Chiudi">×</button>
+        </div>
+        <div id="aboutAppContent" class="about-app-content">
+          <div class="about-app-hero">
+            <img class="about-app-icon" src="icon.svg" alt="STGraphX icon" />
+            <div class="about-app-copy">
+              <div class="about-app-name">STGraphX</div>
+              <div class="about-app-subtitle" data-i18n="about.subtitle">Variable-based modeling workbench</div>
+            </div>
+          </div>
+          <div class="about-app-meta">
+            <div class="about-app-row">
+              <span class="about-app-label" data-i18n="about.versionLabel">Versione</span>
+              <span class="about-app-value">0.1.0</span>
+            </div>
+            <div class="about-app-row">
+              <span class="about-app-label" data-i18n="about.authorLabel">Autore</span>
+              <span class="about-app-value">Luca Mari</span>
+            </div>
+          </div>
+          <div class="about-app-note" data-i18n="about.body">Versione sperimentale con shell web ed Electron.</div>
+        </div>
+        <div class="modal-actions">
+          <button id="aboutAppDismissBtn" type="button" data-i18n="action.close">Chiudi</button>
         </div>
       </div>
     </div>

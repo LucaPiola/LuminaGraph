@@ -1074,10 +1074,92 @@ button:disabled {
   width: min(920px, calc(100vw - 40px));
 }
 
+.about-app-card {
+  width: min(560px, calc(100vw - 40px));
+}
+
 .help-intro {
   color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.4;
+}
+
+.about-app-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.about-app-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #d9e4ef;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(14, 122, 196, 0.12), transparent 40%),
+    linear-gradient(135deg, #f9fbfe 0%, #eef4f9 100%);
+}
+
+.about-app-icon {
+  width: 68px;
+  height: 68px;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 6px 10px rgba(14, 122, 196, 0.16));
+}
+
+.about-app-copy {
+  min-width: 0;
+}
+
+.about-app-name {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #0f2c45;
+}
+
+.about-app-subtitle {
+  margin-top: 4px;
+  color: #4d6478;
+  font-size: 0.94rem;
+  line-height: 1.35;
+}
+
+.about-app-meta {
+  display: grid;
+  gap: 8px;
+  padding: 4px 2px;
+}
+
+.about-app-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.about-app-label {
+  color: #577087;
+  font-size: 0.84rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.about-app-value {
+  color: #173047;
+  font-weight: 600;
+}
+
+.about-app-note {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f6f9fc;
+  border: 1px solid #e1e8ef;
+  color: #55697b;
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .functions-help-content {

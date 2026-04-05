@@ -168,6 +168,78 @@
     return axis === 0 ? rowCount : colCount;
   }
 
+  function averageArrayValues(value, axis = null) {
+    if (!Array.isArray(value)) {
+      throw new Error("average expects a vector or matrix");
+    }
+    const isMatrix = value.every((row) => Array.isArray(row));
+    if (!isMatrix) {
+      const vector = ensureFlatVector(value, "average");
+      if (!vector.length) {
+        throw new Error("average expects a non-empty vector");
+      }
+      return vector.reduce((sum, item) => sum + Number(item), 0) / vector.length;
+    }
+    const rowCount = value.length;
+    const colCount = rowCount > 0 ? value[0].length : 0;
+    if (!value.every((row) => row.length === colCount && row.every((item) => Number.isFinite(Number(item))))) {
+      throw new Error("average expects a rectangular numeric matrix");
+    }
+    if (axis == null) {
+      const totalCount = rowCount * colCount;
+      if (!totalCount) {
+        throw new Error("average expects a non-empty matrix");
+      }
+      return value.flat().reduce((sum, item) => sum + Number(item), 0) / totalCount;
+    }
+    if (!Number.isInteger(axis) || (axis !== 0 && axis !== 1)) {
+      throw new Error("average axis for matrices must be 0 or 1");
+    }
+    if (axis === 0) {
+      return Array.from({ length: colCount }, (_, colIdx) => value.reduce((sum, row) => sum + Number(row[colIdx]), 0) / rowCount);
+    }
+    return value.map((row) => {
+      if (!row.length) {
+        throw new Error("average expects non-empty matrix rows");
+      }
+      return row.reduce((sum, item) => sum + Number(item), 0) / row.length;
+    });
+  }
+
+  function stdevArrayValues(value, axis = null) {
+    if (!Array.isArray(value)) {
+      throw new Error("stdev expects a vector or matrix");
+    }
+    const isMatrix = value.every((row) => Array.isArray(row));
+    const stdevOfVector = (vector) => {
+      const flat = ensureFlatVector(vector, "stdev");
+      if (!flat.length) {
+        throw new Error("stdev expects a non-empty vector");
+      }
+      const mean = flat.reduce((sum, item) => sum + Number(item), 0) / flat.length;
+      const variance = flat.reduce((sum, item) => sum + ((Number(item) - mean) ** 2), 0) / flat.length;
+      return Math.sqrt(variance);
+    };
+    if (!isMatrix) {
+      return stdevOfVector(value);
+    }
+    const rowCount = value.length;
+    const colCount = rowCount > 0 ? value[0].length : 0;
+    if (!value.every((row) => row.length === colCount && row.every((item) => Number.isFinite(Number(item))))) {
+      throw new Error("stdev expects a rectangular numeric matrix");
+    }
+    if (axis == null) {
+      return stdevOfVector(value.flat());
+    }
+    if (!Number.isInteger(axis) || (axis !== 0 && axis !== 1)) {
+      throw new Error("stdev axis for matrices must be 0 or 1");
+    }
+    if (axis === 0) {
+      return Array.from({ length: colCount }, (_, colIdx) => stdevOfVector(value.map((row) => row[colIdx])));
+    }
+    return value.map((row) => stdevOfVector(row));
+  }
+
   function normalizeRandomBounds(args, fnName) {
     if (args.length > 2) {
       throw new Error(`${fnName} expects 0, 1, or 2 arguments`);
@@ -299,6 +371,8 @@
     shuffle: shuffleVectorValues,
     sort: sortVectorValues,
     size: sizeOfValue,
+    average: averageArrayValues,
+    stdev: stdevArrayValues,
     gaussian: typeof probability.gaussian === "function" ? probability.gaussian : unavailableDistribution("gaussian"),
     uniform: typeof probability.uniform === "function" ? probability.uniform : unavailableDistribution("uniform"),
     exponential: typeof probability.exponential === "function" ? probability.exponential : unavailableDistribution("exponential"),
@@ -684,6 +758,7 @@
 
     const compiled = {
       hasThisAlias: containsThisAlias(key),
+      hasSelfAlias: containsIdentifierToken(key, "self"),
       hasIntegral: containsIdentifierToken(key, "integral"),
       ast: null,
       syntaxErrorMessage: null,
@@ -712,6 +787,22 @@
     }
     return ast.args[0];
   }
+  function evaluateAstWithLocalSelf(compiled, baseScope, hooks = null) {
+    const selfVector = baseScope?.__self;
+    if (!compiled?.hasSelfAlias || !Array.isArray(selfVector)) {
+      return evaluateAstNode(compiled.ast, baseScope, hooks);
+    }
+    return selfVector.map((item, index) => evaluateAstNode(
+      compiled.ast,
+      {
+        ...baseScope,
+        self: item,
+        $i: index,
+      },
+      hooks,
+    ));
+  }
+
 
   function collectIntegralArgAstsFromNode(node, out = []) {
     if (!node || typeof node !== "object") {
@@ -1395,6 +1486,28 @@
         if (node.name === "integral" && hooks?.onIntegralCall) {
           return hooks.onIntegralCall(node, scope);
         }
+        if (node.name === "pop") {
+          if (node.args.length !== 1) {
+            throw new Error("pop expects exactly 1 argument");
+          }
+          if (hooks?.onPopulationCall) {
+            return hooks.onPopulationCall(node, scope);
+          }
+          const arg = node.args[0];
+          let value;
+          if (arg?.type === "identifier" && arg.name === "self") {
+            if (Object.prototype.hasOwnProperty.call(scope, "__self")) {
+              value = scope.__self;
+            } else if (Object.prototype.hasOwnProperty.call(scope, "self")) {
+              value = scope.self;
+            } else {
+              throw new ReferenceError("self is not defined");
+            }
+          } else {
+            value = evaluateAstNode(arg, scope, hooks);
+          }
+          return value;
+        }
         if (node.name === "array") {
           if (node.args.length !== 2) {
             throw new Error("array expects exactly 2 arguments");
@@ -1594,7 +1707,11 @@
 
     let raw;
     try {
-      raw = evaluateAstNode(compiled.ast, { ...MATH_SCOPE, ...context });
+      raw = evaluateAstWithLocalSelf(
+        compiled,
+        { ...MATH_SCOPE, ...context },
+        options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
+      );
     } catch (err) {
       if (err && err.name === "ReferenceError") {
         return { ok: false, reason: "reference", message: String(err.message || "") };
@@ -1656,7 +1773,17 @@
 
     let raw;
     try {
-      raw = evaluateAstNode(derivativeAst, { ...MATH_SCOPE, integral: unavailableIntegral, ...context });
+      raw = compiled.hasSelfAlias && Array.isArray(context?.__self)
+        ? evaluateAstWithLocalSelf(
+          { ...compiled, ast: derivativeAst },
+          { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
+          options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
+        )
+        : evaluateAstNode(
+          derivativeAst,
+          { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
+          options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
+        );
     } catch (err) {
       if (err && err.name === "ReferenceError") {
         return { ok: false, reason: "reference", message: String(err.message || "") };
@@ -1691,7 +1818,17 @@
     const values = [];
     try {
       for (const derivativeAst of compiled.integralArgAsts || []) {
-        const raw = evaluateAstNode(derivativeAst, { ...MATH_SCOPE, integral: unavailableIntegral, ...context });
+        const raw = compiled.hasSelfAlias && Array.isArray(context?.__self)
+          ? evaluateAstWithLocalSelf(
+            { ...compiled, ast: derivativeAst },
+            { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
+            options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
+          )
+          : evaluateAstNode(
+            derivativeAst,
+            { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
+            options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
+          );
         const normalized = coerceBooleanToNumber(raw);
         const validated = validateComputedValue(normalized);
         if (!validated.ok) {
@@ -1727,10 +1864,12 @@
     let integralIndex = 0;
     let raw;
     try {
-      raw = evaluateAstNode(
-        compiled.ast,
+      const baseHooks = options?.hooks && typeof options.hooks === "object" ? options.hooks : null;
+      raw = evaluateAstWithLocalSelf(
+        compiled,
         { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
         {
+          ...(baseHooks || {}),
           onIntegralCall(callNode) {
             if (callNode.args.length !== 1) {
               throw new Error("integral expects exactly 1 argument");

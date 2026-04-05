@@ -1,6 +1,6 @@
 # STGraphX: readme di uso
 
-_Luca Mari, versione 4 aprile 2026_
+_Luca Mari, versione 5 aprile 2026_
 
 STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
 
@@ -146,6 +146,38 @@ Esempi:
 - `reduce(+, [[1,2],[3,4]], 0)` -> `[4,6]`
 - `reduce(+, [[1,2],[3,4]], 1)` -> `[3,7]`
 
+### Media e deviazione standard
+
+- `average(vettore)`
+  - restituisce la media aritmetica del vettore
+
+- `average(matrice)`
+  - restituisce la media aritmetica complessiva della matrice
+
+- `average(matrice, asse)`
+  - con `asse = 0` restituisce le medie per colonna
+  - con `asse = 1` restituisce le medie per riga
+
+- `stdev(vettore)`
+  - restituisce la deviazione standard del vettore
+
+- `stdev(matrice)`
+  - restituisce la deviazione standard complessiva della matrice
+
+- `stdev(matrice, asse)`
+  - con `asse = 0` restituisce la deviazione standard per colonna
+  - con `asse = 1` restituisce la deviazione standard per riga
+
+Esempi:
+
+- `average([1,2,3])` -> `2`
+- `average([[1,2],[3,4]])` -> `2.5`
+- `average([[1,2],[3,4]], 0)` -> `[2,3]`
+- `average([[1,2],[3,4]], 1)` -> `[1.5,3.5]`
+- `stdev([1,2,3])`
+- `stdev([[1,2],[3,4]])`
+- `stdev([[1,2],[3,4]], 0)`
+
 ### Append e concatenazione
 
 - `append(vettore, valore)`
@@ -271,6 +303,69 @@ Note:
 - le uscite del `sottomodello` sono accessibili nel modello padre con la notazione `nomeSottomodello.nomeOutput`
 - lo stato interno dei nodi di stato del `sottomodello` resta locale al modello figlio
 - padre e figli condividono la stessa base dei tempi: `time`, `t0`, `t1`, `dt`
+
+### Sottomodelli come template di agenti
+
+Un `sottomodello` puo essere usato anche come template di una popolazione di agenti: il comportamento emerge direttamente quando gli ingressi o gli stati del modello figlio sono vettoriali.
+
+In questa modalità:
+
+- ogni nodo del modello figlio puo assumere valori vettoriali
+- ogni elemento del vettore corrisponde a un agente
+- il modello padre continua a vedere il `sottomodello` come un singolo nodo, ma le sue uscite possono essere vettori
+
+Regole pratiche:
+
+- se uno stato iniziale del modello figlio e, per esempio, `range(3)`, allora il `sottomodello` rappresenta gia una popolazione di `3` agenti
+- analogamente, anche espressioni come `array(3, rand())` possono costruire una popolazione iniziale di `3` agenti
+- nel modello padre, le uscite del `sottomodello` restano accessibili con la sintassi `nomeSottomodello.nomeOutput`
+
+### `this`, `self` e `pop(...)`
+
+Quando un nodo del modello figlio è usato in modo vettoriale, è utile distinguere tre livelli:
+
+- `this`
+  - valore completo corrente del nodo
+  - se il nodo è scalare, `this` è uno scalare
+  - se il nodo è vettoriale, `this` e l'intero vettore
+
+- `self`
+  - valore locale corrente
+  - se il nodo e scalare, coincide con il valore del nodo
+  - se il nodo e vettoriale, indica l'elemento corrente del vettore
+
+- `pop(self)`
+  - vettore completo dei valori del nodo corrente
+
+- `pop(nomeNodo)`
+  - vettore completo dei valori di un altro nodo visibile nel contesto
+
+Questa semantica vale sia:
+
+- quando il modello e eseguito come `sottomodello` dentro un modello padre
+- sia quando il modello e eseguito autonomamente
+
+In questo modo la stessa espressione puo restare valida durante la costruzione e il collaudo del modello.
+
+Esempi:
+
+- persistenza semplice:
+  - `self`
+
+- accesso al vettore completo:
+  - `pop(self)`
+
+- confronto con la media della popolazione:
+  - `if(self > average(pop(self)), 1, 0)`
+
+- regressione verso la media:
+  - `self + 0.1 * (average(pop(self)) - self)`
+
+L'ultimo esempio significa:
+
+- se il valore locale e sopra la media della popolazione, diminuisce
+- se e sotto la media, aumenta
+- se e uguale alla media, resta invariato
 
 ## Widget grafico x-y
 

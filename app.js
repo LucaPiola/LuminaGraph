@@ -111,11 +111,15 @@ const expressionEditorCloseBtn = document.getElementById("expressionEditorCloseB
 const expressionEditorCancelBtn = document.getElementById("expressionEditorCancelBtn");
 const expressionEditorApplyBtn = document.getElementById("expressionEditorApplyBtn");
 const functionsHelpBtn = document.getElementById("functionsHelpBtn");
+const aboutAppBtn = document.getElementById("aboutAppBtn");
 const exitSubmodelBtn = document.getElementById("exitSubmodelBtn");
 const functionsHelpModal = document.getElementById("functionsHelpModal");
 const functionsHelpCloseBtn = document.getElementById("functionsHelpCloseBtn");
 const functionsHelpDismissBtn = document.getElementById("functionsHelpDismissBtn");
 const functionsHelpContent = document.getElementById("functionsHelpContent");
+const aboutAppModal = document.getElementById("aboutAppModal");
+const aboutAppCloseBtn = document.getElementById("aboutAppCloseBtn");
+const aboutAppDismissBtn = document.getElementById("aboutAppDismissBtn");
 const appTooltip = document.getElementById("appTooltip");
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -386,25 +390,15 @@ function setTooltipText(el, text) {
   const existingSvgTitle = isSvgElement
     ? Array.from(el.children || []).find((child) => child.tagName?.toLowerCase?.() === "title" && child.getAttribute("data-generated-tooltip") === "1")
     : null;
+  el.removeAttribute("title");
+  if (existingSvgTitle) {
+    existingSvgTitle.remove();
+  }
   if (!value) {
     el.removeAttribute("data-tooltip");
-    el.removeAttribute("title");
-    if (existingSvgTitle) {
-      existingSvgTitle.remove();
-    }
     return;
   }
   el.setAttribute("data-tooltip", value);
-  el.setAttribute("title", value);
-  if (isSvgElement) {
-    if (existingSvgTitle) {
-      existingSvgTitle.remove();
-    }
-    const titleEl = document.createElementNS(SVG_NS, "title");
-    titleEl.setAttribute("data-generated-tooltip", "1");
-    titleEl.textContent = value;
-    el.appendChild(titleEl);
-  }
 }
 
 function cancelTooltipTimers() {
@@ -515,7 +509,7 @@ function tooltipInfoForTarget(target) {
   }
   const nodeEl = nodeTooltipTarget(target);
   if (nodeEl) {
-    const node = getNodeById(String(nodeEl.dataset.nodeId || ""));
+    const node = getNodeById(String(nodeEl.getAttribute("data-node-id") || ""));
     return buildNodeTooltipText(node);
   }
   return { text: String(target.dataset.tooltip || "").trim(), tone: "" };
@@ -530,6 +524,25 @@ function applyTooltipState(text, tone = "") {
   if (tone) {
     appTooltip.classList.add(tone);
   }
+}
+
+function showNodeTooltip(node, target, clientX, clientY) {
+  cancelTooltipTimers();
+  if (!appTooltip || !target || !node) {
+    return;
+  }
+  const { text, tone } = buildNodeTooltipText(node);
+  if (!text) {
+    hideAppTooltip();
+    return;
+  }
+  setTooltipText(target, text);
+  applyTooltipState(text, tone);
+  appTooltip.classList.remove("hidden");
+  appTooltip.setAttribute("aria-hidden", "false");
+  ui.tooltipTarget = target;
+  ui.tooltipPointer = { x: clientX, y: clientY };
+  positionAppTooltip(clientX, clientY);
 }
 
 function refreshNodeTooltipElement(target) {
@@ -559,7 +572,7 @@ function refreshActiveTooltip() {
   if (!appTooltip || appTooltip.classList.contains("hidden") || !ui.tooltipTarget) {
     return;
   }
-  const nodeId = nodeTooltipTarget(ui.tooltipTarget)?.dataset?.nodeId;
+  const nodeId = nodeTooltipTarget(ui.tooltipTarget)?.getAttribute?.("data-node-id");
   let target = ui.tooltipTarget;
   if (nodeId) {
     target = document.querySelector(`.node[data-node-id="${CSS.escape(String(nodeId))}"]`) || target;
@@ -924,6 +937,7 @@ function expressionDocMap() {
     setProperty: { kind: "function", signature: "setProperty(name, value)", description: t("expr.help.setProperty"), insertText: "setProperty()", cursorOffset: 12 },
     getModelProperty: { kind: "function", signature: "getModelProperty(name, fallback)", description: t("expr.help.getModelProperty"), insertText: "getModelProperty()", cursorOffset: 17 },
     setModelProperty: { kind: "function", signature: "setModelProperty(name, value)", description: t("expr.help.setModelProperty"), insertText: "setModelProperty()", cursorOffset: 17 },
+    pop: { kind: "function", signature: "pop(self | nodeName)", description: t("expr.help.pop"), insertText: "pop()", cursorOffset: 4 },
     array: { kind: "function", signature: "array(dim | [d0,d1,...], expr)", description: t("expr.help.array"), insertText: "array()", cursorOffset: 6 },
     map: { kind: "function", signature: "map(expr, array)", description: t("expr.help.map"), insertText: "map()", cursorOffset: 4 },
     filter: { kind: "function", signature: "filter(cond, array)", description: t("expr.help.filter"), insertText: "filter()", cursorOffset: 7 },
@@ -937,6 +951,8 @@ function expressionDocMap() {
     shuffle: { kind: "function", signature: "shuffle(vector)", description: t("expr.help.shuffle"), insertText: "shuffle()", cursorOffset: 8 },
     sort: { kind: "function", signature: "sort(vector)", description: t("expr.help.sort"), insertText: "sort()", cursorOffset: 5 },
     size: { kind: "function", signature: "size(array[, axis])", description: t("expr.help.size"), insertText: "size()", cursorOffset: 5 },
+    average: { kind: "function", signature: "average(array[, axis])", description: t("expr.help.average"), insertText: "average()", cursorOffset: 8 },
+    stdev: { kind: "function", signature: "stdev(array[, axis])", description: t("expr.help.stdev"), insertText: "stdev()", cursorOffset: 6 },
     range: { kind: "function", signature: "range(stop) | range(start, stop[, step])", description: t("expr.help.range"), insertText: "range()", cursorOffset: 6 },
     gaussian: { kind: "probability", signature: "gaussian([params], x, mode)", description: t("expr.help.gaussian"), insertText: "gaussian()", cursorOffset: 9 },
     uniform: { kind: "probability", signature: "uniform([params], x, mode)", description: t("expr.help.uniform"), insertText: "uniform()", cursorOffset: 8 },
@@ -1215,6 +1231,20 @@ function closeFunctionsHelp() {
   functionsHelpModal.classList.add("hidden");
 }
 
+function openAboutApp() {
+  if (!aboutAppModal) {
+    return;
+  }
+  aboutAppModal.classList.remove("hidden");
+}
+
+function closeAboutApp() {
+  if (!aboutAppModal) {
+    return;
+  }
+  aboutAppModal.classList.add("hidden");
+}
+
 function expressionCatalogForEditor() {
   const meta = expressionEditorMeta();
   if (!meta) {
@@ -1242,6 +1272,16 @@ function expressionCatalogForEditor() {
     }
     pushEntry(name, entry);
   });
+
+  if (node) {
+    pushEntry("self", {
+      kind: "variable",
+      signature: "self",
+      description: t("expr.help.self"),
+      insertText: "self",
+      cursorOffset: 4,
+    });
+  }
 
   if ((meta.key === "value" || meta.key === "initial") && node) {
     graph.edges
@@ -2022,8 +2062,9 @@ function formatComputedValue(value) {
     return `[${value.map((item) => formatComputedValue(item)).join(", ")}]`;
   }
   if (typeof value === "object") {
+    const entries = Object.entries(value);
     try {
-      return JSON.stringify(value);
+      return `{${entries.map(([key, item]) => `${key}: ${formatComputedValue(item)}`).join(", ")}}`;
     } catch (_err) {
       return String(value);
     }
@@ -6430,14 +6471,20 @@ function render() {
     g.setAttribute("data-node-id", node.id);
     g.setAttribute("data-node-tooltip", "1");
     setTooltipText(g, buildNodeTooltipText(node).text);
-    g.addEventListener("pointerenter", () => {
-      refreshNodeTooltipElement(g);
+    g.addEventListener("pointerenter", (evt) => {
+      showNodeTooltip(node, g, evt.clientX, evt.clientY);
     });
-    g.addEventListener("pointermove", () => {
-      refreshNodeTooltipElement(g);
+    g.addEventListener("pointermove", (evt) => {
+      setTooltipText(g, buildNodeTooltipText(node).text);
+      ui.tooltipPointer = { x: evt.clientX, y: evt.clientY };
+      if (ui.tooltipTarget === g) {
+        showNodeTooltip(node, g, evt.clientX, evt.clientY);
+      } else {
+        showNodeTooltip(node, g, evt.clientX, evt.clientY);
+      }
     });
     g.addEventListener("pointerleave", () => {
-      refreshNodeTooltipElement(g);
+      scheduleHideAppTooltip(60);
     });
     g.addEventListener("contextmenu", (evt) => {
       evt.preventDefault();
@@ -8030,14 +8077,14 @@ function buildRuntimeModelFromData(data) {
         y: Number.isFinite(Number(n.y)) ? Number(n.y) : 200,
         width: clamp(Number(n.width) || 120, 40, 500),
         height: clamp(Number(n.height) || 70, 30, 500),
-        valueExpression: shape === "rect"
-          ? String(n.stateTransition ?? "")
-          : String(n.valueExpression ?? ""),
-        initialStateExpression: shape === "rect"
-          ? String(n.initialState ?? "")
-          : "",
-        modelPath: shape === "submodel" ? String(n.modelPath ?? "") : "",
-        inputBindings: shape === "submodel" && n.inputBindings && typeof n.inputBindings === "object"
+      valueExpression: shape === "rect"
+        ? String(n.stateTransition ?? "")
+        : String(n.valueExpression ?? ""),
+      initialStateExpression: shape === "rect"
+        ? String(n.initialState ?? "")
+        : "",
+      modelPath: shape === "submodel" ? String(n.modelPath ?? "") : "",
+      inputBindings: shape === "submodel" && n.inputBindings && typeof n.inputBindings === "object"
           ? Object.fromEntries(
             Object.entries(n.inputBindings)
               .map(([key, value]) => [String(key), String(value ?? "")])
@@ -8597,6 +8644,18 @@ function currentDisplayTimeValue() {
     : Number(graph.execution.currentTime);
 }
 
+function hasInitializedStateSnapshot(model = graph) {
+  const stateNodes = (model?.nodes || []).filter((node) => isStateNode(node));
+  if (stateNodes.length === 0) {
+    return true;
+  }
+  return stateNodes.some((node) =>
+    (node.computedValue !== null && node.computedValue !== undefined) ||
+    String(node.computedError || "").trim() ||
+    (node.pendingStateValue !== null && node.pendingStateValue !== undefined) ||
+    String(node.pendingStateError || "").trim());
+}
+
 function updateMenuTimeLabel() {
   return;
 }
@@ -8767,6 +8826,8 @@ function createSubmodelNodeEvaluator(model, timeValue, env, options = {}) {
         return { ok: false, reason: "runtime", message: "submodel is not loaded" };
       }
       const childModel = applyResults ? runtimeChildModel : cloneRuntimeModel(runtimeChildModel);
+      applyRuntimeModelInputOverrides(childModel, inputOverrides);
+      let childResult;
       if (childModel.execution.currentTime == null || childModel.execution.currentTime !== timeValue) {
         if (childModel.execution.currentTime == null) {
           initializeStateNodesForModel(childModel, timeValue, env.rootExecution);
@@ -8774,8 +8835,7 @@ function createSubmodelNodeEvaluator(model, timeValue, env, options = {}) {
           promotePendingStateNodesForModel(childModel);
         }
       }
-      applyRuntimeModelInputOverrides(childModel, inputOverrides);
-      const childResult = evaluateModelAtTimeRecursive(
+      childResult = evaluateModelAtTimeRecursive(
         childModel,
         timeValue,
         {
@@ -9046,6 +9106,7 @@ async function executeOneStep(restartIfEnded = true) {
   }
 
   let restarted = false;
+  const hasStateSnapshot = hasInitializedStateSnapshot();
   if (isExecutionEnded(cfg)) {
     if (!restartIfEnded) {
       setStatusKey("status.timeEndReached", {
@@ -9053,6 +9114,10 @@ async function executeOneStep(restartIfEnded = true) {
       });
       return false;
     }
+    graph.execution.currentTime = null;
+    restarted = true;
+  }
+  if (graph.execution.currentTime != null && !hasStateSnapshot) {
     graph.execution.currentTime = null;
     restarted = true;
   }
@@ -9106,7 +9171,7 @@ async function executeNodeExpressions() {
     return;
   }
 
-  let continuing = graph.execution.currentTime != null;
+  let continuing = graph.execution.currentTime != null && hasInitializedStateSnapshot();
   if (continuing && isExecutionEnded(cfg)) {
     continuing = false;
   }
@@ -9116,6 +9181,8 @@ async function executeNodeExpressions() {
     clearAllXYChartPoints();
     clearAllTableWidgetRows();
     clearRuntimeSubmodelState();
+    initializeStateNodes(cfg.t0);
+    refreshRuntimeView();
   }
 
   const maxSteps = 100000;
@@ -9148,9 +9215,7 @@ async function executeNodeExpressions() {
   let lastTime = timeValues[timeValues.length - 1];
 
   timeValues.forEach((timeValue, idx) => {
-    if (!continuing && idx === 0) {
-      initializeStateNodes(timeValue);
-    } else {
+    if (continuing || idx > 0) {
       promotePendingStateNodes();
     }
     const stepResult = evaluateAtTime(timeValue);
@@ -9228,7 +9293,7 @@ async function toggleTimedExecution() {
     return;
   }
   const ended = isExecutionEnded(cfg);
-  const isFreshStart = graph.execution.currentTime == null || ended;
+  const isFreshStart = graph.execution.currentTime == null || ended || !hasInitializedStateSnapshot();
   if (isFreshStart) {
     clearAllXYChartPoints();
     clearAllTableWidgetRows();
@@ -10158,16 +10223,35 @@ if (functionsHelpBtn) {
     openFunctionsHelp();
   });
 }
+if (aboutAppBtn) {
+  aboutAppBtn.addEventListener("click", () => {
+    closeTopMenus();
+    openAboutApp();
+  });
+}
 if (functionsHelpCloseBtn) {
   functionsHelpCloseBtn.addEventListener("click", closeFunctionsHelp);
 }
 if (functionsHelpDismissBtn) {
   functionsHelpDismissBtn.addEventListener("click", closeFunctionsHelp);
 }
+if (aboutAppCloseBtn) {
+  aboutAppCloseBtn.addEventListener("click", closeAboutApp);
+}
+if (aboutAppDismissBtn) {
+  aboutAppDismissBtn.addEventListener("click", closeAboutApp);
+}
 if (functionsHelpModal) {
   functionsHelpModal.addEventListener("pointerdown", (evt) => {
     if (evt.target === functionsHelpModal) {
       closeFunctionsHelp();
+    }
+  });
+}
+if (aboutAppModal) {
+  aboutAppModal.addEventListener("pointerdown", (evt) => {
+    if (evt.target === aboutAppModal) {
+      closeAboutApp();
     }
   });
 }
@@ -10281,6 +10365,14 @@ document.addEventListener("keydown", (evt) => {
     if (evt.key === "Escape" || evt.key === "F1") {
       evt.preventDefault();
       closeFunctionsHelp();
+    }
+    return;
+  }
+
+  if (!aboutAppModal?.classList.contains("hidden")) {
+    if (evt.key === "Escape") {
+      evt.preventDefault();
+      closeAboutApp();
     }
     return;
   }
