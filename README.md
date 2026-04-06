@@ -1,6 +1,6 @@
 # STGraphX: readme
 
-_Luca Mari, versione 5 aprile 2026_
+_Luca Mari, versione 6 aprile 2026_
 
 ## Contesto
 
@@ -32,7 +32,7 @@ __Al momento implementati (senza librerie esterne!):__
 * gestione di proprietà custom per il modello e i singoli nodi e funzioni `getModelProperty`/`getProperty` e `setModelProperty`/`setProperty`;
 * gestione di nodi di output e di widget di output: grafici e tabelle; pannello di configurazione aggiornato dinamicamente;
 * gestione di nodi di input e di widget di input, anche per parametri: slider; pannello di configurazione aggiornato dinamicamente;
-* gestione dei sottomodelli con file JSON separati, con caricamento dalla stessa cartella del modello, binding dei nodi di input e accesso ai nodi di output con notazione `nomeSottomodello.nomeOutput`; prima gestione in logica ABM dichirativa / funzionale, mediante variabili di sistema `self` e `pop`; 
+* gestione dei sottomodelli con file JSON separati, con caricamento dalla stessa cartella del modello, binding dei nodi di input e accesso ai nodi di output con notazione `nomeSottomodello.nomeOutput`; prima gestione in logica ABM dichiarativa / funzionale, mediante variabili di sistema `self` e `$i$`; 
 * visualizzazione alternata per il grafo e i widget;
 * definizione della base dei tempi e modalità varie di esecuzione; pannello di configurazione aggiornato dinamicamente;
 * caricamento e salvataggio di modelli in file JSON;

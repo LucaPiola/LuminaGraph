@@ -404,6 +404,7 @@ body {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
+  transition: background-color 140ms ease, border-color 140ms ease;
 }
 
 h2,
@@ -420,6 +421,42 @@ h4 {
   background: #f8fbfe;
   max-height: 100%;
   overflow: auto;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+
+.sidebar.execution-frozen {
+  background: #eef2f5;
+  border-left-color: #c5d0da;
+}
+
+.panel.execution-frozen,
+#noSelection.execution-frozen {
+  background: #eef3f7;
+  border-color: #c7d2dc;
+  box-shadow: inset 0 0 0 1px rgba(120, 137, 152, 0.08);
+}
+
+.panel.execution-frozen h3,
+.panel.execution-frozen h4,
+.panel.execution-frozen label,
+.panel.execution-frozen .expr-status,
+.panel.execution-frozen .value-output,
+.panel.execution-frozen .hint,
+.panel.execution-frozen .edge-info {
+  color: #526575;
+}
+
+.panel.execution-frozen .panel-section,
+.panel.execution-frozen .model-section {
+  background: #f2f5f8;
+  border-color: #d4dde5;
+}
+
+.panel.execution-frozen input,
+.panel.execution-frozen select,
+.panel.execution-frozen textarea,
+.panel.execution-frozen .value-output {
+  background: #f5f7f9;
 }
 
 #globalPanel {
@@ -1063,6 +1100,10 @@ button:disabled {
 .expression-editor-card {
   width: min(1120px, calc(100vw - 40px));
   height: min(78vh, 760px);
+  min-width: 780px;
+  min-height: 420px;
+  max-width: calc(100vw - 20px);
+  max-height: calc(100vh - 20px);
   position: absolute;
   left: 50%;
   top: 50%;
@@ -1307,8 +1348,9 @@ button:disabled {
   font-size: 0.84rem;
   line-height: 1.35;
   white-space: pre-wrap;
-  min-height: 88px;
-  max-height: 160px;
+  min-height: 0;
+  height: 124px;
+  max-height: none;
   overflow: auto;
 }
 
@@ -1323,7 +1365,10 @@ button:disabled {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.95fr);
   gap: 12px;
+  flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
+  align-items: stretch;
 }
 
 .expression-editor-main {
@@ -1335,10 +1380,11 @@ button:disabled {
 
 .expression-sidebar {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) 124px;
   gap: 8px;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .expression-symbols-filter {
@@ -1428,6 +1474,19 @@ button:disabled {
   text-align: right;
 }
 
+.expression-editor-resize-handle {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 16px;
+  height: 16px;
+  border-right: 2px solid #86a7c3;
+  border-bottom: 2px solid #86a7c3;
+  opacity: 0.85;
+  cursor: nwse-resize;
+  border-bottom-right-radius: 3px;
+}
+
 .expression-editor-textarea.invalid {
   border-color: var(--danger);
   box-shadow: 0 0 0 1px rgba(186, 31, 54, 0.18);
@@ -1448,6 +1507,8 @@ button:disabled {
   .expression-editor-card {
     width: min(920px, calc(100vw - 24px));
     height: min(86vh, 860px);
+    min-width: 0;
+    min-height: 0;
   }
 
   .expression-editor-layout {

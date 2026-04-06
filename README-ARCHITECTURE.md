@@ -1,6 +1,6 @@
 # STGraphX: readme tecnico
 
-_Luca Mari, versione 5 aprile 2026_
+_Luca Mari, versione 1 aprile 2026_
 
 STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
 
@@ -169,7 +169,10 @@ A seconda del sistema operativo, `electron-builder` produrrà file diversi:
 - macOS: `dmg` e `zip`
 
 ### Risorse opzionali ma consigliate
-
+MyAgent("Agente", Context(), role_and_skills=default_role, temperature=1.5).do(
+    "Come ti chiami?",
+    reasoning_effort="none"
+)
 La cartella `build/` è predisposta per contenere risorse di packaging, in particolare:
 - icone applicative
 - eventuali immagini usate dagli installer

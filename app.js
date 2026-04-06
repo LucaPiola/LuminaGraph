@@ -110,6 +110,7 @@ const expressionEditorStatus = document.getElementById("expressionEditorStatus")
 const expressionEditorCloseBtn = document.getElementById("expressionEditorCloseBtn");
 const expressionEditorCancelBtn = document.getElementById("expressionEditorCancelBtn");
 const expressionEditorApplyBtn = document.getElementById("expressionEditorApplyBtn");
+const expressionEditorResizeHandle = document.getElementById("expressionEditorResizeHandle");
 const functionsHelpBtn = document.getElementById("functionsHelpBtn");
 const aboutAppBtn = document.getElementById("aboutAppBtn");
 const exitSubmodelBtn = document.getElementById("exitSubmodelBtn");
@@ -199,6 +200,7 @@ const ui = {
   showWidgets: true,
   expressionEditor: null,
   modalDrag: null,
+  modalResize: null,
   tooltipTarget: null,
   tooltipPointer: null,
   tooltipShowTimer: null,
@@ -927,6 +929,7 @@ function expressionEditorMeta() {
 function expressionDocMap() {
   return {
     this: { kind: "variable", signature: "this", description: t("expr.help.this") },
+    $i: { kind: "variable", signature: "$i", description: t("expr.help.agentIndex") },
     time: { kind: "variable", signature: "time", description: t("expr.help.time") },
     t0: { kind: "variable", signature: "t0", description: t("expr.help.t0") },
     t1: { kind: "variable", signature: "t1", description: t("expr.help.t1") },
@@ -937,7 +940,6 @@ function expressionDocMap() {
     setProperty: { kind: "function", signature: "setProperty(name, value)", description: t("expr.help.setProperty"), insertText: "setProperty()", cursorOffset: 12 },
     getModelProperty: { kind: "function", signature: "getModelProperty(name, fallback)", description: t("expr.help.getModelProperty"), insertText: "getModelProperty()", cursorOffset: 17 },
     setModelProperty: { kind: "function", signature: "setModelProperty(name, value)", description: t("expr.help.setModelProperty"), insertText: "setModelProperty()", cursorOffset: 17 },
-    pop: { kind: "function", signature: "pop(self | nodeName)", description: t("expr.help.pop"), insertText: "pop()", cursorOffset: 4 },
     array: { kind: "function", signature: "array(dim | [d0,d1,...], expr)", description: t("expr.help.array"), insertText: "array()", cursorOffset: 6 },
     map: { kind: "function", signature: "map(expr, array)", description: t("expr.help.map"), insertText: "map()", cursorOffset: 4 },
     filter: { kind: "function", signature: "filter(cond, array)", description: t("expr.help.filter"), insertText: "filter()", cursorOffset: 7 },
@@ -1153,6 +1155,12 @@ function renderExpressionLibrary() {
             evt.preventDefault();
           });
           item.addEventListener("click", (evt) => {
+            if (evt.shiftKey) {
+              selectEntry();
+              insertExpressionAtCursor("\n");
+              refreshExpressionEditorValidation();
+              return;
+            }
             if (evt.detail >= 2) {
               activate();
               return;
@@ -1704,6 +1712,8 @@ function resetExpressionEditorCardPosition() {
   if (!card) {
     return;
   }
+  card.style.width = "";
+  card.style.height = "";
   card.style.left = "50%";
   card.style.top = "50%";
   card.style.transform = "translate(-50%, -50%)";
@@ -1734,6 +1744,7 @@ function closeExpressionEditor() {
   expressionSidebar?.classList.remove("hidden");
   setExpressionHelp(null);
   hideExpressionStatus(expressionEditorStatus);
+  ui.modalResize = null;
   resetExpressionEditorCardPosition();
 }
 
@@ -3265,6 +3276,10 @@ function setControlsDisabled(root, disabled, allowedControls = []) {
 
 function updateEditingLockUi() {
   const frozen = isExecutionFrozen();
+  sidebar?.classList.toggle("execution-frozen", frozen);
+  [globalPanel, nodePanel, edgePanel, widgetPanel].forEach((panel) => {
+    panel?.classList.toggle("execution-frozen", frozen);
+  });
   [
     addRectNodeItem,
     addEllipseNodeItem,
@@ -9332,6 +9347,19 @@ window.addEventListener("pointermove", (evt) => {
     }
     return;
   }
+  if (ui.modalResize && evt.pointerId === ui.modalResize.pointerId) {
+    const card = ui.modalResize.card;
+    if (card) {
+      const nextWidth = clamp(ui.modalResize.startWidth + (evt.clientX - ui.modalResize.startClientX), 780, window.innerWidth - 20);
+      const nextHeight = clamp(ui.modalResize.startHeight + (evt.clientY - ui.modalResize.startClientY), 420, window.innerHeight - 20);
+      card.style.transform = "none";
+      card.style.left = `${ui.modalResize.startLeft}px`;
+      card.style.top = `${ui.modalResize.startTop}px`;
+      card.style.width = `${nextWidth}px`;
+      card.style.height = `${nextHeight}px`;
+    }
+    return;
+  }
   if (ui.widgetDrag && evt.pointerId === ui.widgetDrag.pointerId) {
     const widget = graph.widgets.find((w) => w.id === ui.widgetDrag.widgetId);
     if (widget) {
@@ -9476,6 +9504,9 @@ window.addEventListener("pointerup", (evt) => {
 
   if (ui.modalDrag && evt.pointerId === ui.modalDrag.pointerId) {
     ui.modalDrag = null;
+  }
+  if (ui.modalResize && evt.pointerId === ui.modalResize.pointerId) {
+    ui.modalResize = null;
   }
 
   if (ui.widgetDrag && evt.pointerId === ui.widgetDrag.pointerId) {
@@ -10128,38 +10159,30 @@ if (expressionEditorTextarea) {
     renderExpressionHighlight();
   });
   expressionEditorTextarea.addEventListener("keydown", (evt) => {
-    const hasFilterContext = Boolean(String(expressionSymbolsFilter?.value || "").trim() || String(ui.expressionEditor?.autoFilter || "").trim());
-    if (hasFilterContext && evt.key === "ArrowDown") {
+    if (evt.key === "ArrowDown" && evt.shiftKey) {
       evt.preventDefault();
       moveLibrarySelection(1);
       return;
     }
-    if (hasFilterContext && evt.key === "ArrowUp") {
+    if (evt.key === "ArrowUp" && evt.shiftKey) {
       evt.preventDefault();
       moveLibrarySelection(-1);
       return;
     }
-    if (evt.key === "Tab" && !evt.shiftKey) {
-      if (hasFilterContext && insertSelectedLibraryEntry()) {
-        evt.preventDefault();
-        return;
-      }
-    }
-    if (evt.key === "Enter" && !evt.ctrlKey && !evt.metaKey && hasFilterContext) {
-      if (insertSelectedLibraryEntry()) {
-        evt.preventDefault();
-        return;
-      }
+    if (evt.key === "Enter" && evt.shiftKey && !evt.ctrlKey && !evt.metaKey) {
+      evt.preventDefault();
+      insertSelectedLibraryEntry();
+      return;
     }
     if (evt.key === "Tab") {
       evt.preventDefault();
-      indentExpressionSelection(expressionEditorTextarea, evt.shiftKey);
+      insertExpressionSnippet("\t");
       refreshExpressionEditorValidation();
       return;
     }
     if (evt.key === "Enter" && !evt.ctrlKey && !evt.metaKey) {
       evt.preventDefault();
-      insertExpressionNewlineWithIndent(expressionEditorTextarea);
+      insertExpressionSnippet("\n");
       refreshExpressionEditorValidation();
     }
   });
@@ -10185,6 +10208,21 @@ if (expressionSymbolsFilter) {
     renderExpressionLibrary();
   });
   expressionSymbolsFilter.addEventListener("keydown", (evt) => {
+    if (evt.key === "ArrowDown") {
+      evt.preventDefault();
+      moveLibrarySelection(1);
+      return;
+    }
+    if (evt.key === "ArrowUp") {
+      evt.preventDefault();
+      moveLibrarySelection(-1);
+      return;
+    }
+    if (evt.key === "Enter") {
+      evt.preventDefault();
+      insertSelectedLibraryEntry();
+      return;
+    }
     if (evt.key === "Escape") {
       evt.preventDefault();
       expressionEditorTextarea?.focus();
@@ -10192,11 +10230,6 @@ if (expressionSymbolsFilter) {
   });
 }
 if (expressionEditorModal) {
-  expressionEditorModal.addEventListener("pointerdown", (evt) => {
-    if (evt.target === expressionEditorModal) {
-      closeExpressionEditor();
-    }
-  });
   const modalHead = expressionEditorModal.querySelector(".modal-head");
   const modalCard = expressionEditorModal.querySelector(".expression-editor-card");
   if (modalHead && modalCard) {
@@ -10212,6 +10245,28 @@ if (expressionEditorModal) {
         pointerId: evt.pointerId,
         offsetX: evt.clientX - rect.left,
         offsetY: evt.clientY - rect.top,
+        card: modalCard,
+      };
+    });
+  }
+  if (expressionEditorResizeHandle && modalCard) {
+    expressionEditorResizeHandle.addEventListener("pointerdown", (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const rect = modalCard.getBoundingClientRect();
+      modalCard.style.transform = "none";
+      modalCard.style.left = `${rect.left}px`;
+      modalCard.style.top = `${rect.top}px`;
+      modalCard.style.width = `${rect.width}px`;
+      modalCard.style.height = `${rect.height}px`;
+      ui.modalResize = {
+        pointerId: evt.pointerId,
+        startClientX: evt.clientX,
+        startClientY: evt.clientY,
+        startWidth: rect.width,
+        startHeight: rect.height,
+        startLeft: rect.left,
+        startTop: rect.top,
         card: modalCard,
       };
     });

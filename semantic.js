@@ -759,6 +759,7 @@
     const compiled = {
       hasThisAlias: containsThisAlias(key),
       hasSelfAlias: containsIdentifierToken(key, "self"),
+      hasAgentIndex: containsIdentifierToken(key, "$i"),
       hasIntegral: containsIdentifierToken(key, "integral"),
       ast: null,
       syntaxErrorMessage: null,
@@ -789,18 +790,30 @@
   }
   function evaluateAstWithLocalSelf(compiled, baseScope, hooks = null) {
     const selfVector = baseScope?.__self;
-    if (!compiled?.hasSelfAlias || !Array.isArray(selfVector)) {
+    const needsLocalIteration = Boolean(compiled?.hasSelfAlias || compiled?.hasAgentIndex);
+    if (!needsLocalIteration) {
       return evaluateAstNode(compiled.ast, baseScope, hooks);
     }
-    return selfVector.map((item, index) => evaluateAstNode(
+    if (Array.isArray(selfVector)) {
+      return selfVector.map((item, index) => evaluateAstNode(
+        compiled.ast,
+        {
+          ...baseScope,
+          self: item,
+          $i: index,
+        },
+        hooks,
+      ));
+    }
+    return evaluateAstNode(
       compiled.ast,
       {
         ...baseScope,
-        self: item,
-        $i: index,
+        self: Object.prototype.hasOwnProperty.call(baseScope || {}, "__self") ? baseScope.__self : undefined,
+        $i: Object.prototype.hasOwnProperty.call(baseScope || {}, "$i") ? baseScope.$i : 0,
       },
       hooks,
-    ));
+    );
   }
 
 
@@ -1413,6 +1426,12 @@
     };
 
     const applyIndexAccessor = (target, accessor) => {
+      if (!Array.isArray(target)) {
+        if (accessor?.index?.type === "identifier" && accessor.index.name === "$i") {
+          return target;
+        }
+        throw new Error("indexing requires an array or matrix");
+      }
       let idx = Number(evaluateAstNode(accessor.index, scope, hooks));
       if (!Number.isInteger(idx)) {
         throw new Error("array index must be an integer");
@@ -1430,12 +1449,12 @@
       if (!accessors.length) {
         return target;
       }
-      if (!Array.isArray(target)) {
-        throw new Error("indexing requires an array or matrix");
-      }
       const [first, ...rest] = accessors;
       if (first.kind === "index") {
         return applyAccessors(applyIndexAccessor(target, first), rest);
+      }
+      if (!Array.isArray(target)) {
+        throw new Error("indexing requires an array or matrix");
       }
       const sliced = applySliceAccessor(target, first);
       if (!rest.length) {
@@ -1466,9 +1485,6 @@
       }
       case "index": {
         const target = evaluateAstNode(node.target, scope, hooks);
-        if (!Array.isArray(target)) {
-          throw new Error("indexing requires an array or matrix");
-        }
         return applyIndexAccessor(target, { kind: "index", index: node.index });
       }
       case "slice": {
@@ -1485,28 +1501,6 @@
       case "call": {
         if (node.name === "integral" && hooks?.onIntegralCall) {
           return hooks.onIntegralCall(node, scope);
-        }
-        if (node.name === "pop") {
-          if (node.args.length !== 1) {
-            throw new Error("pop expects exactly 1 argument");
-          }
-          if (hooks?.onPopulationCall) {
-            return hooks.onPopulationCall(node, scope);
-          }
-          const arg = node.args[0];
-          let value;
-          if (arg?.type === "identifier" && arg.name === "self") {
-            if (Object.prototype.hasOwnProperty.call(scope, "__self")) {
-              value = scope.__self;
-            } else if (Object.prototype.hasOwnProperty.call(scope, "self")) {
-              value = scope.self;
-            } else {
-              throw new ReferenceError("self is not defined");
-            }
-          } else {
-            value = evaluateAstNode(arg, scope, hooks);
-          }
-          return value;
         }
         if (node.name === "array") {
           if (node.args.length !== 2) {
@@ -1773,17 +1767,11 @@
 
     let raw;
     try {
-      raw = compiled.hasSelfAlias && Array.isArray(context?.__self)
-        ? evaluateAstWithLocalSelf(
-          { ...compiled, ast: derivativeAst },
-          { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
-          options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
-        )
-        : evaluateAstNode(
-          derivativeAst,
-          { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
-          options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
-        );
+      raw = evaluateAstWithLocalSelf(
+        { ...compiled, ast: derivativeAst },
+        { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
+        options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
+      );
     } catch (err) {
       if (err && err.name === "ReferenceError") {
         return { ok: false, reason: "reference", message: String(err.message || "") };
@@ -1818,17 +1806,11 @@
     const values = [];
     try {
       for (const derivativeAst of compiled.integralArgAsts || []) {
-        const raw = compiled.hasSelfAlias && Array.isArray(context?.__self)
-          ? evaluateAstWithLocalSelf(
-            { ...compiled, ast: derivativeAst },
-            { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
-            options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
-          )
-          : evaluateAstNode(
-            derivativeAst,
-            { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
-            options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
-          );
+        const raw = evaluateAstWithLocalSelf(
+          { ...compiled, ast: derivativeAst },
+          { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
+          options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
+        );
         const normalized = coerceBooleanToNumber(raw);
         const validated = validateComputedValue(normalized);
         if (!validated.ok) {

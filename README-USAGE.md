@@ -1,6 +1,6 @@
 # STGraphX: readme di uso
 
-_Luca Mari, versione 5 aprile 2026_
+_Luca Mari, versione 6 aprile 2026_
 
 STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
 
@@ -320,9 +320,9 @@ Regole pratiche:
 - analogamente, anche espressioni come `array(3, rand())` possono costruire una popolazione iniziale di `3` agenti
 - nel modello padre, le uscite del `sottomodello` restano accessibili con la sintassi `nomeSottomodello.nomeOutput`
 
-### `this`, `self` e `pop(...)`
+### `this`, `self`, `x` e `x[$i]`
 
-Quando un nodo del modello figlio è usato in modo vettoriale, è utile distinguere tre livelli:
+Quando un nodo del modello figlio è usato in modo vettoriale, è utile distinguere tra valore completo e valore locale:
 
 - `this`
   - valore completo corrente del nodo
@@ -334,11 +334,19 @@ Quando un nodo del modello figlio è usato in modo vettoriale, è utile distingu
   - se il nodo e scalare, coincide con il valore del nodo
   - se il nodo e vettoriale, indica l'elemento corrente del vettore
 
-- `pop(self)`
-  - vettore completo dei valori del nodo corrente
+- `x`
+  - valore completo del nodo `x`
+  - in scalare e il valore di `x`
+  - in vettoriale e il vettore completo di `x`
 
-- `pop(nomeNodo)`
-  - vettore completo dei valori di un altro nodo visibile nel contesto
+- `$i`
+  - indice dell'agente corrente
+  - in scalare vale `0`
+  - in vettoriale identifica la componente locale
+
+- `x[$i]`
+  - valore locale del nodo `x` per l'agente corrente
+  - in scalare coincide con `x`
 
 Questa semantica vale sia:
 
@@ -352,14 +360,17 @@ Esempi:
 - persistenza semplice:
   - `self`
 
-- accesso al vettore completo:
-  - `pop(self)`
+- accesso al vettore completo del nodo corrente:
+  - `this`
+
+- accesso al valore locale di un altro nodo:
+  - `x[$i]`
 
 - confronto con la media della popolazione:
-  - `if(self > average(pop(self)), 1, 0)`
+  - `if(self > average(this), 1, 0)`
 
 - regressione verso la media:
-  - `self + 0.1 * (average(pop(self)) - self)`
+  - `self + 0.1 * (average(this) - self)`
 
 L'ultimo esempio significa:
 
