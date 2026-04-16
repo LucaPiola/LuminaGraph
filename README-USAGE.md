@@ -18,6 +18,18 @@ Molte funzioni matematiche e molti operatori lavorano in modo vettorializzato. P
 - `[1,2,3] * 2`
 - `[1,2,3] + [4,5,6]`
 
+Per le espressioni booleane puoi usare anche gli alias testuali:
+
+- `not` al posto di `!`
+- `and` al posto di `&&`
+- `or` al posto di `||`
+
+Esempi:
+
+- `not(x > 0)`
+- `a > 0 and b > 0`
+- `occupied or toroidal`
+
 ### Costruzione
 
 - `range(stop)`
@@ -178,6 +190,43 @@ Esempi:
 - `stdev([[1,2],[3,4]])`
 - `stdev([[1,2],[3,4]], 0)`
 
+### Somma e conteggio
+
+- `sum(vettore)`
+  - restituisce la somma degli elementi del vettore
+
+- `sum(matrice)`
+  - restituisce la somma complessiva della matrice
+
+- `sum(matrice, asse)`
+  - con `asse = 0` restituisce le somme per colonna
+  - con `asse = 1` restituisce le somme per riga
+
+- `count(vettore)`
+  - conta gli elementi truthy del vettore
+
+- `count(matrice)`
+  - conta gli elementi truthy della matrice
+
+- `count(matrice, asse)`
+  - con `asse = 0` restituisce i conteggi per colonna
+  - con `asse = 1` restituisce i conteggi per riga
+
+- `count(condizione, array[, asse])`
+  - conta gli elementi che soddisfano la condizione
+  - dentro `condizione` puoi usare `$value` e gli indici locali `$0`, `$1`, ...
+
+Esempi:
+
+- `sum([1,2,3])` -> `6`
+- `sum([[1,2],[3,4]])` -> `10`
+- `sum([[1,2],[3,4]], 0)` -> `[4,6]`
+- `count([1,0,1])` -> `2`
+- `count([[1,0],[1,1]])` -> `3`
+- `count([[1,0],[1,1]], 1)` -> `[1,2]`
+- `count($value > 0, [-2,0,3])` -> `1`
+- `count($value == 1, [[1,0],[1,1]], 1)` -> `[1,2]`
+
 ### Append e concatenazione
 
 - `append(vettore, valore)`
@@ -215,6 +264,94 @@ Esempi:
 - `union([1,2], [2,3])` -> `[1,2,3]`
 - `intersection([1,2,2,3], [2,3,4])` -> `[2,3]`
 - `flatten([[1,2],[3,4]])` -> `[1,2,3,4]`
+
+### Indici e sostituzione
+
+- `indicesWhere(vettore)`
+  - restituisce gli indici degli elementi truthy
+
+- `indicesWhere(matrice)`
+  - restituisce le coordinate `[riga, colonna]` degli elementi truthy
+
+- `indicesWhere(condizione, array)`
+  - restituisce gli indici degli elementi che soddisfano la condizione
+  - dentro `condizione` puoi usare `$value` e gli indici locali `$0`, `$1`, ...
+
+- `setAt(vettore, indice, valore)`
+  - restituisce una copia del vettore con un elemento sostituito
+
+- `setAt(matrice, [riga,colonna], valore)`
+  - restituisce una copia della matrice con una cella sostituita
+
+- `setAt(matrice, riga, vettoreRiga)`
+  - restituisce una copia della matrice con una riga sostituita
+
+Esempi:
+
+- `indicesWhere([0,1,0,1])` -> `[1,3]`
+- `indicesWhere([[1,0],[0,1]])` -> `[[0,0],[1,1]]`
+- `indicesWhere($value > 0, [-2,0,3])` -> `[2]`
+- `indicesWhere($0 === $1, [[1,2],[3,4]])` -> `[[0,0],[1,1]]`
+- `setAt([1,2,3], 1, 9)` -> `[1,9,3]`
+- `setAt([[1,2],[3,4]], [1,0], 8)` -> `[[1,2],[8,4]]`
+
+### Coordinate e griglie spaziali
+
+- `grid(righe, colonne)`
+  - costruisce una matrice di occupazione con `1` nelle celle occupate e `0` altrove
+
+- `grid(righe, colonne, valoreScalare)`
+  - usa lo stesso valore in ogni cella occupata
+
+- `grid(righe, colonne, vettoreValori)`
+  - usa `vettoreValori[i]` nella cella di coordinate `righe[i], colonne[i]`
+
+Regole:
+
+- `righe` e `colonne` devono essere vettori della stessa lunghezza
+- le coordinate devono essere interi non negativi
+- il primo vettore indica le righe, il secondo le colonne
+- la dimensione della matrice viene inferita come:
+  - righe = `max(righe) + 1`
+  - colonne = `max(colonne) + 1`
+- se due agenti finiscono nella stessa cella, l'espressione fallisce con errore
+
+Esempi:
+
+- `grid([1,1], [0,2])` -> `[[0,0,0],[1,0,1]]`
+- `grid([1,1], [0,2], 5)` -> `[[0,0,0],[5,0,5]]`
+- `grid([1,1], [0,2], [1,2])` -> `[[0,0,0],[1,0,2]]`
+
+- `coords(matrice)`
+  - restituisce le coordinate `[riga, colonna]` delle celle non nulle
+
+- `coords(matrice, valore)`
+  - restituisce le coordinate `[riga, colonna]` delle celle uguali a `valore`
+
+Esempi:
+
+- `coords([[0,1,0],[2,0,3]])` -> `[[0,1],[1,0],[1,2]]`
+- `coords([[0,1,0],[2,0,3]], 2)` -> `[[1,0]]`
+
+### Vicinato su griglia
+
+- `neighbors(matrice, riga, colonna)`
+  - restituisce i valori del vicinato di Moore della cella indicata
+
+- `neighbors(matrice, riga, colonna, false)`
+  - restituisce solo i vicini ortogonali: sopra, sotto, sinistra e destra
+
+- `neighbors(matrice, riga, colonna, true, true)`
+  - usa il vicinato di Moore con spazio toroidale
+
+- `neighbors(matrice, riga, colonna, false, true)`
+  - usa solo i vicini ortogonali con spazio toroidale
+
+Esempi:
+
+- `neighbors([[1,2,3],[4,5,6],[7,8,9]], 1, 1)` -> `[1,2,3,4,6,7,8,9]`
+- `neighbors([[1,2,3],[4,5,6],[7,8,9]], 1, 1, false)` -> `[2,4,6,8]`
+- `neighbors([[1,2,3],[4,5,6],[7,8,9]], 0, 0, false, true)` -> `[2,4,3,7]`
 
 ### Estrazione, permutazione e ordinamento
 
@@ -459,3 +596,25 @@ Per ogni coppia si puo scegliere anche come visualizzare i punti:
 ### Nota pratica
 
 Quando `x` oppure `y` sono vettoriali, una singola coppia `x -> y` puo quindi generare piu serie interne, anche se nel pannello del widget compare come una sola coppia configurata.
+
+## Widget matrice
+
+Il widget matrice visualizza direttamente il contenuto di un nodo output che produce una matrice.
+
+Caratteristiche:
+
+- selezione di un solo nodo sorgente
+- intestazioni con indice di riga e colonna
+- opzione per mostrare o nascondere i valori numerici nelle celle
+- opzione per mostrare o nascondere gli indici di righe e colonne
+- opzione per scegliere la dimensione delle celle oppure adattarle automaticamente alla finestra del widget
+- palette colore selezionabili in funzione dei valori numerici nelle celle
+- aggiornamento automatico durante l'esecuzione
+
+Se il nodo selezionato:
+
+- non esiste
+- ha un errore di valutazione
+- oppure non produce una matrice rettangolare
+
+il widget mostra un messaggio esplicito invece della griglia.

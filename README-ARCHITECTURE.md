@@ -19,7 +19,7 @@ Frontend condiviso:
 - `styles.css`
 - `app.js`
 - `semantic.js`
-- `probability.js`
+- `graph-functions.js`
 - `i18n-inline.js`
 
 Shell Electron:
@@ -49,8 +49,41 @@ Il renderer contiene:
 - pannelli di configurazione
 - runtime dei modelli
 - gestione dei widget
-- semantica delle espressioni
+- integrazione UI della semantica delle espressioni
 - risoluzione dei sottomodelli a livello logico
+
+### Modulo funzioni
+
+`graph-functions.js` contiene il catalogo centralizzato del linguaggio:
+- funzioni matematiche built-in
+- funzioni su vettori e matrici
+- generatori casuali
+- distribuzioni probabilistiche
+- metadatazione delle funzioni e variabili di sistema usata dall'editor e dall'help
+
+Espone in particolare:
+- `window.GraphFunctions.createMathScope(...)`
+- `window.GraphFunctions.probability`
+- `window.GraphFunctions.expressionDocs`
+
+### Modulo semantico
+
+`semantic.js` contiene:
+- parser delle espressioni
+- AST
+- valutazione delle espressioni
+- special forms del linguaggio:
+  - `array(...)`
+  - `map(...)`
+  - `filter(...)`
+  - `reduce(...)`
+  - `append(...)`
+  - forme condizionali di `count(...)` e `indicesWhere(...)`
+- runtime dei modelli e delle transizioni di stato
+
+In pratica:
+- `graph-functions.js` definisce cosa il linguaggio sa fare
+- `semantic.js` definisce come il linguaggio viene interpretato
 
 ### Layer di piattaforma
 
@@ -169,10 +202,6 @@ A seconda del sistema operativo, `electron-builder` produrrà file diversi:
 - macOS: `dmg` e `zip`
 
 ### Risorse opzionali ma consigliate
-MyAgent("Agente", Context(), role_and_skills=default_role, temperature=1.5).do(
-    "Come ti chiami?",
-    reasoning_effort="none"
-)
 La cartella `build/` è predisposta per contenere risorse di packaging, in particolare:
 - icone applicative
 - eventuali immagini usate dagli installer

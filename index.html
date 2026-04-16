@@ -44,9 +44,11 @@
             <button id="addEllipseNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.ellipse"><span data-i18n="menu.insert.ellipse">Variabile algebrica</span><span class="menu-shortcut">Alt+2</span></button>
             <button id="addDiamondNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.diamond"><span data-i18n="menu.insert.diamond">Parametro</span><span class="menu-shortcut">Alt+3</span></button>
             <button id="addSubmodelNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.submodel"><span data-i18n="menu.insert.submodel">Sottomodello</span><span class="menu-shortcut">Alt+4</span></button>
+            <button id="addTextItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.text"><span data-i18n="menu.insert.text">Testo</span></button>
             <hr class="menu-sep" />
             <button id="addSliderWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.sliderWidget" data-title-i18n="tooltip.menu.insert.slider">Slider</button>
             <hr class="menu-sep" />
+            <button id="addMatrixWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.matrixWidget" data-title-i18n="tooltip.menu.insert.matrix">Nuova matrice</button>
             <button id="addTableWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.tableWidget" data-title-i18n="tooltip.menu.insert.table">Nuova tabella valori</button>
             <button id="addXYChartWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.xyChartWidget" data-title-i18n="tooltip.menu.insert.chart">Nuovo grafico x-y</button>
           </div>
@@ -221,24 +223,37 @@
               <div id="nodeSubmodelInfo" class="expr-status hidden"></div>
               <div id="nodeSubmodelBindings" class="submodel-bindings hidden"></div>
 
-              <label id="nodeValueExprLabel" for="nodeValueExprInput" data-i18n="label.behaviorFunction" data-title-i18n="tooltip.node.expressionBehavior">Funzione comportamento</label>
-              <div id="nodeValueExprRow" class="expr-inline-row">
-                <input id="nodeValueExprInput" type="text" data-title-i18n="tooltip.node.expressionBehavior" />
-                <button id="editNodeValueExprBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression">Modifica...</button>
-              </div>
-              <div id="nodeValueExprStatus" class="expr-status hidden"></div>
-
               <label id="nodeInitialStateLabel" for="nodeInitialStateInput" data-i18n="label.initialState" data-title-i18n="tooltip.node.initialState">Stato iniziale</label>
               <div id="nodeInitialStateRow" class="expr-inline-row">
                 <input id="nodeInitialStateInput" type="text" data-title-i18n="tooltip.node.initialState" />
                 <button id="editNodeInitialStateBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression">Modifica...</button>
               </div>
               <div id="nodeInitialStateStatus" class="expr-status hidden"></div>
+
+              <label id="nodeValueExprLabel" for="nodeValueExprInput" data-i18n="label.behaviorFunction" data-title-i18n="tooltip.node.expressionBehavior">Funzione comportamento</label>
+              <div id="nodeValueExprRow" class="expr-inline-row">
+                <input id="nodeValueExprInput" type="text" data-title-i18n="tooltip.node.expressionBehavior" />
+                <button id="editNodeValueExprBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression">Modifica...</button>
+              </div>
+              <div id="nodeValueExprStatus" class="expr-status hidden"></div>
             </div>
 
             <div class="panel-section compact-panel-section">
               <label for="nodeValueOutput" data-i18n="label.valueComputed" data-title-i18n="tooltip.node.computedValue">Valore calcolato</label>
               <pre id="nodeValueOutput" class="value-output">-</pre>
+            </div>
+
+            <div class="panel-section compact-panel-section">
+              <div class="row2-exec">
+                <div>
+                  <label for="nodeFillColorInput" data-i18n="label.nodeFillColor">Sfondo</label>
+                  <select id="nodeFillColorInput"></select>
+                </div>
+                <div>
+                  <label for="nodeStrokeColorInput" data-i18n="label.nodeStrokeColor">Bordo</label>
+                  <select id="nodeStrokeColorInput"></select>
+                </div>
+              </div>
             </div>
 
             <div class="panel-section compact-panel-section">
@@ -257,6 +272,45 @@
               <span data-i18n="hint.edge.2">Drag punto: sposta.</span><br />
               <span data-i18n="hint.edge.3">Doppio click punto: rimuovi.</span><br />
               <span data-i18n="hint.edge.4">Trascina dal centro di un nodo a un altro nodo per creare frecce.</span>
+            </div>
+          </div>
+
+          <div id="textPanel" class="panel hidden">
+            <h3 data-i18n="panel.text">Testo</h3>
+
+            <div class="panel-section compact-panel-section">
+              <div class="row2-exec">
+                <div>
+                  <label for="textWidthInput" data-i18n="label.width">Larghezza</label>
+                  <input id="textWidthInput" type="number" min="40" max="1200" step="10" />
+                </div>
+                <div>
+                  <label for="textHeightInput" data-i18n="label.height">Altezza</label>
+                  <input id="textHeightInput" type="number" min="24" max="1200" step="10" />
+                </div>
+              </div>
+              <div class="row2-exec">
+                <div>
+                  <label for="textFillColorInput" data-i18n="label.background">Sfondo</label>
+                  <select id="textFillColorInput"></select>
+                </div>
+                <div>
+                  <label for="textStrokeColorInput" data-i18n="label.border">Bordo</label>
+                  <select id="textStrokeColorInput"></select>
+                </div>
+              </div>
+              <div class="hint" data-i18n="hint.textFormatting">Puoi usare HTML semplice come &lt;b&gt;, &lt;i&gt;, &lt;u&gt;, &lt;br&gt;, &lt;p&gt; e stili inline per colore, sfondo, allineamento e dimensione del testo.</div>
+              <label for="textHtmlInput" data-i18n="label.textHtml">Contenuto formattato</label>
+              <div id="textToolbar" class="text-toolbar">
+                <button type="button" class="small-btn text-tool-btn" data-text-tool="h1">H1</button>
+                <button type="button" class="small-btn text-tool-btn" data-text-tool="h2">H2</button>
+                <button type="button" class="small-btn text-tool-btn" data-text-tool="p">P</button>
+                <button type="button" class="small-btn text-tool-btn" data-text-tool="b"><strong>B</strong></button>
+                <button type="button" class="small-btn text-tool-btn" data-text-tool="i"><em>I</em></button>
+                <button type="button" class="small-btn text-tool-btn" data-text-tool="u"><u>U</u></button>
+                <button type="button" class="small-btn text-tool-btn" data-text-tool="br">BR</button>
+              </div>
+              <textarea id="textHtmlInput" class="panel-textarea"></textarea>
             </div>
           </div>
 
@@ -344,7 +398,7 @@
     </div>
     <div id="appTooltip" class="app-tooltip hidden" role="tooltip" aria-hidden="true"></div>
 
-    <script src="probability.js"></script>
+    <script src="graph-functions.js"></script>
     <script src="semantic.js"></script>
     <script src="i18n-inline.js"></script>
     <script src="app.js"></script>

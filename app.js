@@ -12,7 +12,9 @@ const addRectNodeItem = document.getElementById("addRectNodeItem");
 const addEllipseNodeItem = document.getElementById("addEllipseNodeItem");
 const addDiamondNodeItem = document.getElementById("addDiamondNodeItem");
 const addSubmodelNodeItem = document.getElementById("addSubmodelNodeItem");
+const addTextItem = document.getElementById("addTextItem");
 const addSliderWidgetItem = document.getElementById("addSliderWidgetItem");
+const addMatrixWidgetItem = document.getElementById("addMatrixWidgetItem");
 const addTableWidgetItem = document.getElementById("addTableWidgetItem");
 const addXYChartWidgetItem = document.getElementById("addXYChartWidgetItem");
 const fitContentItem = document.getElementById("fitContentItem");
@@ -89,10 +91,20 @@ const nodeInitialStateInput = document.getElementById("nodeInitialStateInput");
 const editNodeInitialStateBtn = document.getElementById("editNodeInitialStateBtn");
 const nodeInitialStateStatus = document.getElementById("nodeInitialStateStatus");
 const nodeValueOutput = document.getElementById("nodeValueOutput");
+const nodeFillColorInput = document.getElementById("nodeFillColorInput");
+const nodeStrokeColorInput = document.getElementById("nodeStrokeColorInput");
+const resetNodeColorsBtn = document.getElementById("resetNodeColorsBtn");
 const propsList = document.getElementById("propsList");
 const addPropBtn = document.getElementById("addPropBtn");
 
 const edgeInfo = document.getElementById("edgeInfo");
+const textPanel = document.getElementById("textPanel");
+const textWidthInput = document.getElementById("textWidthInput");
+const textHeightInput = document.getElementById("textHeightInput");
+const textFillColorInput = document.getElementById("textFillColorInput");
+const textStrokeColorInput = document.getElementById("textStrokeColorInput");
+const textToolbar = document.getElementById("textToolbar");
+const textHtmlInput = document.getElementById("textHtmlInput");
 const widgetConfig = document.getElementById("widgetConfig");
 const contextMenu = document.getElementById("contextMenu");
 const canvasContent = document.getElementById("canvasContent");
@@ -101,6 +113,7 @@ const expressionEditorModal = document.getElementById("expressionEditorModal");
 const expressionEditorTitle = document.getElementById("expressionEditorTitle");
 const expressionEditorTextarea = document.getElementById("expressionEditorTextarea");
 const expressionEditorHighlight = document.getElementById("expressionEditorHighlight");
+const expressionEditorSurface = document.querySelector(".expression-editor-surface");
 const expressionSymbolsFilter = document.getElementById("expressionSymbolsFilter");
 const expressionSidebar = document.getElementById("expressionSidebar");
 const expressionHelp = document.getElementById("expressionHelp");
@@ -131,10 +144,54 @@ const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 3;
 const SUPPORTED_LANGS = new Set(["it", "en"]);
 const CHART_SERIES_PALETTE = ["#0e7ac4", "#e67e22", "#27ae60", "#8e44ad", "#c0392b", "#16a085"];
+const NODE_FILL_COLOR_PRESETS = [
+  { key: "default", value: "" },
+  { key: "blue", value: "#dff2ff" },
+  { key: "green", value: "#dff6ec" },
+  { key: "yellow", value: "#fff7d8" },
+  { key: "orange", value: "#ffe8d6" },
+  { key: "red", value: "#ffe1e6" },
+  { key: "violet", value: "#eee3ff" },
+  { key: "gray", value: "#eef2f6" },
+];
+
+const NODE_STROKE_COLOR_PRESETS = [
+  { key: "default", value: "" },
+  { key: "blue", value: "#156fb8" },
+  { key: "green", value: "#1f8a5a" },
+  { key: "yellow", value: "#b48710" },
+  { key: "orange", value: "#c56416" },
+  { key: "red", value: "#c43a52" },
+  { key: "violet", value: "#6e49b8" },
+  { key: "gray", value: "#586978" },
+];
+
+const TEXT_FILL_COLOR_PRESETS = [
+  { key: "default", value: "" },
+  { key: "blue", value: "#eef6ff" },
+  { key: "green", value: "#edf9f2" },
+  { key: "yellow", value: "#fff9e7" },
+  { key: "orange", value: "#fff0e4" },
+  { key: "red", value: "#fff0f2" },
+  { key: "violet", value: "#f3eeff" },
+  { key: "gray", value: "#f3f6f9" },
+];
+
+const TEXT_STROKE_COLOR_PRESETS = [
+  { key: "default", value: "" },
+  { key: "blue", value: "#2f78c4" },
+  { key: "green", value: "#2d9564" },
+  { key: "yellow", value: "#bc8c19" },
+  { key: "orange", value: "#ca6a1d" },
+  { key: "red", value: "#c44b61" },
+  { key: "violet", value: "#7a58c1" },
+  { key: "gray", value: "#6b7b8a" },
+];
 
 let nodeCounter = 1;
 let edgeCounter = 1;
 let widgetCounter = 1;
+let textItemCounter = 1;
 let currentLang = "it";
 let i18n = {};
 let lastSavedSnapshot = "";
@@ -161,6 +218,7 @@ const graph = {
   properties: [],
   nodes: [],
   edges: [],
+  textItems: [],
   widgets: [],
   execution: {
     t0: 0,
@@ -208,6 +266,9 @@ const ui = {
   executionPlan: null,
   activeChartPairByWidgetId: new Map(),
   sidebarNodeId: null,
+  lastNodeActivate: null,
+  textDrag: null,
+  textResize: null,
 };
 
 const history = {
@@ -241,10 +302,12 @@ const edgesLayer = document.createElementNS(SVG_NS, "g");
 const previewLayer = document.createElementNS(SVG_NS, "g");
 const marqueeLayer = document.createElementNS(SVG_NS, "g");
 const nodesLayer = document.createElementNS(SVG_NS, "g");
+const textLayer = document.createElementNS(SVG_NS, "g");
 const controlsLayer = document.createElementNS(SVG_NS, "g");
 svg.appendChild(edgesLayer);
 svg.appendChild(previewLayer);
 svg.appendChild(nodesLayer);
+svg.appendChild(textLayer);
 svg.appendChild(controlsLayer);
 svg.appendChild(marqueeLayer);
 const semantics = window.GraphSemantics;
@@ -303,6 +366,121 @@ function snapPoint(p) {
 
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
+}
+
+function normalizeColorString(value) {
+  return /^#[0-9a-fA-F]{6}$/.test(String(value ?? "")) ? String(value) : "";
+}
+
+function defaultNodeFillColor() {
+  return "#fcfdff";
+}
+
+function defaultNodeStrokeColor() {
+  return "#2f4a62";
+}
+
+function sanitizeNodeVisualOptions(node) {
+  node.fillColor = normalizeColorString(node.fillColor);
+  node.strokeColor = normalizeColorString(node.strokeColor);
+}
+
+function populateNodeColorSelect(selectEl, presets) {
+  if (!selectEl) {
+    return;
+  }
+  const currentValue = String(selectEl.value ?? "");
+  selectEl.innerHTML = "";
+  presets.forEach((preset) => {
+    const opt = document.createElement("option");
+    opt.value = preset.value;
+    opt.textContent = t(`color.${preset.key}`);
+    selectEl.appendChild(opt);
+  });
+  selectEl.value = presets.some((preset) => preset.value === currentValue) ? currentValue : "";
+}
+
+function sanitizeTextItem(item) {
+  item.html = String(item?.html ?? "");
+  item.x = Number.isFinite(Number(item?.x)) ? Number(item.x) : 120;
+  item.y = Number.isFinite(Number(item?.y)) ? Number(item.y) : 120;
+  item.width = clamp(Number(item?.width) || 220, 40, 1200);
+  item.height = clamp(Number(item?.height) || 80, 24, 1200);
+  item.fillColor = normalizeColorString(item?.fillColor);
+  item.strokeColor = normalizeColorString(item?.strokeColor);
+}
+
+function sanitizeRichTextHtml(rawHtml) {
+  const template = document.createElement("template");
+  template.innerHTML = String(rawHtml ?? "");
+  const allowedTags = new Set([
+    "B", "STRONG", "I", "EM", "U", "BR",
+    "P", "DIV", "SPAN",
+    "H1", "H2", "H3", "H4", "H5", "H6",
+    "UL", "OL", "LI", "SUP", "SUB",
+  ]);
+  const allowedStyles = new Set([
+    "color",
+    "background-color",
+    "font-size",
+    "font-weight",
+    "font-style",
+    "text-decoration",
+    "text-align",
+    "line-height",
+  ]);
+
+  const sanitizeStyle = (value) => {
+    return String(value || "")
+      .split(";")
+      .map((chunk) => chunk.trim())
+      .filter(Boolean)
+      .map((chunk) => {
+        const [prop, ...rest] = chunk.split(":");
+        const key = String(prop || "").trim().toLowerCase();
+        if (!allowedStyles.has(key)) {
+          return "";
+        }
+        const val = rest.join(":").trim();
+        return val ? `${key}: ${val}` : "";
+      })
+      .filter(Boolean)
+      .join("; ");
+  };
+
+  const walk = (node) => {
+    [...node.childNodes].forEach((child) => {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const tag = child.tagName.toUpperCase();
+        if (!allowedTags.has(tag)) {
+          const fragment = document.createDocumentFragment();
+          while (child.firstChild) {
+            fragment.appendChild(child.firstChild);
+          }
+          child.replaceWith(fragment);
+          walk(node);
+          return;
+        }
+        [...child.attributes].forEach((attr) => {
+          if (attr.name.toLowerCase() !== "style") {
+            child.removeAttribute(attr.name);
+          }
+        });
+        const style = sanitizeStyle(child.getAttribute("style"));
+        if (style) {
+          child.setAttribute("style", style);
+        } else {
+          child.removeAttribute("style");
+        }
+        walk(child);
+      } else if (child.nodeType === Node.COMMENT_NODE) {
+        child.remove();
+      }
+    });
+  };
+
+  walk(template.content);
+  return template.innerHTML.trim();
 }
 
 function hasPlatformApi(name) {
@@ -695,6 +873,10 @@ function localizeExpressionErrorMessage(message) {
   if (lower.includes("missing : after property id")) {
     return t("expr.error.objectColon");
   }
+  const notDefinedMatch = raw.match(/^([A-Za-z_$][A-Za-z0-9_$]*) is not defined$/);
+  if (notDefinedMatch) {
+    return `${notDefinedMatch[1]} non definito`;
+  }
   return raw;
 }
 
@@ -725,7 +907,18 @@ function validateExpressionDraft(value, fieldKey = null) {
     return { ok: true, empty: true };
   }
   const allowStateTransitionOnly = Boolean(meta && meta.key === "value" && node && isStateNode(node));
-  const result = semantics.validateExpressionSyntax(text, [], {
+  const extraNames = [];
+  if (node) {
+    graph.edges
+      .filter((edge) => edge.to === node.id)
+      .map((edge) => getNodeById(edge.from))
+      .filter(Boolean)
+      .filter((depNode) => (meta?.key !== "initial") || depNode.shape === "diamond")
+      .forEach((depNode) => {
+        extraNames.push(depNode.name);
+      });
+  }
+  const result = semantics.validateExpressionSyntax(text, extraNames, {
     allowThisAlias: allowStateTransitionOnly,
     allowIntegral: allowStateTransitionOnly,
   });
@@ -748,7 +941,18 @@ function validateNodeDefinition(node) {
   if (!node) {
     return { ok: true };
   }
-  const validateExpr = (value, options = {}) => semantics.validateExpressionSyntax(String(value ?? ""), [], options);
+  const validateExpr = (value, fieldKey, options = {}) => {
+    const extraNames = [];
+    graph.edges
+      .filter((edge) => edge.to === node.id)
+      .map((edge) => getNodeById(edge.from))
+      .filter(Boolean)
+      .filter((depNode) => fieldKey !== "initial" || depNode.shape === "diamond")
+      .forEach((depNode) => {
+        extraNames.push(depNode.name);
+      });
+    return semantics.validateExpressionSyntax(String(value ?? ""), extraNames, options);
+  };
   const valueExpr = String(node.valueExpression ?? "");
   const initialExpr = String(node.initialStateExpression ?? "");
 
@@ -766,14 +970,14 @@ function validateNodeDefinition(node) {
     if (!valueExpr.trim()) {
       return { ok: false, reason: "missingTransition" };
     }
-    const transitionResult = validateExpr(valueExpr, { allowThisAlias: true, allowIntegral: true });
+    const transitionResult = validateExpr(valueExpr, "value", { allowThisAlias: true, allowIntegral: true });
     if (!transitionResult.ok) {
       return { ok: false, reason: "invalidTransition", message: transitionResult.message || "" };
     }
     if (!initialExpr.trim()) {
       return { ok: false, reason: "missingInitialState" };
     }
-    const initialResult = validateExpr(initialExpr);
+    const initialResult = validateExpr(initialExpr, "initial");
     if (!initialResult.ok) {
       return { ok: false, reason: "invalidInitialState", message: initialResult.message || "" };
     }
@@ -786,7 +990,7 @@ function validateNodeDefinition(node) {
   if (!valueExpr.trim()) {
     return { ok: false, reason: node.shape === "diamond" ? "missingValue" : "missingBehavior" };
   }
-  const result = validateExpr(valueExpr);
+  const result = validateExpr(valueExpr, "value");
   if (!result.ok) {
     return { ok: false, reason: node.shape === "diamond" ? "invalidValue" : "invalidBehavior", message: result.message || "" };
   }
@@ -927,66 +1131,23 @@ function expressionEditorMeta() {
 }
 
 function expressionDocMap() {
-  return {
-    this: { kind: "variable", signature: "this", description: t("expr.help.this") },
-    $i: { kind: "variable", signature: "$i", description: t("expr.help.agentIndex") },
-    time: { kind: "variable", signature: "time", description: t("expr.help.time") },
-    t0: { kind: "variable", signature: "t0", description: t("expr.help.t0") },
-    t1: { kind: "variable", signature: "t1", description: t("expr.help.t1") },
-    dt: { kind: "variable", signature: "dt", description: t("expr.help.dt") },
-    if: { kind: "function", signature: "if(condition, whenTrue, whenFalse)", description: t("expr.help.if"), insertText: "if()", cursorOffset: 3 },
-    integral: { kind: "function", signature: "integral(x)", description: t("expr.help.integral"), insertText: "integral()", cursorOffset: 9 },
-    getProperty: { kind: "function", signature: "getProperty(name, fallback)", description: t("expr.help.getProperty"), insertText: "getProperty()", cursorOffset: 12 },
-    setProperty: { kind: "function", signature: "setProperty(name, value)", description: t("expr.help.setProperty"), insertText: "setProperty()", cursorOffset: 12 },
-    getModelProperty: { kind: "function", signature: "getModelProperty(name, fallback)", description: t("expr.help.getModelProperty"), insertText: "getModelProperty()", cursorOffset: 17 },
-    setModelProperty: { kind: "function", signature: "setModelProperty(name, value)", description: t("expr.help.setModelProperty"), insertText: "setModelProperty()", cursorOffset: 17 },
-    array: { kind: "function", signature: "array(dim | [d0,d1,...], expr)", description: t("expr.help.array"), insertText: "array()", cursorOffset: 6 },
-    map: { kind: "function", signature: "map(expr, array)", description: t("expr.help.map"), insertText: "map()", cursorOffset: 4 },
-    filter: { kind: "function", signature: "filter(cond, array)", description: t("expr.help.filter"), insertText: "filter()", cursorOffset: 7 },
-    reduce: { kind: "function", signature: "reduce(op|fn, vector[, init]) | reduce(op|fn, matrix, axis[, init])", description: t("expr.help.reduce"), insertText: "reduce()", cursorOffset: 7 },
-    append: { kind: "function", signature: "append(vector, value|vector) | append(matrix, rowVector)", description: t("expr.help.append"), insertText: "append()", cursorOffset: 7 },
-    set: { kind: "function", signature: "set(vector)", description: t("expr.help.set"), insertText: "set()", cursorOffset: 4 },
-    union: { kind: "function", signature: "union(vectorA, vectorB)", description: t("expr.help.union"), insertText: "union()", cursorOffset: 6 },
-    intersection: { kind: "function", signature: "intersection(vectorA, vectorB)", description: t("expr.help.intersection"), insertText: "intersection()", cursorOffset: 13 },
-    flatten: { kind: "function", signature: "flatten(matrix)", description: t("expr.help.flatten"), insertText: "flatten()", cursorOffset: 8 },
-    choice: { kind: "function", signature: "choice(vector)", description: t("expr.help.choice"), insertText: "choice()", cursorOffset: 7 },
-    shuffle: { kind: "function", signature: "shuffle(vector)", description: t("expr.help.shuffle"), insertText: "shuffle()", cursorOffset: 8 },
-    sort: { kind: "function", signature: "sort(vector)", description: t("expr.help.sort"), insertText: "sort()", cursorOffset: 5 },
-    size: { kind: "function", signature: "size(array[, axis])", description: t("expr.help.size"), insertText: "size()", cursorOffset: 5 },
-    average: { kind: "function", signature: "average(array[, axis])", description: t("expr.help.average"), insertText: "average()", cursorOffset: 8 },
-    stdev: { kind: "function", signature: "stdev(array[, axis])", description: t("expr.help.stdev"), insertText: "stdev()", cursorOffset: 6 },
-    range: { kind: "function", signature: "range(stop) | range(start, stop[, step])", description: t("expr.help.range"), insertText: "range()", cursorOffset: 6 },
-    gaussian: { kind: "probability", signature: "gaussian([params], x, mode)", description: t("expr.help.gaussian"), insertText: "gaussian()", cursorOffset: 9 },
-    uniform: { kind: "probability", signature: "uniform([params], x, mode)", description: t("expr.help.uniform"), insertText: "uniform()", cursorOffset: 8 },
-    exponential: { kind: "probability", signature: "exponential([params], x, mode)", description: t("expr.help.exponential"), insertText: "exponential()", cursorOffset: 12 },
-    rand: { kind: "probability", signature: "rand([max]) | rand(min, max)", description: t("expr.help.rand"), insertText: "rand()", cursorOffset: 5 },
-    randInt: { kind: "probability", signature: "randInt(max) | randInt(min, max)", description: t("expr.help.randInt"), insertText: "randInt()", cursorOffset: 8 },
-    sin: { kind: "math", signature: "sin(x)", description: t("expr.help.sin"), insertText: "sin()", cursorOffset: 4 },
-    cos: { kind: "math", signature: "cos(x)", description: t("expr.help.cos"), insertText: "cos()", cursorOffset: 4 },
-    tan: { kind: "math", signature: "tan(x)", description: t("expr.help.tan"), insertText: "tan()", cursorOffset: 4 },
-    asin: { kind: "math", signature: "asin(x)", description: t("expr.help.asin"), insertText: "asin()", cursorOffset: 5 },
-    acos: { kind: "math", signature: "acos(x)", description: t("expr.help.acos"), insertText: "acos()", cursorOffset: 5 },
-    atan: { kind: "math", signature: "atan(x)", description: t("expr.help.atan"), insertText: "atan()", cursorOffset: 5 },
-    atan2: { kind: "math", signature: "atan2(y, x)", description: t("expr.help.atan2"), insertText: "atan2()", cursorOffset: 6 },
-    sinh: { kind: "math", signature: "sinh(x)", description: t("expr.help.sinh"), insertText: "sinh()", cursorOffset: 5 },
-    cosh: { kind: "math", signature: "cosh(x)", description: t("expr.help.cosh"), insertText: "cosh()", cursorOffset: 5 },
-    tanh: { kind: "math", signature: "tanh(x)", description: t("expr.help.tanh"), insertText: "tanh()", cursorOffset: 5 },
-    exp: { kind: "math", signature: "exp(x)", description: t("expr.help.exp"), insertText: "exp()", cursorOffset: 4 },
-    log: { kind: "math", signature: "log(x)", description: t("expr.help.log"), insertText: "log()", cursorOffset: 4 },
-    log10: { kind: "math", signature: "log10(x)", description: t("expr.help.log10"), insertText: "log10()", cursorOffset: 6 },
-    log2: { kind: "math", signature: "log2(x)", description: t("expr.help.log2"), insertText: "log2()", cursorOffset: 5 },
-    sqrt: { kind: "math", signature: "sqrt(x)", description: t("expr.help.sqrt"), insertText: "sqrt()", cursorOffset: 5 },
-    pow: { kind: "math", signature: "pow(base, exp)", description: t("expr.help.pow"), insertText: "pow()", cursorOffset: 4 },
-    abs: { kind: "math", signature: "abs(x)", description: t("expr.help.abs"), insertText: "abs()", cursorOffset: 4 },
-    min: { kind: "math", signature: "min(a, b, ...)", description: t("expr.help.min"), insertText: "min()", cursorOffset: 4 },
-    max: { kind: "math", signature: "max(a, b, ...)", description: t("expr.help.max"), insertText: "max()", cursorOffset: 4 },
-    round: { kind: "math", signature: "round(x)", description: t("expr.help.round"), insertText: "round()", cursorOffset: 6 },
-    floor: { kind: "math", signature: "floor(x)", description: t("expr.help.floor"), insertText: "floor()", cursorOffset: 6 },
-    ceil: { kind: "math", signature: "ceil(x)", description: t("expr.help.ceil"), insertText: "ceil()", cursorOffset: 5 },
-    trunc: { kind: "math", signature: "trunc(x)", description: t("expr.help.trunc"), insertText: "trunc()", cursorOffset: 6 },
-    int: { kind: "math", signature: "int(x)", description: t("expr.help.int"), insertText: "int()", cursorOffset: 4 },
-    sign: { kind: "math", signature: "sign(x)", description: t("expr.help.sign"), insertText: "sign()", cursorOffset: 5 },
+  const docs = window.GraphFunctions?.expressionDocs || globalThis.GraphFunctions?.expressionDocs;
+  if (!docs) {
+    return {};
+  }
+  const out = {};
+  const appendEntries = (entries) => {
+    Object.entries(entries || {}).forEach(([name, entry]) => {
+      out[name] = {
+        ...entry,
+        name,
+        description: t(entry.descriptionKey),
+      };
+    });
   };
+  appendEntries(docs.variables);
+  appendEntries(docs.functions);
+  return out;
 }
 
 function globalHelpEntries() {
@@ -1068,7 +1229,7 @@ function renderExpressionLibrary() {
       if (!filter) {
         return true;
       }
-      return entry.name.toLowerCase().includes(filter) || String(entry.signature || "").toLowerCase().includes(filter);
+      return entry.name.toLowerCase().includes(filter);
     })
     .sort((left, right) => {
       const leftName = left.name.toLowerCase();
@@ -1734,6 +1895,7 @@ function closeExpressionEditor() {
     expressionEditorHighlight.innerHTML = "";
     expressionEditorHighlight.classList.remove("invalid");
   }
+  expressionEditorSurface?.classList.remove("invalid");
   if (expressionLibrary) {
     expressionLibrary.innerHTML = "";
     expressionLibrary.classList.add("hidden");
@@ -1763,6 +1925,7 @@ function refreshExpressionEditorValidation() {
     true,
     null,
   );
+  expressionEditorSurface?.classList.toggle("invalid", !syntaxResult.ok);
   expressionEditorApplyBtn.disabled = !syntaxResult.ok;
   ui.expressionEditor.syntaxOk = syntaxResult.ok;
   renderExpressionHighlight();
@@ -1866,6 +2029,18 @@ function openExpressionEditor(fieldKey) {
   expressionEditorTextarea.select();
 }
 
+function openNodePrimaryEditor(node) {
+  if (!node || isExecutionFrozen()) {
+    return;
+  }
+  if (isSubmodelNode(node)) {
+    void openSubmodelNode(node);
+    return;
+  }
+  selectSingleNode(node.id);
+  openExpressionEditor("value");
+}
+
 function openCustomExpressionEditor(title, initialValue, onApply) {
   if (!expressionEditorModal || !expressionEditorTextarea || !expressionEditorTitle) {
     return;
@@ -1926,6 +2101,10 @@ function isFirefoxBrowser() {
 
 function applyI18nToDom() {
   document.documentElement.lang = currentLang;
+  populateNodeColorSelect(nodeFillColorInput, NODE_FILL_COLOR_PRESETS);
+  populateNodeColorSelect(nodeStrokeColorInput, NODE_STROKE_COLOR_PRESETS);
+  populateNodeColorSelect(textFillColorInput, TEXT_FILL_COLOR_PRESETS);
+  populateNodeColorSelect(textStrokeColorInput, TEXT_STROKE_COLOR_PRESETS);
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     const key = el.getAttribute("data-i18n");
     if (!key) {
@@ -2083,6 +2262,25 @@ function formatComputedValue(value) {
   return String(value);
 }
 
+function summarizeTooltipValue(value) {
+  if (Array.isArray(value)) {
+    const isMatrix =
+      value.length > 0 &&
+      value.every((row) => Array.isArray(row)) &&
+      value.every((row) => row.length === value[0].length);
+    if (isMatrix) {
+      const rows = value.length;
+      const cols = value[0]?.length ?? 0;
+      if ((rows * cols) > 16) {
+        return t("text.matrixSummary", { rows, cols });
+      }
+    } else if (value.every((item) => !Array.isArray(item)) && value.length > 8) {
+      return t("text.vectorSummary", { size: value.length });
+    }
+  }
+  return formatComputedValue(value);
+}
+
 function normalizeExecutionConfig(raw) {
   const t0 = Number(raw?.t0);
   const dt = Number(raw?.dt);
@@ -2124,6 +2322,9 @@ function propagateNodeRenameInExpressions(oldName, newName) {
     if (widget.type === "table" && Array.isArray(widget.columns)) {
       widget.columns = widget.columns.map((name) => (name === oldName ? newName : name));
     }
+    if (widget.type === "matrix" && widget.source === oldName) {
+      widget.source = newName;
+    }
     if (widget.type === "xychart") {
       if (Array.isArray(widget.xyPairs)) {
         widget.xyPairs = widget.xyPairs.map((pair) => ({
@@ -2146,6 +2347,9 @@ function removeNodeFromAllWidgetDisplays(nodeName) {
   graph.widgets.forEach((widget) => {
     if (widget.type === "table" && Array.isArray(widget.columns)) {
       widget.columns = widget.columns.filter((name) => name !== nodeName);
+    }
+    if (widget.type === "matrix" && widget.source === nodeName) {
+      widget.source = "";
     }
     if (widget.type === "xychart") {
       if (Array.isArray(widget.xyPairs)) {
@@ -2504,6 +2708,13 @@ function graphBounds() {
     maxY = Math.max(maxY, widget.y + height);
   });
 
+  graph.textItems.forEach((item) => {
+    minX = Math.min(minX, item.x);
+    minY = Math.min(minY, item.y);
+    maxX = Math.max(maxX, item.x + item.width);
+    maxY = Math.max(maxY, item.y + item.height);
+  });
+
   const margin = 180;
   minX -= margin;
   minY -= margin;
@@ -2519,7 +2730,7 @@ function graphBounds() {
 }
 
 function updateCanvasSize(anchorClientX = null, anchorClientY = null, force = false) {
-  if (!force && (ui.drag || ui.resize || ui.controlPointDrag || ui.edgeCreate || ui.marquee)) {
+  if (!force && (ui.drag || ui.resize || ui.controlPointDrag || ui.edgeCreate || ui.marquee || ui.textDrag || ui.textResize)) {
     return;
   }
 
@@ -2755,6 +2966,14 @@ function nodeExists(id) {
   return graph.nodes.some((n) => n.id === id);
 }
 
+function textItemExists(id) {
+  return graph.textItems.some((item) => item.id === id);
+}
+
+function getTextItemById(id) {
+  return graph.textItems.find((item) => item.id === id) || null;
+}
+
 function clearAllSelection() {
   ui.selected = null;
   ui.selectedNodes.clear();
@@ -2779,6 +2998,15 @@ function syncNodeSelectionFocus() {
     return;
   }
 
+  if (ui.selected?.type === "text") {
+    const item = getTextItemById(ui.selected.id);
+    if (!item) {
+      ui.selected = null;
+    }
+    ui.selectedNodes.clear();
+    return;
+  }
+
   if (ui.selectedNodes.size === 1) {
     const id = [...ui.selectedNodes][0];
     ui.selected = { type: "node", id };
@@ -2798,6 +3026,13 @@ function selectEdge(id) {
 
 function selectWidget(id) {
   ui.selected = { type: "widget", id };
+  ui.selectedNodes.clear();
+  ui.selectedControlPoint = null;
+  refreshSidebar();
+}
+
+function selectTextItem(id) {
+  ui.selected = { type: "text", id };
   ui.selectedNodes.clear();
   ui.selectedControlPoint = null;
   refreshSidebar();
@@ -2841,6 +3076,7 @@ function exportGraphData() {
     nodeCounter,
     edgeCounter,
     widgetCounter,
+    textItemCounter,
     execution: {
       t0: graph.execution.t0,
       dt: graph.execution.dt,
@@ -2862,6 +3098,8 @@ function exportGraphData() {
         y: n.y,
         width: n.width,
         height: n.height,
+        fillColor: String(n.fillColor ?? ""),
+        strokeColor: String(n.strokeColor ?? ""),
         properties: n.properties.map((p) => ({ key: String(p.key), value: String(p.value) })),
       };
       if (type === "algebraic") {
@@ -2898,6 +3136,16 @@ function exportGraphData() {
       targetPort: String(e.targetPort ?? ""),
       controlPoints: (e.controlPoints || []).map((cp) => ({ x: cp.x, y: cp.y })),
     })),
+    textItems: graph.textItems.map((item) => ({
+      id: item.id,
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
+      fillColor: String(item.fillColor ?? ""),
+      strokeColor: String(item.strokeColor ?? ""),
+      html: String(item.html ?? ""),
+    })),
     widgets: graph.widgets.map((w) => ({
       id: w.id,
       type: w.type,
@@ -2915,6 +3163,13 @@ function exportGraphData() {
       yMax: Number.isFinite(Number(w.yMax)) ? Number(w.yMax) : null,
       showGrid: w.showGrid !== false,
       source: String(w.source ?? ""),
+      showNumericValues: w.showNumericValues !== false,
+      showIndices: w.showIndices !== false,
+      autoFitCells: w.autoFitCells !== false,
+      cellSize: Number.isFinite(Number(w.cellSize)) ? clamp(Number(w.cellSize), 2, 96) : 28,
+      colorScheme: ["blue", "heat", "grayscale", "diverging", "none"].includes(String(w.colorScheme ?? ""))
+        ? String(w.colorScheme)
+        : "blue",
       min: Number.isFinite(Number(w.min)) ? Number(w.min) : 0,
       max: Number.isFinite(Number(w.max)) ? Number(w.max) : 100,
       step: Number.isFinite(Number(w.step)) ? Number(w.step) : 1,
@@ -3029,6 +3284,8 @@ function applyGraphData(data) {
       y: n.y,
       width: n.width,
       height: n.height,
+      fillColor: normalizeColorString(n.fillColor),
+      strokeColor: normalizeColorString(n.strokeColor),
       valueExpression: shape === "rect"
         ? String(n.stateTransition ?? "")
         : String(n.valueExpression ?? ""),
@@ -3057,6 +3314,7 @@ function applyGraphData(data) {
       properties: n.properties.map((p) => ({ key: p.key, value: p.value })),
     };
     normalizeNodeDescriptionProperty(node);
+    sanitizeNodeVisualOptions(node);
     return node;
   });
   graph.edges = data.edges.map((e) => ({
@@ -3068,9 +3326,25 @@ function applyGraphData(data) {
     controlPoints: (e.controlPoints || []).map((cp) => ({ x: cp.x, y: cp.y })),
   }));
   graph.edges.forEach((edge) => sanitizeEdgePorts(edge));
+  graph.textItems = Array.isArray(data.textItems)
+    ? data.textItems.map((item) => {
+      const out = {
+        id: item.id,
+        x: item.x,
+        y: item.y,
+        width: item.width,
+        height: item.height,
+        fillColor: normalizeColorString(item.fillColor),
+        strokeColor: normalizeColorString(item.strokeColor),
+        html: String(item.html ?? ""),
+      };
+      sanitizeTextItem(out);
+      return out;
+    })
+    : [];
   graph.widgets = Array.isArray(data.widgets)
     ? data.widgets
-      .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider"))
+      .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider" || w.type === "matrix"))
       .map((w) => ({
         id: w.id,
         type: w.type,
@@ -3088,6 +3362,13 @@ function applyGraphData(data) {
         yMax: Number.isFinite(Number(w.yMax)) ? Number(w.yMax) : null,
         showGrid: w.showGrid !== false,
         source: String(w.source ?? ""),
+        showNumericValues: w.showNumericValues !== false,
+        showIndices: w.showIndices !== false,
+        autoFitCells: w.autoFitCells !== false,
+        cellSize: Number.isFinite(Number(w.cellSize)) ? clamp(Number(w.cellSize), 2, 96) : 28,
+        colorScheme: ["blue", "heat", "grayscale", "diverging", "none"].includes(String(w.colorScheme ?? ""))
+          ? String(w.colorScheme)
+          : "blue",
         min: Number.isFinite(Number(w.min)) ? Number(w.min) : 0,
         max: Number.isFinite(Number(w.max)) ? Number(w.max) : 100,
         step: Number.isFinite(Number(w.step)) ? Number(w.step) : 1,
@@ -3129,6 +3410,7 @@ function applyGraphData(data) {
   nodeCounter = Number(data.nodeCounter) || 1;
   edgeCounter = Number(data.edgeCounter) || 1;
   widgetCounter = Number(data.widgetCounter) || 1;
+  textItemCounter = Number(data.textItemCounter) || 1;
   normalizeInputNodeFlags();
   initializeStateNodes(graph.execution.t0);
 
@@ -3141,6 +3423,8 @@ function applyGraphData(data) {
   ui.marquee = null;
   ui.widgetDrag = null;
   ui.widgetResize = null;
+  ui.textDrag = null;
+  ui.textResize = null;
   invalidateExecutionPlan();
   clearAllSelection();
 }
@@ -3212,7 +3496,8 @@ function hasAnySelection() {
     ui.selectedNodes.size > 0 ||
     ui.selectedControlPoint ||
     ui.selected?.type === "edge" ||
-    ui.selected?.type === "widget",
+    ui.selected?.type === "widget" ||
+    ui.selected?.type === "text",
   );
 }
 
@@ -3277,7 +3562,7 @@ function setControlsDisabled(root, disabled, allowedControls = []) {
 function updateEditingLockUi() {
   const frozen = isExecutionFrozen();
   sidebar?.classList.toggle("execution-frozen", frozen);
-  [globalPanel, nodePanel, edgePanel, widgetPanel].forEach((panel) => {
+  [globalPanel, nodePanel, textPanel, edgePanel, widgetPanel].forEach((panel) => {
     panel?.classList.toggle("execution-frozen", frozen);
   });
   [
@@ -3285,7 +3570,9 @@ function updateEditingLockUi() {
     addEllipseNodeItem,
     addDiamondNodeItem,
     addSubmodelNodeItem,
+    addTextItem,
     addSliderWidgetItem,
+    addMatrixWidgetItem,
     addTableWidgetItem,
     addXYChartWidgetItem,
   ].forEach((btn) => {
@@ -3296,6 +3583,7 @@ function updateEditingLockUi() {
 
   setControlsDisabled(globalPanel, frozen, [runFullModelBtn, manualStepBtn, timedToggleBtn, resetExecBtn]);
   setControlsDisabled(nodePanel, frozen);
+  setControlsDisabled(textPanel, frozen);
   setControlsDisabled(edgePanel, frozen);
   setControlsDisabled(widgetPanel, frozen);
 
@@ -3330,6 +3618,8 @@ function collectSelectedForClipboard() {
       y: n.y,
       width: n.width,
       height: n.height,
+      fillColor: String(n.fillColor ?? ""),
+      strokeColor: String(n.strokeColor ?? ""),
       valueExpression: n.valueExpression,
       initialStateExpression: n.initialStateExpression,
       modelPath: n.modelPath,
@@ -3403,6 +3693,8 @@ function pasteFromClipboard() {
         y: snap(n.y + offset),
         width: n.width,
         height: n.height,
+        fillColor: normalizeColorString(n.fillColor),
+        strokeColor: normalizeColorString(n.strokeColor),
         valueExpression: String(n.valueExpression ?? ""),
         initialStateExpression: String(n.initialStateExpression ?? ""),
         modelPath: String(n.modelPath ?? ""),
@@ -3416,6 +3708,7 @@ function pasteFromClipboard() {
         properties: (n.properties || []).map((p) => ({ key: String(p.key), value: String(p.value) })),
       };
       normalizeNodeDescriptionProperty(node);
+      sanitizeNodeVisualOptions(node);
       graph.nodes.push(node);
       idMap.set(n.id, newId);
       newNodeIds.push(newId);
@@ -3613,6 +3906,8 @@ function addNode(shape, atPoint = null) {
     y: py,
     width: 120,
     height: 70,
+    fillColor: "",
+    strokeColor: "",
     valueExpression: "",
     initialStateExpression: "",
     modelPath: "",
@@ -3626,6 +3921,7 @@ function addNode(shape, atPoint = null) {
     properties: [],
   };
   normalizeNodeDescriptionProperty(node);
+  sanitizeNodeVisualOptions(node);
   graph.nodes.push(node);
   selectSingleNode(node.id);
 }
@@ -3684,6 +3980,52 @@ function addTableWidget(at = null) {
     showHistory: false,
     rows: [],
     columns: [],
+  });
+}
+
+function addCanvasText(at = null) {
+  const id = textItemCounter++;
+  const z = Math.max(0.0001, ui.zoom || 1);
+  const x = at?.x ?? (graphViewport.scrollLeft + 60) / z;
+  const y = at?.y ?? (graphViewport.scrollTop + 60) / z;
+  graph.textItems.push({
+    id,
+    x,
+    y,
+    width: 240,
+    height: 90,
+    fillColor: "",
+    strokeColor: "",
+    html: `<p><strong>${t("menu.insert.text")}</strong></p><p>${t("text.defaultCanvasText")}</p>`,
+  });
+  selectTextItem(id);
+}
+
+function addMatrixWidget(at = null) {
+  const id = widgetCounter++;
+  const z = Math.max(0.0001, ui.zoom || 1);
+  const x = at?.x ?? (graphViewport.scrollLeft + 60) / z;
+  const y = at?.y ?? (graphViewport.scrollTop + 60) / z;
+  const nodeNames = graph.nodes.filter((n) => n.output).map((n) => n.name);
+  graph.widgets.push({
+    id,
+    type: "matrix",
+    customTitle: "",
+    x,
+    y,
+    width: 320,
+    height: 240,
+    minimized: false,
+    outputOnly: true,
+    source: nodeNames[0] || "",
+    showNumericValues: true,
+    showIndices: true,
+    autoFitCells: true,
+    cellSize: 28,
+    colorScheme: "blue",
+    rows: [],
+    columns: [],
+    xyPairs: [],
   });
 }
 
@@ -3801,6 +4143,20 @@ function sanitizeTableWidgetOptions(widget) {
   if (!Array.isArray(widget.rows)) {
     widget.rows = [];
   }
+}
+
+function sanitizeMatrixWidgetOptions(widget) {
+  const allowedNames = new Set(graph.nodes.filter((n) => n.output).map((n) => n.name));
+  widget.source = String(widget.source ?? "");
+  if (widget.source && !allowedNames.has(widget.source)) {
+    widget.source = "";
+  }
+  widget.showNumericValues = widget.showNumericValues !== false;
+  widget.showIndices = widget.showIndices !== false;
+  widget.autoFitCells = widget.autoFitCells !== false;
+  widget.cellSize = Number.isFinite(Number(widget.cellSize)) ? clamp(Number(widget.cellSize), 2, 96) : 28;
+  const allowedPalettes = new Set(["blue", "heat", "grayscale", "diverging", "none"]);
+  widget.colorScheme = allowedPalettes.has(String(widget.colorScheme ?? "")) ? String(widget.colorScheme) : "blue";
 }
 
 function sanitizeWidgetXYPairs(widget) {
@@ -3943,6 +4299,14 @@ function sanitizeSliderWidgetOptions(widget) {
   if (widget.value > widget.max) {
     widget.value = widget.max;
   }
+}
+
+function isFiniteMatrix(value) {
+  return Array.isArray(value)
+    && value.length >= 0
+    && value.every((row) => Array.isArray(row))
+    && (value.length === 0 || value.every((row) => row.length === value[0].length))
+    && value.every((row) => row.every((item) => isFiniteScalar(item)));
 }
 
 function snapSliderValue(value, min, max, step) {
@@ -4315,6 +4679,9 @@ function widgetDefaultTitle(widget) {
   if (widget.type === "xychart") {
     return t("widget.chartTitle", { id: widget.id });
   }
+  if (widget.type === "matrix") {
+    return t("widget.matrixTitle", { id: widget.id });
+  }
   if (widget.type === "slider") {
     return t("widget.sliderTitle", { id: widget.id });
   }
@@ -4347,6 +4714,139 @@ function buildTableRowElement(displayedCols, entry) {
     row.appendChild(td);
   });
   return row;
+}
+
+function matrixPaletteColor(scheme, ratio) {
+  const tValue = clamp(Number(ratio) || 0, 0, 1);
+  if (scheme === "heat") {
+    const hue = 44 - (44 * tValue);
+    const sat = 90;
+    const light = 94 - (46 * tValue);
+    return `hsl(${hue.toFixed(1)} ${sat}% ${light.toFixed(1)}%)`;
+  }
+  if (scheme === "grayscale") {
+    const light = 98 - (68 * tValue);
+    return `hsl(210 10% ${light.toFixed(1)}%)`;
+  }
+  if (scheme === "diverging") {
+    const hue = tValue < 0.5 ? 210 : 12;
+    const distance = Math.abs(tValue - 0.5) * 2;
+    const sat = 68;
+    const light = 96 - (44 * distance);
+    return `hsl(${hue} ${sat}% ${light.toFixed(1)}%)`;
+  }
+  return `hsl(204 76% ${94 - (38 * tValue)}%)`;
+}
+
+function matrixCellBackgroundColor(value, minValue, maxValue, scheme) {
+  if (scheme === "none" || !isFiniteScalar(value)) {
+    return "";
+  }
+  const range = maxValue - minValue;
+  if (range > 0) {
+    return matrixPaletteColor(scheme, (value - minValue) / range);
+  }
+  if (value === 0) {
+    return "";
+  }
+  return matrixPaletteColor(scheme, 0.55);
+}
+
+function renderMatrixWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
+  body.innerHTML = "";
+  sanitizeMatrixWidgetOptions(widget);
+  const sourceNode = nodeMap.get(widget.source);
+  if (!sourceNode || !widget.source) {
+    const msg = document.createElement("div");
+    msg.className = "empty-props";
+    msg.textContent = t("widget.matrixEmpty");
+    body.appendChild(msg);
+    return;
+  }
+  if (sourceNode.computedError) {
+    const msg = document.createElement("div");
+    msg.className = "empty-props error";
+    msg.textContent = t("text.valueError", { reason: evalReasonText(sourceNode.computedError) });
+    body.appendChild(msg);
+    return;
+  }
+  const matrix = sourceNode.computedValue;
+  if (!Array.isArray(matrix) || !matrix.every((row) => Array.isArray(row))) {
+    const msg = document.createElement("div");
+    msg.className = "empty-props";
+    msg.textContent = t("widget.matrixNotMatrix");
+    body.appendChild(msg);
+    return;
+  }
+  const rowCount = matrix.length;
+  const colCount = rowCount > 0 ? matrix[0].length : 0;
+  if (!matrix.every((row) => row.length === colCount)) {
+    const msg = document.createElement("div");
+    msg.className = "empty-props";
+    msg.textContent = t("widget.matrixNotMatrix");
+    body.appendChild(msg);
+    return;
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "matrix-widget-grid";
+  const showIndices = widget.showIndices !== false;
+  const headerOffset = showIndices ? 1 : 0;
+  const availableWidth = Math.max(40, Math.floor(widget.width - 16));
+  const availableHeight = Math.max(40, Math.floor(widget.height - 44));
+  const fitSize = Math.floor(Math.min(
+    availableWidth / Math.max(1, colCount + headerOffset),
+    availableHeight / Math.max(1, rowCount + headerOffset),
+  ));
+  const cellSize = widget.autoFitCells
+    ? clamp(fitSize || widget.cellSize, 2, 96)
+    : clamp(Number(widget.cellSize) || 28, 2, 96);
+  grid.style.setProperty("--matrix-cell-size", `${cellSize}px`);
+  grid.style.setProperty("--matrix-font-size", `${Math.max(0, Math.floor(cellSize * 0.45))}px`);
+  grid.style.gridTemplateColumns = `repeat(${Math.max(1, colCount + headerOffset)}, ${cellSize}px)`;
+  grid.style.width = `${Math.max(1, colCount + headerOffset) * cellSize}px`;
+  if (showIndices) {
+    const corner = document.createElement("div");
+    corner.className = "matrix-widget-cell matrix-widget-index";
+    corner.textContent = "";
+    grid.appendChild(corner);
+    for (let colIdx = 0; colIdx < colCount; colIdx += 1) {
+      const th = document.createElement("div");
+      th.className = "matrix-widget-cell matrix-widget-index";
+      th.textContent = String(colIdx);
+      grid.appendChild(th);
+    }
+  }
+
+  let minValue = 0;
+  let maxValue = 0;
+  if (isFiniteMatrix(matrix) && rowCount > 0 && colCount > 0) {
+    minValue = matrix[0][0];
+    maxValue = matrix[0][0];
+    matrix.forEach((row) => row.forEach((value) => {
+      minValue = Math.min(minValue, value);
+      maxValue = Math.max(maxValue, value);
+    }));
+  }
+  matrix.forEach((row, rowIdx) => {
+    if (showIndices) {
+      const rowHeader = document.createElement("div");
+      rowHeader.className = "matrix-widget-cell matrix-widget-index";
+      rowHeader.textContent = String(rowIdx);
+      grid.appendChild(rowHeader);
+    }
+    row.forEach((value) => {
+      const td = document.createElement("div");
+      td.className = "matrix-widget-cell matrix-widget-value";
+      td.textContent = widget.showNumericValues ? formatComputedValue(value) : "";
+      const bg = matrixCellBackgroundColor(value, minValue, maxValue, widget.colorScheme);
+      if (bg) {
+        td.style.backgroundColor = bg;
+      }
+      grid.appendChild(td);
+    });
+  });
+  body.appendChild(grid);
 }
 
 function renderTableWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
@@ -4433,6 +4933,15 @@ function refreshTableWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap(
     return;
   }
   renderTableWidgetBody(body, widget, nodeMap);
+}
+
+function refreshMatrixWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap()) {
+  const body = root.querySelector(".value-widget-body");
+  if (!body) {
+    renderWidgets();
+    return;
+  }
+  renderMatrixWidgetBody(body, widget, nodeMap);
 }
 
 function refreshChartWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap()) {
@@ -4530,6 +5039,8 @@ function refreshRuntimeWidgetContents() {
     }
     if (widget.type === "table") {
       refreshTableWidgetRuntimeBody(root, widget, nodeMap);
+    } else if (widget.type === "matrix") {
+      refreshMatrixWidgetRuntimeBody(root, widget, nodeMap);
     } else if (widget.type === "xychart") {
       refreshChartWidgetRuntimeBody(root, widget, nodeMap);
     } else if (widget.type === "slider") {
@@ -4565,12 +5076,14 @@ function renderWidgets() {
   const viewMinY = view?.y ?? 0;
 
   graph.widgets.forEach((widget) => {
-    if (widget.type !== "table" && widget.type !== "xychart" && widget.type !== "slider") {
+    if (widget.type !== "table" && widget.type !== "xychart" && widget.type !== "slider" && widget.type !== "matrix") {
       return;
     }
     if (widget.type === "table") {
       sanitizeWidgetColumns(widget);
       sanitizeTableWidgetOptions(widget);
+    } else if (widget.type === "matrix") {
+      sanitizeMatrixWidgetOptions(widget);
     } else if (widget.type === "xychart") {
       sanitizeWidgetXYPairs(widget);
       sanitizeXYChartOptions(widget);
@@ -4684,6 +5197,8 @@ function renderWidgets() {
     body.className = "value-widget-body";
     if (widget.type === "table") {
       renderTableWidgetBody(body, widget);
+    } else if (widget.type === "matrix") {
+      renderMatrixWidgetBody(body, widget);
     } else if (widget.type === "xychart") {
       const canvasWrap = document.createElement("div");
       canvasWrap.className = "xy-chart-canvas-wrap";
@@ -4990,6 +5505,15 @@ function removeSelected() {
       clearAllSelection();
       setStatusKey("status.widgetDeleted");
     });
+    return;
+  }
+
+  if (ui.selected?.type === "text") {
+    runAction(() => {
+      graph.textItems = graph.textItems.filter((item) => item.id !== ui.selected.id);
+      clearAllSelection();
+      setStatusKey("status.textDeleted");
+    });
   }
 }
 
@@ -5100,12 +5624,26 @@ function openBackgroundContextMenu(evt) {
         setStatusKey("status.nodeCreated");
       },
     },
+    {
+      label: t("menu.insert.text"),
+      action: () => {
+        runAction(() => addCanvasText({ x: p.x, y: p.y }));
+        setStatusKey("status.textCreated");
+      },
+    },
     { separator: true },
     {
       label: t("context.bg.newSliderWidget"),
       action: () => {
         runAction(() => addSliderWidget({ x: p.x, y: p.y }));
         setStatusKey("status.widgetSliderCreated");
+      },
+    },
+    {
+      label: t("menu.insert.matrixWidget"),
+      action: () => {
+        runAction(() => addMatrixWidget({ x: p.x, y: p.y }));
+        setStatusKey("status.widgetMatrixCreated");
       },
     },
     {
@@ -5327,7 +5865,7 @@ function buildNodeTooltipText(node) {
   }
   const description = getNodeDescription(node);
   if (node.computedValue != null) {
-    const valueText = formatComputedValue(node.computedValue);
+    const valueText = summarizeTooltipValue(node.computedValue);
     return { text: description ? `${description}: ${valueText}` : valueText, tone: "value" };
   }
   if (String(node.computedError || "").trim()) {
@@ -5335,6 +5873,59 @@ function buildNodeTooltipText(node) {
     return { text: description ? `${description}: ${errorText}` : errorText, tone: "error" };
   }
   return { text: description, tone: "" };
+}
+
+function canvasTextDisplayHtml(item) {
+  const sanitized = sanitizeRichTextHtml(item?.html ?? "");
+  return sanitized || `<p>${t("text.defaultCanvasText")}</p>`;
+}
+
+function updateSelectedTextHtml(nextValue) {
+  const item = ui.selected?.type === "text" ? getTextItemById(ui.selected.id) : null;
+  if (!item || !textHtmlInput) {
+    return false;
+  }
+  textHtmlInput.value = nextValue;
+  item.html = String(nextValue ?? "");
+  sanitizeTextItem(item);
+  dirtySinceLastSave = true;
+  updateFileStatusLabel(true);
+  render();
+  return true;
+}
+
+function wrapTextSelection(startTag, endTag, placeholder = "testo") {
+  if (!textHtmlInput) {
+    return;
+  }
+  const start = textHtmlInput.selectionStart ?? 0;
+  const end = textHtmlInput.selectionEnd ?? 0;
+  const current = textHtmlInput.value || "";
+  const selected = start === end ? placeholder : current.slice(start, end);
+  const nextValue = `${current.slice(0, start)}${startTag}${selected}${endTag}${current.slice(end)}`;
+  if (!updateSelectedTextHtml(nextValue)) {
+    return;
+  }
+  const nextStart = start + startTag.length;
+  const nextEnd = nextStart + selected.length;
+  textHtmlInput.focus();
+  textHtmlInput.setSelectionRange(nextStart, nextEnd);
+}
+
+function insertTextHtmlSnippet(snippet) {
+  if (!textHtmlInput) {
+    return;
+  }
+  const start = textHtmlInput.selectionStart ?? 0;
+  const end = textHtmlInput.selectionEnd ?? 0;
+  const current = textHtmlInput.value || "";
+  const nextValue = `${current.slice(0, start)}${snippet}${current.slice(end)}`;
+  if (!updateSelectedTextHtml(nextValue)) {
+    return;
+  }
+  const caret = start + snippet.length;
+  textHtmlInput.focus();
+  textHtmlInput.setSelectionRange(caret, caret);
 }
 
 function renderPropertiesEditor(container, items, ownerKey, deleteHandler, options = {}) {
@@ -5513,6 +6104,125 @@ function refreshWidgetConfigPanel(widget) {
     rangeRow.appendChild(createRangeField("widget.sliderStep", stepInput));
     rangeRow.appendChild(createRangeField("widget.sliderMax", maxInput));
     sliderSection.appendChild(rangeRow);
+    return;
+  }
+
+  if (widget.type === "matrix") {
+    sanitizeMatrixWidgetOptions(widget);
+    const matrixSection = createWidgetSection();
+    const sourceLabel = document.createElement("label");
+    sourceLabel.textContent = t("widget.matrixSourceLabel");
+    const sourceSelect = document.createElement("select");
+    const matrixChoices = ["", ...outputNodeNames];
+    matrixChoices.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name || t("widget.noneOption");
+      sourceSelect.appendChild(opt);
+    });
+    sourceSelect.value = matrixChoices.includes(widget.source) ? widget.source : "";
+    sourceSelect.addEventListener("change", () => {
+      runAction(() => {
+        widget.source = sourceSelect.value;
+        sanitizeMatrixWidgetOptions(widget);
+      });
+    });
+    matrixSection.appendChild(sourceLabel);
+    matrixSection.appendChild(sourceSelect);
+
+    const valuesLabel = document.createElement("label");
+    valuesLabel.className = "menu-check compact-bool";
+    const valuesInput = document.createElement("input");
+    valuesInput.type = "checkbox";
+    valuesInput.checked = widget.showNumericValues !== false;
+    valuesInput.addEventListener("change", () => {
+      runAction(() => {
+        widget.showNumericValues = valuesInput.checked;
+      });
+    });
+    const valuesText = document.createElement("span");
+    valuesText.textContent = t("widget.matrixShowValues");
+    valuesLabel.appendChild(valuesInput);
+    valuesLabel.appendChild(valuesText);
+    matrixSection.appendChild(valuesLabel);
+
+    const indicesLabel = document.createElement("label");
+    indicesLabel.className = "menu-check compact-bool";
+    const indicesInput = document.createElement("input");
+    indicesInput.type = "checkbox";
+    indicesInput.checked = widget.showIndices !== false;
+    indicesInput.addEventListener("change", () => {
+      runAction(() => {
+        widget.showIndices = indicesInput.checked;
+      });
+    });
+    const indicesText = document.createElement("span");
+    indicesText.textContent = t("widget.matrixShowIndices");
+    indicesLabel.appendChild(indicesInput);
+    indicesLabel.appendChild(indicesText);
+    matrixSection.appendChild(indicesLabel);
+
+    const fitLabel = document.createElement("label");
+    fitLabel.className = "menu-check compact-bool";
+    const fitInput = document.createElement("input");
+    fitInput.type = "checkbox";
+    fitInput.checked = widget.autoFitCells !== false;
+    fitInput.addEventListener("change", () => {
+      runAction(() => {
+        widget.autoFitCells = fitInput.checked;
+      });
+      cellSizeInput.disabled = fitInput.checked;
+    });
+    const fitText = document.createElement("span");
+    fitText.textContent = t("widget.matrixAutoFitCells");
+    fitLabel.appendChild(fitInput);
+    fitLabel.appendChild(fitText);
+    matrixSection.appendChild(fitLabel);
+
+    const matrixOptionsRow = document.createElement("div");
+    matrixOptionsRow.className = "row3-exec";
+
+    const createCompactField = (labelKey, inputEl) => {
+      const wrap = document.createElement("label");
+      wrap.className = "compact-field";
+      const text = document.createElement("span");
+      text.textContent = t(labelKey);
+      wrap.appendChild(text);
+      wrap.appendChild(inputEl);
+      return wrap;
+    };
+
+    const cellSizeInput = document.createElement("input");
+    cellSizeInput.type = "number";
+    cellSizeInput.min = "2";
+    cellSizeInput.max = "96";
+    cellSizeInput.step = "1";
+    cellSizeInput.value = String(widget.cellSize ?? 28);
+    cellSizeInput.disabled = widget.autoFitCells !== false;
+    cellSizeInput.addEventListener("change", () => {
+      runAction(() => {
+        widget.cellSize = clamp(Number(cellSizeInput.value) || 28, 2, 96);
+      });
+      cellSizeInput.value = String(widget.cellSize);
+    });
+
+    const colorSelect = document.createElement("select");
+    ["blue", "heat", "grayscale", "diverging", "none"].forEach((scheme) => {
+      const opt = document.createElement("option");
+      opt.value = scheme;
+      opt.textContent = t(`widget.matrixColorScheme.${scheme}`);
+      colorSelect.appendChild(opt);
+    });
+    colorSelect.value = widget.colorScheme;
+    colorSelect.addEventListener("change", () => {
+      runAction(() => {
+        widget.colorScheme = colorSelect.value;
+      });
+    });
+
+    matrixOptionsRow.appendChild(createCompactField("widget.matrixCellSize", cellSizeInput));
+    matrixOptionsRow.appendChild(createCompactField("widget.matrixColorSchemeLabel", colorSelect));
+    matrixSection.appendChild(matrixOptionsRow);
     return;
   }
 
@@ -5961,6 +6671,7 @@ function refreshSidebar() {
     delete propsList.dataset.ownerKey;
     noSelection.classList.add("hidden");
     globalPanel.classList.add("hidden");
+    textPanel.classList.add("hidden");
     widgetPanel.classList.add("hidden");
     nodePanel.classList.add("hidden");
     edgePanel.classList.remove("hidden");
@@ -6047,6 +6758,7 @@ function refreshSidebar() {
     delete propsList.dataset.ownerKey;
     noSelection.classList.add("hidden");
     globalPanel.classList.add("hidden");
+    textPanel.classList.add("hidden");
     nodePanel.classList.add("hidden");
     edgePanel.classList.add("hidden");
     widgetPanel.classList.remove("hidden");
@@ -6059,9 +6771,44 @@ function refreshSidebar() {
     if (widgetPanelTitle) {
       widgetPanelTitle.textContent = widget.type === "xychart"
         ? t("panel.widgetChart")
-        : (widget.type === "slider" ? t("panel.widgetSlider") : t("panel.widgetTable"));
+        : (widget.type === "slider"
+          ? t("panel.widgetSlider")
+          : (widget.type === "matrix" ? t("panel.widgetMatrix") : t("panel.widgetTable")));
     }
     refreshWidgetConfigPanel(widget);
+    return;
+  }
+
+  if (ui.selected?.type === "text") {
+    ui.sidebarNodeId = null;
+    delete propsList.dataset.ownerKey;
+    noSelection.classList.add("hidden");
+    globalPanel.classList.add("hidden");
+    nodePanel.classList.add("hidden");
+    edgePanel.classList.add("hidden");
+    widgetPanel.classList.add("hidden");
+    textPanel.classList.remove("hidden");
+    const item = getTextItemById(ui.selected.id);
+    if (!item) {
+      clearAllSelection();
+      refreshSidebar();
+      return;
+    }
+    if (document.activeElement !== textWidthInput) {
+      textWidthInput.value = String(item.width);
+    }
+    if (document.activeElement !== textHeightInput) {
+      textHeightInput.value = String(item.height);
+    }
+    if (document.activeElement !== textFillColorInput && textFillColorInput) {
+      textFillColorInput.value = item.fillColor || "";
+    }
+    if (document.activeElement !== textStrokeColorInput && textStrokeColorInput) {
+      textStrokeColorInput.value = item.strokeColor || "";
+    }
+    if (document.activeElement !== textHtmlInput) {
+      textHtmlInput.value = String(item.html ?? "");
+    }
     return;
   }
 
@@ -6076,6 +6823,7 @@ function refreshSidebar() {
 
     noSelection.classList.add("hidden");
     globalPanel.classList.add("hidden");
+    textPanel.classList.add("hidden");
     widgetPanel.classList.add("hidden");
     nodePanel.classList.remove("hidden");
     edgePanel.classList.add("hidden");
@@ -6092,6 +6840,13 @@ function refreshSidebar() {
     const submodelNode = isSubmodelNode(node);
     nodeInputInput.checked = Boolean(node.input);
     nodeOutputInput.checked = Boolean(node.output);
+    sanitizeNodeVisualOptions(node);
+    if (nodeFillColorInput) {
+      nodeFillColorInput.value = node.fillColor || "";
+    }
+    if (nodeStrokeColorInput) {
+      nodeStrokeColorInput.value = node.strokeColor || "";
+    }
     if (nodeInputLabel) {
       nodeInputLabel.classList.toggle("hidden", !showInputToggle);
     }
@@ -6223,6 +6978,7 @@ function refreshSidebar() {
 
   ui.sidebarNodeId = null;
   nodePanel.classList.add("hidden");
+  textPanel.classList.add("hidden");
   edgePanel.classList.add("hidden");
   widgetPanel.classList.add("hidden");
   if (nodeValueExprLabel) {
@@ -6334,6 +7090,7 @@ function render() {
   updateModelBreadcrumb();
   edgesLayer.innerHTML = "";
   nodesLayer.innerHTML = "";
+  textLayer.innerHTML = "";
   controlsLayer.innerHTML = "";
   previewLayer.innerHTML = "";
   marqueeLayer.innerHTML = "";
@@ -6509,17 +7266,6 @@ function render() {
       }
       openNodeContextMenu(evt, node);
     });
-    g.addEventListener("dblclick", (evt) => {
-      if (isExecutionFrozen()) {
-        return;
-      }
-      if (!isSubmodelNode(node)) {
-        return;
-      }
-      evt.preventDefault();
-      evt.stopPropagation();
-      void openSubmodelNode(node);
-    });
     if (ui.selectedNodes.has(node.id)) {
       g.classList.add("selected");
     }
@@ -6531,6 +7277,7 @@ function render() {
     }
 
     let shapeEl;
+    let shapeOutlineEl = null;
     let submodelInnerShape = null;
     if (node.shape === "ellipse") {
       shapeEl = document.createElementNS(SVG_NS, "ellipse");
@@ -6559,6 +7306,20 @@ function render() {
       }
     }
     shapeEl.classList.add("node-shape");
+    shapeOutlineEl = shapeEl.cloneNode(false);
+    shapeOutlineEl.classList.add("node-shape-outline");
+    if (node.fillColor) {
+      g.style.setProperty("--node-fill", node.fillColor);
+    } else {
+      g.style.removeProperty("--node-fill");
+    }
+    if (node.strokeColor) {
+      g.style.setProperty("--node-stroke", node.strokeColor);
+      g.classList.add("has-custom-stroke");
+    } else {
+      g.style.removeProperty("--node-stroke");
+      g.classList.remove("has-custom-stroke");
+    }
 
     const startEdgeCreate = (evt) => {
       if (isExecutionFrozen()) {
@@ -6624,6 +7385,41 @@ function render() {
         pointerId: evt.pointerId,
       };
       beginTransaction();
+    });
+    g.addEventListener("pointerup", (evt) => {
+      if (evt.button !== 0) {
+        return;
+      }
+      const activeDrag = ui.drag && evt.pointerId === ui.drag.pointerId ? ui.drag : null;
+      const moved = activeDrag
+        ? Math.hypot(
+          evt.clientX - activeDrag.startClientX,
+          evt.clientY - activeDrag.startClientY,
+        ) >= 4
+        : false;
+      if (moved) {
+        ui.lastNodeActivate = null;
+        return;
+      }
+      const now = performance.now();
+      const last = ui.lastNodeActivate;
+      if (
+        last
+        && last.nodeId === node.id
+        && (now - last.time) <= 320
+      ) {
+        ui.lastNodeActivate = null;
+        evt.preventDefault();
+        evt.stopPropagation();
+        if (ui.drag && evt.pointerId === ui.drag.pointerId) {
+          ui.drag = null;
+          cancelTransaction();
+          render();
+        }
+        openNodePrimaryEditor(node);
+        return;
+      }
+      ui.lastNodeActivate = { nodeId: node.id, time: now };
     });
 
     const label = document.createElementNS(SVG_NS, "text");
@@ -6728,6 +7524,7 @@ function render() {
       render();
     });
 
+    g.appendChild(shapeOutlineEl);
     g.appendChild(shapeEl);
     if (submodelInnerShape) {
       g.appendChild(submodelInnerShape);
@@ -6745,6 +7542,106 @@ function render() {
     g.appendChild(centerPortHit);
     g.appendChild(handle);
     nodesLayer.appendChild(g);
+  });
+
+  graph.textItems.forEach((item) => {
+    sanitizeTextItem(item);
+    const g = document.createElementNS(SVG_NS, "g");
+    g.classList.add("canvas-text-item");
+    if (item.fillColor) {
+      g.style.setProperty("--text-box-fill", item.fillColor);
+    } else {
+      g.style.removeProperty("--text-box-fill");
+    }
+    if (item.strokeColor) {
+      g.style.setProperty("--text-box-stroke", item.strokeColor);
+      g.classList.add("has-custom-stroke");
+    } else {
+      g.style.removeProperty("--text-box-stroke");
+      g.classList.remove("has-custom-stroke");
+    }
+    if (ui.selected?.type === "text" && ui.selected.id === item.id) {
+      g.classList.add("selected");
+    }
+    g.setAttribute("transform", `translate(${item.x}, ${item.y})`);
+
+    const frame = document.createElementNS(SVG_NS, "rect");
+    frame.classList.add("canvas-text-frame");
+    frame.setAttribute("x", "0");
+    frame.setAttribute("y", "0");
+    frame.setAttribute("width", String(item.width));
+    frame.setAttribute("height", String(item.height));
+    frame.setAttribute("rx", "6");
+    frame.setAttribute("ry", "6");
+
+    const foreignObject = document.createElementNS(SVG_NS, "foreignObject");
+    foreignObject.setAttribute("x", "0");
+    foreignObject.setAttribute("y", "0");
+    foreignObject.setAttribute("width", String(item.width));
+    foreignObject.setAttribute("height", String(item.height));
+    foreignObject.classList.add("canvas-text-fo");
+    const div = document.createElement("div");
+    div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+    div.className = "canvas-text-content";
+    div.innerHTML = canvasTextDisplayHtml(item);
+    foreignObject.appendChild(div);
+
+    const handle = document.createElementNS(SVG_NS, "circle");
+    handle.classList.add("resize-handle");
+    handle.setAttribute("cx", String(item.width));
+    handle.setAttribute("cy", String(item.height));
+    handle.setAttribute("r", "6");
+
+    g.addEventListener("pointerdown", (evt) => {
+      evt.stopPropagation();
+      if (!(ui.selected?.type === "text" && ui.selected.id === item.id)) {
+        selectTextItem(item.id);
+      }
+      if (isExecutionFrozen()) {
+        render();
+        return;
+      }
+      ui.textDrag = {
+        id: item.id,
+        pointerId: evt.pointerId,
+        startClientX: evt.clientX,
+        startClientY: evt.clientY,
+        startX: item.x,
+        startY: item.y,
+      };
+      beginTransaction();
+    });
+    g.addEventListener("contextmenu", (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      if (!(ui.selected?.type === "text" && ui.selected.id === item.id)) {
+        selectTextItem(item.id);
+      }
+    });
+    handle.addEventListener("pointerdown", (evt) => {
+      evt.stopPropagation();
+      if (!(ui.selected?.type === "text" && ui.selected.id === item.id)) {
+        selectTextItem(item.id);
+      }
+      if (isExecutionFrozen()) {
+        render();
+        return;
+      }
+      ui.textResize = {
+        id: item.id,
+        pointerId: evt.pointerId,
+        startClientX: evt.clientX,
+        startClientY: evt.clientY,
+        startWidth: item.width,
+        startHeight: item.height,
+      };
+      beginTransaction();
+    });
+
+    g.appendChild(frame);
+    g.appendChild(foreignObject);
+    g.appendChild(handle);
+    textLayer.appendChild(g);
   });
 
   refreshActiveTooltip();
@@ -6786,6 +7683,8 @@ function importGraphData(data) {
         y: Number.isFinite(n.y) ? n.y : 200,
         width: clamp(Number(n.width) || 120, 40, 500),
         height: clamp(Number(n.height) || 70, 30, 500),
+        fillColor: normalizeColorString(n.fillColor),
+        strokeColor: normalizeColorString(n.strokeColor),
         valueExpression: shape === "rect" ? "" : String(n.valueExpression ?? ""),
         stateTransition: shape === "rect"
           ? String(n.stateTransition ?? "")
@@ -6817,6 +7716,7 @@ function importGraphData(data) {
           : [],
       };
       normalizeNodeDescriptionProperty(node);
+      sanitizeNodeVisualOptions(node);
       return node;
     });
   const nodesWithValidNames = semantics.sanitizeNodeNames(nodes, "n");
@@ -6842,14 +7742,34 @@ function importGraphData(data) {
         : [],
     }));
 
+  const textItems = Array.isArray(data.textItems)
+    ? data.textItems
+      .filter((item) => Number.isInteger(item?.id))
+      .map((item) => {
+        const out = {
+          id: item.id,
+          x: Number(item.x),
+          y: Number(item.y),
+          width: Number(item.width),
+          height: Number(item.height),
+          fillColor: normalizeColorString(item.fillColor),
+          strokeColor: normalizeColorString(item.strokeColor),
+          html: String(item.html ?? ""),
+        };
+        sanitizeTextItem(out);
+        return out;
+      })
+    : [];
+
   const maxNodeId = nodesWithValidNames.reduce((max, n) => Math.max(max, n.id), 0);
   const maxEdgeId = edges.reduce((max, e) => Math.max(max, e.id), 0);
+  const maxTextItemId = textItems.reduce((max, item) => Math.max(max, item.id), 0);
   const widgets = Array.isArray(data.widgets)
     ? data.widgets
-      .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider"))
+      .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider" || w.type === "matrix"))
       .map((w) => ({
         id: w.id,
-        type: w.type === "xychart" ? "xychart" : (w.type === "slider" ? "slider" : "table"),
+        type: w.type === "xychart" ? "xychart" : (w.type === "slider" ? "slider" : (w.type === "matrix" ? "matrix" : "table")),
         customTitle: String(w.customTitle ?? ""),
         x: Number.isFinite(Number(w.x)) ? Number(w.x) : 40,
         y: Number.isFinite(Number(w.y)) ? Number(w.y) : 40,
@@ -6864,6 +7784,13 @@ function importGraphData(data) {
         yMax: Number.isFinite(Number(w.yMax)) ? Number(w.yMax) : null,
         showGrid: w.showGrid !== false,
         source: String(w.source ?? ""),
+        showNumericValues: w.showNumericValues !== false,
+        showIndices: w.showIndices !== false,
+        autoFitCells: w.autoFitCells !== false,
+        cellSize: Number.isFinite(Number(w.cellSize)) ? clamp(Number(w.cellSize), 2, 96) : 28,
+        colorScheme: ["blue", "heat", "grayscale", "diverging", "none"].includes(String(w.colorScheme ?? ""))
+          ? String(w.colorScheme)
+          : "blue",
         min: Number.isFinite(Number(w.min)) ? Number(w.min) : 0,
         max: Number.isFinite(Number(w.max)) ? Number(w.max) : 100,
         step: Number.isFinite(Number(w.step)) ? Number(w.step) : 1,
@@ -6908,9 +7835,11 @@ function importGraphData(data) {
     nodeCounter: Math.max(Number(data.nodeCounter) || 0, maxNodeId) + 1,
     edgeCounter: Math.max(Number(data.edgeCounter) || 0, maxEdgeId) + 1,
     widgetCounter: Math.max(Number(data.widgetCounter) || 0, maxWidgetId) + 1,
+    textItemCounter: Math.max(Number(data.textItemCounter) || 0, maxTextItemId) + 1,
     execution: normalizeExecutionConfig(data.execution),
     nodes: nodesWithValidNames,
     edges,
+    textItems,
     widgets,
   });
 }
@@ -7914,6 +8843,7 @@ async function createNewGraph() {
   graph.properties = [];
   graph.nodes = [];
   graph.edges = [];
+  graph.textItems = [];
   graph.widgets = [];
   invalidateExecutionPlan();
   stopTimedExecution(false);
@@ -7930,6 +8860,7 @@ async function createNewGraph() {
   nodeCounter = 1;
   edgeCounter = 1;
   widgetCounter = 1;
+  textItemCounter = 1;
   clearAllSelection();
   history.undo = [];
   history.redo = [];
@@ -9384,6 +10315,32 @@ window.addEventListener("pointermove", (evt) => {
     }
     return;
   }
+  if (ui.textDrag && evt.pointerId === ui.textDrag.pointerId) {
+    const item = getTextItemById(ui.textDrag.id);
+    if (item) {
+      const delta = worldDeltaFromClientDelta(
+        evt.clientX - ui.textDrag.startClientX,
+        evt.clientY - ui.textDrag.startClientY,
+      );
+      item.x = ui.snapToGrid ? snap(ui.textDrag.startX + delta.x) : ui.textDrag.startX + delta.x;
+      item.y = ui.snapToGrid ? snap(ui.textDrag.startY + delta.y) : ui.textDrag.startY + delta.y;
+      render();
+    }
+    return;
+  }
+  if (ui.textResize && evt.pointerId === ui.textResize.pointerId) {
+    const item = getTextItemById(ui.textResize.id);
+    if (item) {
+      const delta = worldDeltaFromClientDelta(
+        evt.clientX - ui.textResize.startClientX,
+        evt.clientY - ui.textResize.startClientY,
+      );
+      item.width = clamp(ui.snapToGrid ? snap(ui.textResize.startWidth + delta.x) : ui.textResize.startWidth + delta.x, 40, 1200);
+      item.height = clamp(ui.snapToGrid ? snap(ui.textResize.startHeight + delta.y) : ui.textResize.startHeight + delta.y, 24, 1200);
+      render();
+    }
+    return;
+  }
 
   const pRaw = svgPoint(evt);
   const p = snapPoint(pRaw);
@@ -9391,7 +10348,7 @@ window.addEventListener("pointermove", (evt) => {
   const hoverNode = hoverNodeId != null ? getNodeById(hoverNodeId) : null;
   const hoverNearCenter = hoverNode ? Math.hypot(pRaw.x - hoverNode.x, pRaw.y - hoverNode.y) <= 20 : false;
 
-  if (!ui.drag && !ui.resize && !ui.edgeCreate && !ui.controlPointDrag && !ui.marquee) {
+  if (!ui.drag && !ui.resize && !ui.edgeCreate && !ui.controlPointDrag && !ui.marquee && !ui.textDrag && !ui.textResize) {
     if (hoverNearCenter) {
       svg.style.cursor = "crosshair";
     } else if (hoverNode) {
@@ -9533,6 +10490,32 @@ window.addEventListener("pointerup", (evt) => {
     needsRender = true;
   }
 
+  if (ui.textDrag && evt.pointerId === ui.textDrag.pointerId) {
+    const item = getTextItemById(ui.textDrag.id);
+    const moved =
+      item &&
+      (item.x !== ui.textDrag.startX || item.y !== ui.textDrag.startY);
+    ui.textDrag = null;
+    commitTransaction();
+    if (moved) {
+      setStatusKey("status.textMoved");
+    }
+    needsRender = true;
+  }
+
+  if (ui.textResize && evt.pointerId === ui.textResize.pointerId) {
+    const item = getTextItemById(ui.textResize.id);
+    const resized =
+      item &&
+      (item.width !== ui.textResize.startWidth || item.height !== ui.textResize.startHeight);
+    ui.textResize = null;
+    commitTransaction();
+    if (resized) {
+      setStatusKey("status.textResized");
+    }
+    needsRender = true;
+  }
+
   if (ui.edgeCreate && evt.pointerId === ui.edgeCreate.pointerId) {
     finishEdgeCreateFromClient(evt.clientX, evt.clientY);
     needsRender = true;
@@ -9588,7 +10571,7 @@ window.addEventListener("pointerup", (evt) => {
   if (needsRender) {
     render();
   }
-  if (!ui.drag && !ui.resize && !ui.edgeCreate && !ui.controlPointDrag && !ui.marquee && !ui.widgetDrag && !ui.widgetResize) {
+  if (!ui.drag && !ui.resize && !ui.edgeCreate && !ui.controlPointDrag && !ui.marquee && !ui.widgetDrag && !ui.widgetResize && !ui.textDrag && !ui.textResize) {
     svg.style.cursor = "";
   }
 });
@@ -9603,13 +10586,14 @@ window.addEventListener("mouseup", (evt) => {
 svg.addEventListener("pointerleave", () => {
   ui.edgeCreateHoverId = null;
   ui.edgeCreateLastPoint = null;
-  if (!ui.drag && !ui.resize && !ui.controlPointDrag && !ui.edgeCreate && !ui.marquee && !ui.widgetDrag && !ui.widgetResize) {
+  if (!ui.drag && !ui.resize && !ui.controlPointDrag && !ui.edgeCreate && !ui.marquee && !ui.widgetDrag && !ui.widgetResize && !ui.textDrag && !ui.textResize) {
     svg.style.cursor = "";
   }
 });
 
 svg.addEventListener("pointerdown", (evt) => {
   hideContextMenu();
+  ui.lastNodeActivate = null;
   if (evt.target !== svg) {
     return;
   }
@@ -9632,7 +10616,10 @@ svg.addEventListener("pointerdown", (evt) => {
 
 [graphViewport, canvasContent].forEach((el) => {
   el?.addEventListener("pointerdown", (evt) => {
-    if (evt.target.closest?.(".node, .edge, .st-widget, .menu-bar, .sidebar, .context-menu, svg")) {
+    if (!evt.target.closest?.(".node")) {
+      ui.lastNodeActivate = null;
+    }
+    if (evt.target.closest?.(".node, .canvas-text-item, .edge, .st-widget, .menu-bar, .sidebar, .context-menu, svg")) {
       return;
     }
     hideContextMenu();
@@ -9644,7 +10631,8 @@ svg.addEventListener("pointerdown", (evt) => {
 
 svg.addEventListener("contextmenu", (evt) => {
   const onNode = evt.target.closest?.(".node");
-  if (onNode) {
+  const onText = evt.target.closest?.(".canvas-text-item");
+  if (onNode || onText) {
     return;
   }
   evt.preventDefault();
@@ -9653,7 +10641,7 @@ svg.addEventListener("contextmenu", (evt) => {
 
 [graphViewport, canvasContent].forEach((el) => {
   el?.addEventListener("contextmenu", (evt) => {
-    if (evt.target.closest?.(".node, .edge, .st-widget, .context-menu")) {
+    if (evt.target.closest?.(".node, .canvas-text-item, .edge, .st-widget, .context-menu")) {
       return;
     }
     evt.preventDefault();
@@ -9717,11 +10705,27 @@ if (addSubmodelNodeItem) {
   });
 }
 
+if (addTextItem) {
+  addTextItem.addEventListener("click", () => {
+    runAction(() => {
+      addCanvasText();
+    });
+    setStatusKey("status.textCreated");
+  });
+}
+
 addSliderWidgetItem.addEventListener("click", () => {
   runAction(() => {
     addSliderWidget();
   });
   setStatusKey("status.widgetSliderCreated");
+});
+
+addMatrixWidgetItem.addEventListener("click", () => {
+  runAction(() => {
+    addMatrixWidget();
+  });
+  setStatusKey("status.widgetMatrixCreated");
 });
 
 addTableWidgetItem.addEventListener("click", () => {
@@ -10110,6 +11114,170 @@ nodeOutputInput.addEventListener("change", () => {
     }
   });
 });
+
+if (nodeFillColorInput) {
+  nodeFillColorInput.addEventListener("change", () => {
+    if (ui.selectedNodes.size !== 1) {
+      return;
+    }
+    const node = getNodeById([...ui.selectedNodes][0]);
+    if (!node) {
+      return;
+    }
+    runAction(() => {
+      node.fillColor = normalizeColorString(nodeFillColorInput.value);
+      sanitizeNodeVisualOptions(node);
+    });
+  });
+}
+
+if (nodeStrokeColorInput) {
+  nodeStrokeColorInput.addEventListener("change", () => {
+    if (ui.selectedNodes.size !== 1) {
+      return;
+    }
+    const node = getNodeById([...ui.selectedNodes][0]);
+    if (!node) {
+      return;
+    }
+    runAction(() => {
+      node.strokeColor = normalizeColorString(nodeStrokeColorInput.value);
+      sanitizeNodeVisualOptions(node);
+    });
+  });
+}
+
+if (resetNodeColorsBtn) {
+  resetNodeColorsBtn.addEventListener("click", () => {
+    if (ui.selectedNodes.size !== 1) {
+      return;
+    }
+    const node = getNodeById([...ui.selectedNodes][0]);
+    if (!node) {
+      return;
+    }
+    runAction(() => {
+      node.fillColor = "";
+      node.strokeColor = "";
+      sanitizeNodeVisualOptions(node);
+    });
+  });
+}
+
+if (textWidthInput) {
+  textWidthInput.addEventListener("change", () => {
+    const item = ui.selected?.type === "text" ? getTextItemById(ui.selected.id) : null;
+    if (!item) {
+      return;
+    }
+    runAction(() => {
+      item.width = clamp(Number(textWidthInput.value) || item.width, 40, 1200);
+      sanitizeTextItem(item);
+    });
+  });
+}
+
+if (textHeightInput) {
+  textHeightInput.addEventListener("change", () => {
+    const item = ui.selected?.type === "text" ? getTextItemById(ui.selected.id) : null;
+    if (!item) {
+      return;
+    }
+    runAction(() => {
+      item.height = clamp(Number(textHeightInput.value) || item.height, 24, 1200);
+      sanitizeTextItem(item);
+    });
+  });
+}
+
+if (textFillColorInput) {
+  textFillColorInput.addEventListener("change", () => {
+    const item = ui.selected?.type === "text" ? getTextItemById(ui.selected.id) : null;
+    if (!item) {
+      return;
+    }
+    runAction(() => {
+      item.fillColor = normalizeColorString(textFillColorInput.value);
+      sanitizeTextItem(item);
+    });
+  });
+}
+
+if (textStrokeColorInput) {
+  textStrokeColorInput.addEventListener("change", () => {
+    const item = ui.selected?.type === "text" ? getTextItemById(ui.selected.id) : null;
+    if (!item) {
+      return;
+    }
+    runAction(() => {
+      item.strokeColor = normalizeColorString(textStrokeColorInput.value);
+      sanitizeTextItem(item);
+    });
+  });
+}
+
+if (textHtmlInput) {
+  textHtmlInput.addEventListener("focus", () => {
+    const item = ui.selected?.type === "text" ? getTextItemById(ui.selected.id) : null;
+    if (!item) {
+      return;
+    }
+    beginTransaction();
+  });
+  textHtmlInput.addEventListener("input", () => {
+    const item = ui.selected?.type === "text" ? getTextItemById(ui.selected.id) : null;
+    if (!item) {
+      return;
+    }
+    item.html = String(textHtmlInput.value ?? "");
+    sanitizeTextItem(item);
+    dirtySinceLastSave = true;
+    updateFileStatusLabel(true);
+    render();
+  });
+  textHtmlInput.addEventListener("blur", () => {
+    commitTransaction();
+    render();
+  });
+}
+
+if (textToolbar) {
+  textToolbar.addEventListener("click", (evt) => {
+    const btn = evt.target.closest("[data-text-tool]");
+    if (!btn) {
+      return;
+    }
+    evt.preventDefault();
+    const tool = btn.getAttribute("data-text-tool");
+    if (tool === "h1") {
+      wrapTextSelection("<h1>", "</h1>", "Titolo 1");
+      return;
+    }
+    if (tool === "h2") {
+      wrapTextSelection("<h2>", "</h2>", "Titolo 2");
+      return;
+    }
+    if (tool === "p") {
+      wrapTextSelection("<p>", "</p>", "Paragrafo");
+      return;
+    }
+    if (tool === "b") {
+      wrapTextSelection("<strong>", "</strong>");
+      return;
+    }
+    if (tool === "i") {
+      wrapTextSelection("<em>", "</em>");
+      return;
+    }
+    if (tool === "u") {
+      wrapTextSelection("<u>", "</u>");
+      return;
+    }
+    if (tool === "br") {
+      insertTextHtmlSnippet("<br>");
+    }
+  });
+}
 
 manualStepBtn.addEventListener("click", () => {
   void runManualStep();

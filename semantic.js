@@ -6,9 +6,12 @@
     "instanceof", "let", "new", "return", "super", "switch", "this", "throw", "try", "typeof",
     "var", "void", "while", "with", "yield", "enum", "await", "implements", "interface",
     "package", "private", "protected", "public", "static", "null", "true", "false", "time",
-    "t0", "t1", "dt",
+    "t0", "t1", "dt", "and", "or", "not",
   ]);
-  const probability = global.GraphProbability || {};
+  const graphFunctions = global.GraphFunctions || {};
+  const sameArrayShape = graphFunctions.helpers?.sameArrayShape || ((left, right) => JSON.stringify(left) === JSON.stringify(right));
+  const countTruthyValues = graphFunctions.helpers?.countTruthyValues;
+  const indicesWhereValues = graphFunctions.helpers?.indicesWhereValues;
   const EXPRESSION_CACHE_LIMIT = 1000;
   const expressionCache = new Map();
 
@@ -52,338 +55,29 @@
     throw new Error("append is a special expression form");
   }
 
-  function normalizeCollectionValueKey(value) {
-    if (Array.isArray(value)) {
-      return `a:${JSON.stringify(value)}`;
+  function buildPredicateMask(target, predicateAst, scope, hooks, localIndices = []) {
+    if (!Array.isArray(target)) {
+      const localScope = { ...scope, $value: target };
+      localIndices.forEach((indexValue, idx) => {
+        localScope[`$${idx}`] = indexValue;
+      });
+      return coerceBooleanToNumber(evaluateAstNode(predicateAst, localScope, hooks));
     }
-    return `${typeof value}:${String(value)}`;
+    return target.map((item, idx) => buildPredicateMask(item, predicateAst, scope, hooks, [...localIndices, idx]));
   }
 
-  function setArrayValues(values) {
-    if (!Array.isArray(values) || values.some((item) => Array.isArray(item))) {
-      throw new Error("set expects a vector");
-    }
-    const seen = new Set();
-    const out = [];
-    values.forEach((item) => {
-      const key = normalizeCollectionValueKey(item);
-      if (!seen.has(key)) {
-        seen.add(key);
-        out.push(item);
-      }
-    });
-    return out;
-  }
-
-  function unionArrayValues(left, right) {
-    if (!Array.isArray(left) || !Array.isArray(right) || left.some((item) => Array.isArray(item)) || right.some((item) => Array.isArray(item))) {
-      throw new Error("union expects two vectors");
-    }
-    return setArrayValues([...left, ...right]);
-  }
-
-  function intersectArrayValues(left, right) {
-    if (!Array.isArray(left) || !Array.isArray(right) || left.some((item) => Array.isArray(item)) || right.some((item) => Array.isArray(item))) {
-      throw new Error("intersection expects two vectors");
-    }
-    const rightKeys = new Set(right.map((item) => normalizeCollectionValueKey(item)));
-    const seen = new Set();
-    const out = [];
-    left.forEach((item) => {
-      const key = normalizeCollectionValueKey(item);
-      if (rightKeys.has(key) && !seen.has(key)) {
-        seen.add(key);
-        out.push(item);
-      }
-    });
-    return out;
-  }
-
-  function flattenMatrixValues(value) {
-    if (!Array.isArray(value) || !value.every((row) => Array.isArray(row))) {
-      throw new Error("flatten expects a matrix");
-    }
-    return value.flat();
-  }
-
-  function ensureFlatVector(value, fnName) {
-    if (!Array.isArray(value) || value.some((item) => Array.isArray(item))) {
-      throw new Error(`${fnName} expects a vector`);
-    }
-    return value;
-  }
-
-  function chooseRandomElement(values) {
-    const vector = ensureFlatVector(values, "choice");
-    if (!vector.length) {
-      throw new Error("choice expects a non-empty vector");
-    }
-    return vector[Math.floor(Math.random() * vector.length)];
-  }
-
-  function shuffleVectorValues(values) {
-    const vector = ensureFlatVector(values, "shuffle").slice();
-    for (let idx = vector.length - 1; idx > 0; idx -= 1) {
-      const swapIdx = Math.floor(Math.random() * (idx + 1));
-      [vector[idx], vector[swapIdx]] = [vector[swapIdx], vector[idx]];
-    }
-    return vector;
-  }
-
-  function sortVectorValues(values) {
-    const vector = ensureFlatVector(values, "sort").slice();
-    return vector.sort((left, right) => {
-      if (left === right) {
-        return 0;
-      }
-      return left < right ? -1 : 1;
-    });
-  }
-
-  function sizeOfValue(value, axis = null) {
-    if (!Array.isArray(value)) {
-      throw new Error("size expects a vector or matrix");
-    }
-    const isMatrix = value.every((row) => Array.isArray(row));
-    if (!isMatrix) {
-      if (axis == null) {
-        return value.length;
-      }
-      if (!Number.isInteger(axis) || axis !== 0) {
-        throw new Error("size axis for vectors must be 0");
-      }
-      return value.length;
-    }
-    const rowCount = value.length;
-    const colCount = rowCount > 0 ? value[0].length : 0;
-    if (!value.every((row) => row.length === colCount)) {
-      throw new Error("size expects a rectangular matrix");
-    }
-    if (axis == null) {
-      return [rowCount, colCount];
-    }
-    if (!Number.isInteger(axis) || (axis !== 0 && axis !== 1)) {
-      throw new Error("size axis for matrices must be 0 or 1");
-    }
-    return axis === 0 ? rowCount : colCount;
-  }
-
-  function averageArrayValues(value, axis = null) {
-    if (!Array.isArray(value)) {
-      throw new Error("average expects a vector or matrix");
-    }
-    const isMatrix = value.every((row) => Array.isArray(row));
-    if (!isMatrix) {
-      const vector = ensureFlatVector(value, "average");
-      if (!vector.length) {
-        throw new Error("average expects a non-empty vector");
-      }
-      return vector.reduce((sum, item) => sum + Number(item), 0) / vector.length;
-    }
-    const rowCount = value.length;
-    const colCount = rowCount > 0 ? value[0].length : 0;
-    if (!value.every((row) => row.length === colCount && row.every((item) => Number.isFinite(Number(item))))) {
-      throw new Error("average expects a rectangular numeric matrix");
-    }
-    if (axis == null) {
-      const totalCount = rowCount * colCount;
-      if (!totalCount) {
-        throw new Error("average expects a non-empty matrix");
-      }
-      return value.flat().reduce((sum, item) => sum + Number(item), 0) / totalCount;
-    }
-    if (!Number.isInteger(axis) || (axis !== 0 && axis !== 1)) {
-      throw new Error("average axis for matrices must be 0 or 1");
-    }
-    if (axis === 0) {
-      return Array.from({ length: colCount }, (_, colIdx) => value.reduce((sum, row) => sum + Number(row[colIdx]), 0) / rowCount);
-    }
-    return value.map((row) => {
-      if (!row.length) {
-        throw new Error("average expects non-empty matrix rows");
-      }
-      return row.reduce((sum, item) => sum + Number(item), 0) / row.length;
-    });
-  }
-
-  function stdevArrayValues(value, axis = null) {
-    if (!Array.isArray(value)) {
-      throw new Error("stdev expects a vector or matrix");
-    }
-    const isMatrix = value.every((row) => Array.isArray(row));
-    const stdevOfVector = (vector) => {
-      const flat = ensureFlatVector(vector, "stdev");
-      if (!flat.length) {
-        throw new Error("stdev expects a non-empty vector");
-      }
-      const mean = flat.reduce((sum, item) => sum + Number(item), 0) / flat.length;
-      const variance = flat.reduce((sum, item) => sum + ((Number(item) - mean) ** 2), 0) / flat.length;
-      return Math.sqrt(variance);
-    };
-    if (!isMatrix) {
-      return stdevOfVector(value);
-    }
-    const rowCount = value.length;
-    const colCount = rowCount > 0 ? value[0].length : 0;
-    if (!value.every((row) => row.length === colCount && row.every((item) => Number.isFinite(Number(item))))) {
-      throw new Error("stdev expects a rectangular numeric matrix");
-    }
-    if (axis == null) {
-      return stdevOfVector(value.flat());
-    }
-    if (!Number.isInteger(axis) || (axis !== 0 && axis !== 1)) {
-      throw new Error("stdev axis for matrices must be 0 or 1");
-    }
-    if (axis === 0) {
-      return Array.from({ length: colCount }, (_, colIdx) => stdevOfVector(value.map((row) => row[colIdx])));
-    }
-    return value.map((row) => stdevOfVector(row));
-  }
-
-  function normalizeRandomBounds(args, fnName) {
-    if (args.length > 2) {
-      throw new Error(`${fnName} expects 0, 1, or 2 arguments`);
-    }
-    if (args.length === 0) {
-      return { min: 0, max: 1 };
-    }
-    if (args.length === 1) {
-      const max = Number(args[0]);
-      if (!Number.isFinite(max)) {
-        throw new Error(`${fnName} expects finite numeric bounds`);
-      }
-      return { min: 0, max };
-    }
-    const min = Number(args[0]);
-    const max = Number(args[1]);
-    if (!Number.isFinite(min) || !Number.isFinite(max)) {
-      throw new Error(`${fnName} expects finite numeric bounds`);
-    }
-    return { min, max };
-  }
-
-  function randomFloatInRange(...args) {
-    const { min, max } = normalizeRandomBounds(args, "rand");
-    return min + Math.random() * (max - min);
-  }
-
-  function randomIntInRange(...args) {
-    if (args.length < 1 || args.length > 2) {
-      throw new Error("randInt expects 1 or 2 arguments");
-    }
-    const bounds = normalizeRandomBounds(args, "randInt");
-    const min = Math.ceil(bounds.min);
-    const max = Math.floor(bounds.max);
-    if (max < min) {
-      throw new Error("randInt expects min <= max");
-    }
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-  }
-
-  function unavailableDistribution(name) {
-    return () => {
-      throw new Error(`${name} is unavailable`);
-    };
-  }
-
-  function sameArrayShape(left, right) {
-    if (Array.isArray(left) !== Array.isArray(right)) {
-      return false;
-    }
-    if (!Array.isArray(left)) {
-      return true;
-    }
-    if (left.length !== right.length) {
-      return false;
-    }
-    return left.every((item, idx) => sameArrayShape(item, right[idx]));
-  }
-
-  function mapFunctionArgs(args, scalarFn) {
-    const ref = args.find((arg) => Array.isArray(arg));
-    if (!ref) {
-      return scalarFn(...args);
-    }
-    if (!args.every((arg) => !Array.isArray(arg) || sameArrayShape(ref, arg))) {
-      throw new Error("function arguments must have matching shapes");
-    }
-    return ref.map((_, idx) => mapFunctionArgs(
-      args.map((arg) => (Array.isArray(arg) ? arg[idx] : arg)),
-      scalarFn,
-    ));
-  }
-
-  function vectorizeFunction(fn) {
-    return (...args) => mapFunctionArgs(args, (...scalarArgs) => fn(...scalarArgs));
-  }
-
-  const MATH_SCOPE = Object.freeze({
-    __if: vectorizeFunction((condition, whenTrue, whenFalse) => (condition ? whenTrue : whenFalse)),
-    sin: vectorizeFunction(Math.sin),
-    cos: vectorizeFunction(Math.cos),
-    tan: vectorizeFunction(Math.tan),
-    asin: vectorizeFunction(Math.asin),
-    acos: vectorizeFunction(Math.acos),
-    atan: vectorizeFunction(Math.atan),
-    atan2: vectorizeFunction(Math.atan2),
-    sinh: vectorizeFunction(Math.sinh),
-    cosh: vectorizeFunction(Math.cosh),
-    tanh: vectorizeFunction(Math.tanh),
-    exp: vectorizeFunction(Math.exp),
-    log: vectorizeFunction(Math.log),
-    log10: vectorizeFunction(Math.log10),
-    log2: vectorizeFunction(Math.log2),
-    sqrt: vectorizeFunction(Math.sqrt),
-    pow: vectorizeFunction(Math.pow),
-    abs: vectorizeFunction(Math.abs),
-    min: vectorizeFunction(Math.min),
-    max: vectorizeFunction(Math.max),
-    round: vectorizeFunction(Math.round),
-    floor: vectorizeFunction(Math.floor),
-    ceil: vectorizeFunction(Math.ceil),
-    trunc: vectorizeFunction(Math.trunc),
-    int: vectorizeFunction(Math.trunc),
-    sign: vectorizeFunction(Math.sign),
-    rand: randomFloatInRange,
-    randInt: randomIntInRange,
-    range: (...args) => {
-      if (args.length === 1) {
-        return buildNumericRange(0, args[0], 1);
-      }
-      if (args.length === 2) {
-        return buildNumericRange(args[0], args[1], null);
-      }
-      if (args.length === 3) {
-        return buildNumericRange(args[0], args[1], args[2]);
-      }
-      throw new Error("range expects 1, 2, or 3 arguments");
-    },
+  const MATH_SCOPE = Object.freeze(graphFunctions.createMathScope({
     array: unavailableArrayConstructor,
     map: unavailableMapOperator,
     filter: unavailableFilterOperator,
     reduce: unavailableReduceOperator,
     append: unavailableAppendOperator,
-    set: setArrayValues,
-    union: unionArrayValues,
-    intersection: intersectArrayValues,
-    flatten: flattenMatrixValues,
-    choice: chooseRandomElement,
-    shuffle: shuffleVectorValues,
-    sort: sortVectorValues,
-    size: sizeOfValue,
-    average: averageArrayValues,
-    stdev: stdevArrayValues,
-    gaussian: typeof probability.gaussian === "function" ? probability.gaussian : unavailableDistribution("gaussian"),
-    uniform: typeof probability.uniform === "function" ? probability.uniform : unavailableDistribution("uniform"),
-    exponential: typeof probability.exponential === "function" ? probability.exponential : unavailableDistribution("exponential"),
     getProperty: unavailablePropertyGetter,
     setProperty: unavailablePropertySetter,
     getModelProperty: unavailableModelPropertyGetter,
     setModelProperty: unavailableModelPropertySetter,
     integral: unavailableIntegral,
-    pi: Math.PI,
-    e: Math.E,
-  });
+  }));
   const FUNCTION_NAMES = new Set(
     Object.keys(MATH_SCOPE).filter((name) => typeof MATH_SCOPE[name] === "function"),
   );
@@ -788,6 +482,96 @@
     }
     return ast.args[0];
   }
+
+  function isImplicitExpressionIdentifier(name) {
+    return (
+      name === "__self" ||
+      name === "self" ||
+      name === "$i" ||
+      name === "$value" ||
+      name === "time" ||
+      name === "t0" ||
+      name === "t1" ||
+      name === "dt" ||
+      /^\$\d+$/.test(String(name || ""))
+    );
+  }
+
+  function validateAstReferences(node, knownNames) {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    switch (node.type) {
+      case "literal":
+        return;
+      case "array":
+        node.elements.forEach((item) => validateAstReferences(item, knownNames));
+        return;
+      case "identifier":
+        if (!knownNames.has(node.name) && !isImplicitExpressionIdentifier(node.name)) {
+          throw new ReferenceError(`${node.name} is not defined`);
+        }
+        return;
+      case "member":
+        validateAstReferences(node.target, knownNames);
+        return;
+      case "index":
+        validateAstReferences(node.target, knownNames);
+        validateAstReferences(node.index, knownNames);
+        return;
+      case "slice":
+        validateAstReferences(node.target, knownNames);
+        if (node.start) {
+          validateAstReferences(node.start, knownNames);
+        }
+        if (node.end) {
+          validateAstReferences(node.end, knownNames);
+        }
+        if (node.step) {
+          validateAstReferences(node.step, knownNames);
+        }
+        return;
+      case "multi-access":
+        validateAstReferences(node.target, knownNames);
+        (node.accessors || []).forEach((accessor) => {
+          if (accessor.kind === "index") {
+            validateAstReferences(accessor.index, knownNames);
+            return;
+          }
+          if (accessor.start) {
+            validateAstReferences(accessor.start, knownNames);
+          }
+          if (accessor.end) {
+            validateAstReferences(accessor.end, knownNames);
+          }
+          if (accessor.step) {
+            validateAstReferences(accessor.step, knownNames);
+          }
+        });
+        return;
+      case "call":
+        if (!knownNames.has(node.name)) {
+          throw new ReferenceError(`${node.name} is not defined`);
+        }
+        (node.args || []).forEach((arg) => validateAstReferences(arg, knownNames));
+        return;
+      case "callable-ref":
+        if (node.refKind === "function" && !knownNames.has(node.name)) {
+          throw new ReferenceError(`${node.name} is not defined`);
+        }
+        return;
+      case "unary":
+        validateAstReferences(node.argument, knownNames);
+        return;
+      case "binary":
+        validateAstReferences(node.left, knownNames);
+        validateAstReferences(node.right, knownNames);
+        return;
+      default:
+        return;
+    }
+  }
+
   function evaluateAstWithLocalSelf(compiled, baseScope, hooks = null) {
     const selfVector = baseScope?.__self;
     const needsLocalIteration = Boolean(compiled?.hasSelfAlias || compiled?.hasAgentIndex);
@@ -872,40 +656,6 @@
       idx += size;
     }
     return idx;
-  }
-
-  function buildNumericRange(startValue, endValue, stepValue = null) {
-    const start = Number(startValue);
-    const end = Number(endValue);
-    if (!Number.isFinite(start) || !Number.isFinite(end)) {
-      throw new Error("range bounds must be finite numbers");
-    }
-    let step = stepValue == null ? (end >= start ? 1 : -1) : Number(stepValue);
-    if (!Number.isFinite(step) || step === 0) {
-      throw new Error("range step must be a non-zero finite number");
-    }
-    if ((end > start && step < 0) || (end < start && step > 0)) {
-      throw new Error("range step does not reach the end value");
-    }
-    const out = [];
-    const epsilon = Math.abs(step) * 1e-9;
-    const maxItems = 100000;
-    if (step > 0) {
-      for (let value = start; value < end - epsilon; value += step) {
-        out.push(Number(value.toFixed(12)));
-        if (out.length > maxItems) {
-          throw new Error("range is too large");
-        }
-      }
-    } else {
-      for (let value = start; value > end + epsilon; value += step) {
-        out.push(Number(value.toFixed(12)));
-        if (out.length > maxItems) {
-          throw new Error("range is too large");
-        }
-      }
-    }
-    return out;
   }
 
   function scalarBinaryOperation(op, left, right) {
@@ -1108,7 +858,16 @@
         while (j < source.length && /[A-Za-z0-9_$]/.test(source[j])) {
           j += 1;
         }
-        tokens.push({ type: "identifier", value: source.slice(i, j) });
+        const value = source.slice(i, j);
+        if (value === "and") {
+          tokens.push({ type: "op", value: "&&" });
+        } else if (value === "or") {
+          tokens.push({ type: "op", value: "||" });
+        } else if (value === "not") {
+          tokens.push({ type: "op", value: "!" });
+        } else {
+          tokens.push({ type: "identifier", value });
+        }
         i = j;
         continue;
       }
@@ -1615,6 +1374,44 @@
           const value = evaluateAstNode(node.args[1], scope, hooks);
           return appendArrayValues(target, value);
         }
+        if (node.name === "count") {
+          if (node.args.length < 1 || node.args.length > 3) {
+            throw new Error("count expects 1 to 3 arguments");
+          }
+          if (node.args.length === 1) {
+            return countTruthyValues(evaluateAstNode(node.args[0], scope, hooks));
+          }
+          if (node.args.length === 2) {
+            const maybeTarget = evaluateAstNode(node.args[1], scope, hooks);
+            if (Array.isArray(maybeTarget)) {
+              const mask = buildPredicateMask(maybeTarget, node.args[0], scope, hooks);
+              return countTruthyValues(mask);
+            }
+            const target = evaluateAstNode(node.args[0], scope, hooks);
+            return countTruthyValues(target, Number(maybeTarget));
+          }
+          const target = evaluateAstNode(node.args[1], scope, hooks);
+          if (!Array.isArray(target)) {
+            throw new Error("count conditional form expects a vector or matrix");
+          }
+          const axis = Number(evaluateAstNode(node.args[2], scope, hooks));
+          const mask = buildPredicateMask(target, node.args[0], scope, hooks);
+          return countTruthyValues(mask, axis);
+        }
+        if (node.name === "indicesWhere") {
+          if (node.args.length < 1 || node.args.length > 2) {
+            throw new Error("indicesWhere expects 1 or 2 arguments");
+          }
+          if (node.args.length === 1) {
+            return indicesWhereValues(evaluateAstNode(node.args[0], scope, hooks));
+          }
+          const target = evaluateAstNode(node.args[1], scope, hooks);
+          if (!Array.isArray(target)) {
+            throw new Error("indicesWhere conditional form expects a vector or matrix");
+          }
+          const mask = buildPredicateMask(target, node.args[0], scope, hooks);
+          return indicesWhereValues(mask);
+        }
         if (!Object.prototype.hasOwnProperty.call(scope, node.name)) {
           throw new ReferenceError(`${node.name} is not defined`);
         }
@@ -1898,10 +1695,26 @@
     const scopeNames = [
       ...Object.keys(MATH_SCOPE),
       ...extraNames.map((name) => String(name ?? "").trim()).filter(Boolean),
+      "__self",
+      "self",
+      "$i",
+      "$value",
+      "time",
+      "t0",
+      "t1",
+      "dt",
     ];
-    void scopeNames;
+    const knownNames = new Set(scopeNames);
     if (compiled.syntaxErrorMessage) {
       return { ok: false, reason: "syntax", message: compiled.syntaxErrorMessage };
+    }
+    try {
+      validateAstReferences(compiled.ast, knownNames);
+    } catch (err) {
+      if (err && err.name === "ReferenceError") {
+        return { ok: false, reason: "reference", message: String(err.message || "") };
+      }
+      return { ok: false, reason: "runtime", message: String(err?.message || "") };
     }
     return { ok: true };
   }

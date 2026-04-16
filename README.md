@@ -1,6 +1,6 @@
 # STGraphX: readme
 
-_Luca Mari, versione 6 aprile 2026_
+_Luca Mari, versione 16 aprile 2026_
 
 ## Contesto
 
@@ -17,35 +17,39 @@ Applicazione JavaScript con doppia shell e logica condivisa:
 * desktop, mediante `Electron`.
 
 __Al momento implementati (senza librerie esterne!):__
-* editor per grafi orientati, con nodi di forme diverse e tooltip, frecce spline, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard, undo e redo, ...;
+* editor per grafi orientati, con nodi di forme e colori diversi e tooltip, frecce spline, testi, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard, undo e redo, ...;
 * menu, menu contestuale e pannello di configurazione aggiornato dinamicamente, con tooltip;
 * gestione dei testi in italiano e inglese, con scelta via query string nella shell web (`?lang=it|en`) e via parametro `--lang=it|en` nella shell Electron;
 * gestione dei nodi algebrici, di stato, parametri e sottomodelli, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale); controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo sullo stato iniziale: solo espressioni locali o riferimenti a parametri; controllo del numero di cifre decimali visualizzate;
 * gestione di esecuzione completa, passo-passo, temporizzata, con modello in modalità read-only durante l'esecuzione;
 * gestione opzionale di blocco di esecuzione ed evidenziazione per nodi non definiti;
-* editor per espressioni, con gestione ed help contestuale e controllo sintattico
+* editor per espressioni, con gestione ed help contestuale e controllo sintattico dinamico;
 * varie funzioni definite; mapping da valori booleani a valori numerici e funzione `if`;
 * funzione `integral`, con scelta dell'algoritmo di integrazione, se Eulero o RK4;
 * alcune funzioni per distribuzioni di probabilità;
 * generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione/slicing di vettori e matrici con la sintassi di NumPy, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari;
 * funzioni "special form" per operare su vettori e matrici: `array`, `reduce`, `map`, `filter`;
 * gestione di proprietà custom per il modello e i singoli nodi e funzioni `getModelProperty`/`getProperty` e `setModelProperty`/`setProperty`;
-* gestione di nodi di output e di widget di output: grafici e tabelle; pannello di configurazione aggiornato dinamicamente;
+* gestione di nodi di output e di widget di output: grafici, tabelle, matrici; pannello di configurazione aggiornato dinamicamente;
 * gestione di nodi di input e di widget di input, anche per parametri: slider; pannello di configurazione aggiornato dinamicamente;
 * gestione dei sottomodelli con file JSON separati, con caricamento dalla stessa cartella del modello, binding dei nodi di input e accesso ai nodi di output con notazione `nomeSottomodello.nomeOutput`; prima gestione in logica ABM dichiarativa / funzionale, mediante variabili di sistema `self` e `$i$`; 
 * visualizzazione alternata per il grafo e i widget;
+* editor per testi;
 * definizione della base dei tempi e modalità varie di esecuzione; pannello di configurazione aggiornato dinamicamente;
 * caricamento e salvataggio di modelli in file JSON;
 * editor per funzioni con controllo sintattico interattivo e help;
 * menu di help;
 * ...
 
-__Al momento non implementati:__
+__Al momento non implementati (rispetto a STGraph):__
 * altri widget e altre opzioni per i widget già presenti, in particolare per la visualizzazione di valori non scalari;
 * altre funzioni;
 * nodi di stato con output;
+* variabili globali;
+* playmode e altre modalità di esecuzione;
 * lettura e scrittura di file dati (xls, csv, ...);
 * interfaccia a tab per più modelli;
+* strumenti di monitoraggio e debugging;
 * ...
 
 ## Appunti sul progetto
@@ -54,7 +58,7 @@ __Al momento non implementati:__
 - Controlla sempre il lavoro svolto e quasi sempre lo corregge da sé se trova degli errori
 - Nel caso di estensioni a parti già realizzate, si fa carico automaticamente di mantenere la coerenza
 - Le spiegazioni del lavoro compiuto sono chiare e corrette
-- A volte prende iniziative implementando estensioni a quanto richiesto
+- A volte prende iniziative proponendo o anche implementando estensioni a quanto richiesto
 - È in grado di fare refactoring e ottimizzazione
 - Si possono chiedere pareri o comunque indicazioni su come si potrebbero risolvere problemi
 - Scrive ottima documentazione a partire dal codice, e aggiorna automaticamente la documentazione
