@@ -70,6 +70,9 @@ function createDirectoryHandleFromFilePath(filePath) {
 
 contextBridge.exposeInMainWorld('STGraphXPlatform', {
   isElectron: true,
+  createFileHandleFromPath(filePath) {
+    return createFileHandle(String(filePath || ''));
+  },
   createDirectoryHandleFromPath(filePath) {
     return createDirectoryHandleFromFilePath(filePath);
   },

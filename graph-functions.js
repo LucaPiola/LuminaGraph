@@ -364,6 +364,36 @@
     return value;
   }
 
+  function ensureVectorLike(value, fnName) {
+    if (!Array.isArray(value)) {
+      throw new Error(`${fnName} expects a vector`);
+    }
+    if (!value.some((item) => Array.isArray(item))) {
+      return value;
+    }
+    if (value.length === 1 && Array.isArray(value[0]) && value[0].every((item) => !Array.isArray(item))) {
+      return value[0].slice();
+    }
+    if (value.every((row) => Array.isArray(row) && row.length === 1 && !Array.isArray(row[0]))) {
+      return value.map((row) => row[0]);
+    }
+    throw new Error(`${fnName} expects a vector`);
+  }
+
+  function normalizeGridCollisionMode(modeValue) {
+    const normalized = String(modeValue ?? "error").trim().toLowerCase();
+    if (normalized === "" || normalized === "error") {
+      return "error";
+    }
+    if (normalized === "first") {
+      return "first";
+    }
+    if (normalized === "sum") {
+      return "sum";
+    }
+    throw new Error("grid collision mode must be 'error', 'first', or 'sum'");
+  }
+
   function chooseRandomElement(values) {
     const vector = ensureFlatVector(values, "choice");
     if (!vector.length) {
@@ -620,14 +650,15 @@
     return value.map((row) => stdevOfVector(row));
   }
 
-  function gridFromCoordinates(rowValues, colValues, typeValues = 1) {
-    const rows = ensureFlatVector(rowValues, "grid");
-    const cols = ensureFlatVector(colValues, "grid");
+  function gridFromCoordinates(rowValues, colValues, collisionMode = "error", typeValues = 1) {
+    const mode = normalizeGridCollisionMode(collisionMode);
+    const rows = ensureVectorLike(rowValues, "grid");
+    const cols = ensureVectorLike(colValues, "grid");
     if (rows.length !== cols.length) {
       throw new Error("grid expects row and column vectors with the same length");
     }
     const hasTypeVector = Array.isArray(typeValues);
-    const types = hasTypeVector ? ensureFlatVector(typeValues, "grid") : null;
+    const types = hasTypeVector ? ensureVectorLike(typeValues, "grid") : null;
     if (types && types.length !== rows.length) {
       throw new Error("grid expects type vector with the same length as row and column vectors");
     }
@@ -651,11 +682,24 @@
 
     coords.forEach((coord, idx) => {
       const key = `${coord.row}:${coord.col}`;
+      const nextValue = types ? types[idx] : typeValues;
       if (occupied.has(key)) {
-        throw new Error(`grid collision at [${coord.row}, ${coord.col}]`);
+        if (mode === "error") {
+          throw new Error(`grid collision at [${coord.row}, ${coord.col}]`);
+        }
+        if (mode === "first") {
+          return;
+        }
+        const current = Number(matrix[coord.row][coord.col]);
+        const increment = Number(nextValue);
+        if (!Number.isFinite(current) || !Number.isFinite(increment)) {
+          throw new Error("grid sum mode expects numeric values on coincident coordinates");
+        }
+        matrix[coord.row][coord.col] = current + increment;
+        return;
       }
       occupied.add(key);
-      matrix[coord.row][coord.col] = types ? types[idx] : typeValues;
+      matrix[coord.row][coord.col] = nextValue;
     });
 
     return matrix;
@@ -963,7 +1007,7 @@
       count: { kind: "function", signature: "count(array[, axis]) | count(cond, array[, axis])", descriptionKey: "expr.help.count", insertText: "count()", cursorOffset: 6 },
       indicesWhere: { kind: "function", signature: "indicesWhere(array) | indicesWhere(cond, array)", descriptionKey: "expr.help.indicesWhere", insertText: "indicesWhere()", cursorOffset: 13 },
       setAt: { kind: "function", signature: "setAt(vector, index, value) | setAt(matrix, [row,col], value) | setAt(matrix, row, rowVector)", descriptionKey: "expr.help.setAt", insertText: "setAt()", cursorOffset: 6 },
-      grid: { kind: "function", signature: "grid(rows, cols[, value])", descriptionKey: "expr.help.grid", insertText: "grid()", cursorOffset: 5 },
+      grid: { kind: "function", signature: "grid(rows, cols[, collisions[, value]])", descriptionKey: "expr.help.grid", insertText: "grid()", cursorOffset: 5 },
       coords: { kind: "function", signature: "coords(matrix[, value])", descriptionKey: "expr.help.coords", insertText: "coords()", cursorOffset: 7 },
       neighbors: { kind: "function", signature: "neighbors(matrix, row, col[, diagonals[, toroidal]])", descriptionKey: "expr.help.neighbors", insertText: "neighbors()", cursorOffset: 10 },
       choice: { kind: "function", signature: "choice(vector)", descriptionKey: "expr.help.choice", insertText: "choice()", cursorOffset: 7 },

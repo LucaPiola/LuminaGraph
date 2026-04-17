@@ -300,11 +300,17 @@ Esempi:
 - `grid(righe, colonne)`
   - costruisce una matrice di occupazione con `1` nelle celle occupate e `0` altrove
 
-- `grid(righe, colonne, valoreScalare)`
+- `grid(righe, colonne, collisioni)`
+  - con `collisioni` uguale a `"error"`, `"first"` o `"sum"` controlla come gestire coordinate coincidenti, usando `1` come valore implicito
+
+- `grid(righe, colonne, collisioni, valoreScalare)`
   - usa lo stesso valore in ogni cella occupata
 
-- `grid(righe, colonne, vettoreValori)`
+- `grid(righe, colonne, collisioni, vettoreValori)`
   - usa `vettoreValori[i]` nella cella di coordinate `righe[i], colonne[i]`
+
+- `grid(righe, colonne, collisioni, valore)`
+  - con `collisioni` uguale a `"error"`, `"first"` o `"sum"` controlla come gestire coordinate coincidenti
 
 Regole:
 
@@ -314,13 +320,19 @@ Regole:
 - la dimensione della matrice viene inferita come:
   - righe = `max(righe) + 1`
   - colonne = `max(colonne) + 1`
-- se due agenti finiscono nella stessa cella, l'espressione fallisce con errore
+- se due agenti finiscono nella stessa cella:
+  - con `"error"` l'espressione fallisce con errore
+  - con `"first"` resta il valore della prima occorrenza
+  - con `"sum"` i valori coincidenti vengono sommati
 
 Esempi:
 
 - `grid([1,1], [0,2])` -> `[[0,0,0],[1,0,1]]`
-- `grid([1,1], [0,2], 5)` -> `[[0,0,0],[5,0,5]]`
-- `grid([1,1], [0,2], [1,2])` -> `[[0,0,0],[1,0,2]]`
+- `grid([1,1], [0,2], "error", 5)` -> `[[0,0,0],[5,0,5]]`
+- `grid([1,1], [0,2], "error", [1,2])` -> `[[0,0,0],[1,0,2]]`
+- `grid([1,1], [0,0], "first")` -> `[[0],[1]]`
+- `grid([1,1], [0,0], "sum")` -> `[[0],[2]]`
+- `grid([1,1], [0,0], "sum", [2,3])` -> `[[0],[5]]`
 
 - `coords(matrice)`
   - restituisce le coordinate `[riga, colonna]` delle celle non nulle

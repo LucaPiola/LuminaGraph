@@ -42,6 +42,9 @@ const newGraphBtn = document.getElementById("newGraphBtn");
 const saveJsonBtn = document.getElementById("saveJsonBtn");
 const saveAsJsonBtn = document.getElementById("saveAsJsonBtn");
 const loadJsonBtn = document.getElementById("loadJsonBtn");
+const recentModelsSep = document.getElementById("recentModelsSep");
+const recentModelsSection = document.getElementById("recentModelsSection");
+const clearRecentModelsBtn = document.getElementById("clearRecentModelsBtn");
 const loadJsonInput = document.getElementById("loadJsonInput");
 const snapToGridInput = document.getElementById("snapToGridInput");
 const gridSizeInput = document.getElementById("gridSizeInput");
@@ -144,6 +147,8 @@ const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 3;
 const SUPPORTED_LANGS = new Set(["it", "en"]);
 const CHART_SERIES_PALETTE = ["#0e7ac4", "#e67e22", "#27ae60", "#8e44ad", "#c0392b", "#16a085"];
+const RECENT_MODELS_STORAGE_KEY = "stgraphx.recentModels.v1";
+const MAX_RECENT_MODELS = 8;
 const NODE_FILL_COLOR_PRESETS = [
   { key: "default", value: "" },
   { key: "blue", value: "#dff2ff" },
@@ -198,6 +203,7 @@ let lastSavedSnapshot = "";
 let currentFileHandle = null;
 let currentFileName = "";
 let currentModelDirectoryHandle = null;
+let recentModelEntries = [];
 const modelContextStack = [];
 const submodelTemplateCache = new Map();
 const submodelFileHandleCache = new Map();
@@ -2131,6 +2137,7 @@ function applyI18nToDom() {
     }
     el.placeholder = t(key);
   });
+  renderRecentModelsMenu();
   updateFileStatusLabel(dirtySinceLastSave);
 }
 
@@ -2791,8 +2798,14 @@ function updateZoomButtons() {
 }
 
 function applyCanvasVisibility() {
-  svg.style.display = ui.showGraph ? "block" : "none";
+  svg.style.display = "block";
+  edgesLayer.style.display = ui.showGraph ? "" : "none";
+  previewLayer.style.display = ui.showGraph ? "" : "none";
+  nodesLayer.style.display = ui.showGraph ? "" : "none";
+  controlsLayer.style.display = ui.showGraph ? "" : "none";
+  marqueeLayer.style.display = ui.showGraph ? "" : "none";
   widgetLayer.style.display = ui.showWidgets ? "" : "none";
+  textLayer.style.display = ui.showWidgets ? "" : "none";
   const graphLabel = ui.showGraph ? t("view.btn.hideGraph") : t("view.btn.showGraph");
   const widgetsLabel = ui.showWidgets ? t("view.btn.hideWidgets") : t("view.btn.showWidgets");
   if (toggleGraphBtn) {
@@ -4006,7 +4019,6 @@ function addMatrixWidget(at = null) {
   const z = Math.max(0.0001, ui.zoom || 1);
   const x = at?.x ?? (graphViewport.scrollLeft + 60) / z;
   const y = at?.y ?? (graphViewport.scrollTop + 60) / z;
-  const nodeNames = graph.nodes.filter((n) => n.output).map((n) => n.name);
   graph.widgets.push({
     id,
     type: "matrix",
@@ -4017,7 +4029,7 @@ function addMatrixWidget(at = null) {
     height: 240,
     minimized: false,
     outputOnly: true,
-    source: nodeNames[0] || "",
+    source: "",
     showNumericValues: true,
     showIndices: true,
     autoFitCells: true,
@@ -4675,6 +4687,94 @@ function clearAllTableWidgetRows() {
   });
 }
 
+function copyTextToClipboard(text) {
+  const content = String(text ?? "");
+  if (!content) {
+    return Promise.resolve(false);
+  }
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    return navigator.clipboard.writeText(content).then(() => true).catch(() => false);
+  }
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = content;
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const ok = document.execCommand("copy");
+    textarea.remove();
+    return Promise.resolve(Boolean(ok));
+  } catch (_err) {
+    return Promise.resolve(false);
+  }
+}
+
+function renderMatrixGrid(body, widget, matrix) {
+  const rowCount = matrix.length;
+  const colCount = rowCount > 0 ? matrix[0].length : 0;
+  const grid = document.createElement("div");
+  grid.className = "matrix-widget-grid";
+  const showIndices = widget.showIndices !== false;
+  const headerOffset = showIndices ? 1 : 0;
+  const availableWidth = Math.max(40, Math.floor(widget.width - 16));
+  const availableHeight = Math.max(40, Math.floor(widget.height - 44));
+  const fitSize = Math.floor(Math.min(
+    availableWidth / Math.max(1, colCount + headerOffset),
+    availableHeight / Math.max(1, rowCount + headerOffset),
+  ));
+  const cellSize = widget.autoFitCells
+    ? clamp(fitSize || widget.cellSize, 2, 96)
+    : clamp(Number(widget.cellSize) || 28, 2, 96);
+  grid.style.setProperty("--matrix-cell-size", `${cellSize}px`);
+  grid.style.setProperty("--matrix-font-size", `${Math.max(0, Math.floor(cellSize * 0.45))}px`);
+  grid.style.gridTemplateColumns = `repeat(${Math.max(1, colCount + headerOffset)}, ${cellSize}px)`;
+  grid.style.width = `${Math.max(1, colCount + headerOffset) * cellSize}px`;
+  if (showIndices) {
+    const corner = document.createElement("div");
+    corner.className = "matrix-widget-cell matrix-widget-index";
+    corner.textContent = "";
+    grid.appendChild(corner);
+    for (let colIdx = 0; colIdx < colCount; colIdx += 1) {
+      const th = document.createElement("div");
+      th.className = "matrix-widget-cell matrix-widget-index";
+      th.textContent = String(colIdx);
+      grid.appendChild(th);
+    }
+  }
+
+  let minValue = 0;
+  let maxValue = 0;
+  if (isFiniteMatrix(matrix) && rowCount > 0 && colCount > 0) {
+    minValue = matrix[0][0];
+    maxValue = matrix[0][0];
+    matrix.forEach((row) => row.forEach((value) => {
+      minValue = Math.min(minValue, value);
+      maxValue = Math.max(maxValue, value);
+    }));
+  }
+  matrix.forEach((row, rowIdx) => {
+    if (showIndices) {
+      const rowHeader = document.createElement("div");
+      rowHeader.className = "matrix-widget-cell matrix-widget-index";
+      rowHeader.textContent = String(rowIdx);
+      grid.appendChild(rowHeader);
+    }
+    row.forEach((value) => {
+      const td = document.createElement("div");
+      td.className = "matrix-widget-cell matrix-widget-value";
+      td.textContent = widget.showNumericValues ? formatComputedValue(value) : "";
+      const bg = matrixCellBackgroundColor(value, minValue, maxValue, widget.colorScheme);
+      if (bg) {
+        td.style.backgroundColor = bg;
+      }
+      grid.appendChild(td);
+    });
+  });
+  body.appendChild(grid);
+}
+
 function widgetDefaultTitle(widget) {
   if (widget.type === "xychart") {
     return t("widget.chartTitle", { id: widget.id });
@@ -4764,6 +4864,10 @@ function renderMatrixWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
     return;
   }
   if (sourceNode.computedError) {
+    if (Array.isArray(widget.lastMatrixValue)) {
+      renderMatrixGrid(body, widget, widget.lastMatrixValue);
+      return;
+    }
     const msg = document.createElement("div");
     msg.className = "empty-props error";
     msg.textContent = t("text.valueError", { reason: evalReasonText(sourceNode.computedError) });
@@ -4772,6 +4876,10 @@ function renderMatrixWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
   }
   const matrix = sourceNode.computedValue;
   if (!Array.isArray(matrix) || !matrix.every((row) => Array.isArray(row))) {
+    if (Array.isArray(widget.lastMatrixValue)) {
+      renderMatrixGrid(body, widget, widget.lastMatrixValue);
+      return;
+    }
     const msg = document.createElement("div");
     msg.className = "empty-props";
     msg.textContent = t("widget.matrixNotMatrix");
@@ -4781,72 +4889,18 @@ function renderMatrixWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
   const rowCount = matrix.length;
   const colCount = rowCount > 0 ? matrix[0].length : 0;
   if (!matrix.every((row) => row.length === colCount)) {
+    if (Array.isArray(widget.lastMatrixValue)) {
+      renderMatrixGrid(body, widget, widget.lastMatrixValue);
+      return;
+    }
     const msg = document.createElement("div");
     msg.className = "empty-props";
     msg.textContent = t("widget.matrixNotMatrix");
     body.appendChild(msg);
     return;
   }
-
-  const grid = document.createElement("div");
-  grid.className = "matrix-widget-grid";
-  const showIndices = widget.showIndices !== false;
-  const headerOffset = showIndices ? 1 : 0;
-  const availableWidth = Math.max(40, Math.floor(widget.width - 16));
-  const availableHeight = Math.max(40, Math.floor(widget.height - 44));
-  const fitSize = Math.floor(Math.min(
-    availableWidth / Math.max(1, colCount + headerOffset),
-    availableHeight / Math.max(1, rowCount + headerOffset),
-  ));
-  const cellSize = widget.autoFitCells
-    ? clamp(fitSize || widget.cellSize, 2, 96)
-    : clamp(Number(widget.cellSize) || 28, 2, 96);
-  grid.style.setProperty("--matrix-cell-size", `${cellSize}px`);
-  grid.style.setProperty("--matrix-font-size", `${Math.max(0, Math.floor(cellSize * 0.45))}px`);
-  grid.style.gridTemplateColumns = `repeat(${Math.max(1, colCount + headerOffset)}, ${cellSize}px)`;
-  grid.style.width = `${Math.max(1, colCount + headerOffset) * cellSize}px`;
-  if (showIndices) {
-    const corner = document.createElement("div");
-    corner.className = "matrix-widget-cell matrix-widget-index";
-    corner.textContent = "";
-    grid.appendChild(corner);
-    for (let colIdx = 0; colIdx < colCount; colIdx += 1) {
-      const th = document.createElement("div");
-      th.className = "matrix-widget-cell matrix-widget-index";
-      th.textContent = String(colIdx);
-      grid.appendChild(th);
-    }
-  }
-
-  let minValue = 0;
-  let maxValue = 0;
-  if (isFiniteMatrix(matrix) && rowCount > 0 && colCount > 0) {
-    minValue = matrix[0][0];
-    maxValue = matrix[0][0];
-    matrix.forEach((row) => row.forEach((value) => {
-      minValue = Math.min(minValue, value);
-      maxValue = Math.max(maxValue, value);
-    }));
-  }
-  matrix.forEach((row, rowIdx) => {
-    if (showIndices) {
-      const rowHeader = document.createElement("div");
-      rowHeader.className = "matrix-widget-cell matrix-widget-index";
-      rowHeader.textContent = String(rowIdx);
-      grid.appendChild(rowHeader);
-    }
-    row.forEach((value) => {
-      const td = document.createElement("div");
-      td.className = "matrix-widget-cell matrix-widget-value";
-      td.textContent = widget.showNumericValues ? formatComputedValue(value) : "";
-      const bg = matrixCellBackgroundColor(value, minValue, maxValue, widget.colorScheme);
-      if (bg) {
-        td.style.backgroundColor = bg;
-      }
-      grid.appendChild(td);
-    });
-  });
-  body.appendChild(grid);
+  widget.lastMatrixValue = deepClone(matrix);
+  renderMatrixGrid(body, widget, matrix);
 }
 
 function renderTableWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
@@ -4900,6 +4954,43 @@ function renderTableWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
       body.scrollTop = body.scrollHeight;
     });
   }
+}
+
+function matrixWidgetStructuredText(widget, nodeMap = buildNodeNameMap()) {
+  sanitizeMatrixWidgetOptions(widget);
+  const sourceNode = nodeMap.get(widget.source);
+  let matrix = null;
+  if (
+    sourceNode &&
+    !sourceNode.computedError &&
+    Array.isArray(sourceNode.computedValue) &&
+    sourceNode.computedValue.every((row) => Array.isArray(row))
+  ) {
+    const rowCount = sourceNode.computedValue.length;
+    const colCount = rowCount > 0 ? sourceNode.computedValue[0].length : 0;
+    if (sourceNode.computedValue.every((row) => row.length === colCount)) {
+      matrix = sourceNode.computedValue;
+    }
+  }
+  if (!matrix && Array.isArray(widget.lastMatrixValue)) {
+    matrix = widget.lastMatrixValue;
+  }
+  if (!Array.isArray(matrix)) {
+    return "";
+  }
+  return matrix
+    .map((row) => row.map((value) => formatComputedValue(value)).join("\t"))
+    .join("\n")
+    .trim();
+}
+
+function widgetRenderedText(widget) {
+  if (widget?.type === "matrix") {
+    return matrixWidgetStructuredText(widget);
+  }
+  const root = widgetLayer.querySelector(`.value-widget[data-widget-id="${widget.id}"]`);
+  const body = root?.querySelector(".value-widget-body");
+  return String(body?.innerText || "").trim();
 }
 
 function refreshTableWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap()) {
@@ -5737,6 +5828,15 @@ function openWidgetContextMenu(evt, widget) {
   const wasMinimized = Boolean(widget.minimized);
   showContextMenu(evt.clientX, evt.clientY, [
     {
+      label: t("context.widget.copy"),
+      action: async () => {
+        const content = widgetRenderedText(widget);
+        const ok = await copyTextToClipboard(content);
+        setStatusKey(ok ? "status.widgetCopied" : "status.clipboardEmpty");
+      },
+      disabled: !widgetRenderedText(widget),
+    },
+    {
       label: wasMinimized ? t("context.widget.restore") : t("context.widget.minimize"),
       action: () => {
         runAction(() => {
@@ -5756,6 +5856,35 @@ function openWidgetContextMenu(evt, widget) {
           clearAllSelection();
         });
         setStatusKey("status.widgetDeleted");
+      },
+    },
+  ]);
+}
+
+function openTextContextMenu(evt, item) {
+  if (isExecutionFrozen()) {
+    return;
+  }
+  showContextMenu(evt.clientX, evt.clientY, [
+    {
+      label: t("context.text.edit"),
+      action: () => {
+        selectTextItem(item.id);
+        render();
+        window.requestAnimationFrame(() => {
+          textHtmlInput?.focus();
+          textHtmlInput?.select();
+        });
+      },
+    },
+    {
+      label: t("context.text.delete"),
+      action: () => {
+        runAction(() => {
+          graph.textItems = graph.textItems.filter((entry) => entry.id !== item.id);
+          clearAllSelection();
+        });
+        setStatusKey("status.textDeleted");
       },
     },
   ]);
@@ -6124,6 +6253,7 @@ function refreshWidgetConfigPanel(widget) {
     sourceSelect.addEventListener("change", () => {
       runAction(() => {
         widget.source = sourceSelect.value;
+        widget.lastMatrixValue = null;
         sanitizeMatrixWidgetOptions(widget);
       });
     });
@@ -7617,6 +7747,7 @@ function render() {
       if (!(ui.selected?.type === "text" && ui.selected.id === item.id)) {
         selectTextItem(item.id);
       }
+      openTextContextMenu(evt, item);
     });
     handle.addEventListener("pointerdown", (evt) => {
       evt.stopPropagation();
@@ -7855,6 +7986,201 @@ function normalizeJsonFilename(name) {
     return defaultGraphFilename();
   }
   return trimmed.toLowerCase().endsWith(".json") ? trimmed : `${trimmed}.json`;
+}
+
+function supportsRecentModelPaths() {
+  return hasPlatformApi("createFileHandleFromPath");
+}
+
+async function extractFileHandlePath(fileHandle) {
+  if (!fileHandle) {
+    return "";
+  }
+  if (typeof fileHandle.getPath === "function") {
+    try {
+      const path = String(await fileHandle.getPath()).trim();
+      if (path) {
+        return path;
+      }
+    } catch (_err) {
+      // Fall back below.
+    }
+  }
+  const directPath = String(fileHandle.path ?? "").trim();
+  return directPath;
+}
+
+function saveRecentModelsToStorage() {
+  try {
+    const payload = recentModelEntries
+      .filter((entry) => entry && entry.path)
+      .slice(0, MAX_RECENT_MODELS)
+      .map((entry) => ({
+        name: String(entry.name || ""),
+        path: String(entry.path || ""),
+      }));
+    window.localStorage.setItem(RECENT_MODELS_STORAGE_KEY, JSON.stringify(payload));
+  } catch (_err) {
+    // Ignore storage failures.
+  }
+}
+
+function loadRecentModelsFromStorage() {
+  try {
+    const raw = window.localStorage.getItem(RECENT_MODELS_STORAGE_KEY);
+    if (!raw) {
+      recentModelEntries = [];
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      recentModelEntries = [];
+      return;
+    }
+    recentModelEntries = parsed
+      .map((entry) => ({
+        name: String(entry?.name || ""),
+        path: String(entry?.path || "").trim(),
+        handle: null,
+      }))
+      .filter((entry) => entry.path)
+      .slice(0, MAX_RECENT_MODELS);
+  } catch (_err) {
+    recentModelEntries = [];
+  }
+}
+
+function clearRecentModels() {
+  recentModelEntries = [];
+  saveRecentModelsToStorage();
+  renderRecentModelsMenu();
+}
+
+function renderRecentModelsMenu() {
+  if (!recentModelsSection || !recentModelsSep || !clearRecentModelsBtn) {
+    return;
+  }
+  recentModelsSection.innerHTML = "";
+  const hasRecent = recentModelEntries.length > 0;
+  recentModelsSection.classList.toggle("hidden", !hasRecent);
+  recentModelsSep.classList.toggle("hidden", !hasRecent);
+  clearRecentModelsBtn.classList.toggle("hidden", !hasRecent);
+  if (!hasRecent) {
+    return;
+  }
+  const title = document.createElement("div");
+  title.className = "menu-recent-title";
+  title.textContent = t("menu.file.recent");
+  recentModelsSection.appendChild(title);
+  recentModelEntries.forEach((entry, idx) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "menu-command";
+    btn.title = entry.path || entry.name || "";
+    const label = document.createElement("span");
+    label.textContent = entry.name || entry.path || `${idx + 1}`;
+    btn.appendChild(label);
+    btn.addEventListener("click", () => {
+      closeTopMenus();
+      void openRecentModelEntry(entry);
+    });
+    recentModelsSection.appendChild(btn);
+  });
+}
+
+async function rememberRecentModel(name, fileHandle = null) {
+  const trimmedName = String(name || "").trim();
+  const path = supportsRecentModelPaths() ? await extractFileHandlePath(fileHandle) : "";
+  const handle = fileHandle || null;
+  if (!trimmedName && !path && !handle) {
+    return;
+  }
+  const dedupeIndex = recentModelEntries.findIndex((entry) => {
+    if (path && entry.path) {
+      return entry.path === path;
+    }
+    if (!path && !entry.path && handle && entry.handle) {
+      return entry.handle === handle;
+    }
+    return !path && !entry.path && trimmedName && entry.name === trimmedName;
+  });
+  if (dedupeIndex >= 0) {
+    recentModelEntries.splice(dedupeIndex, 1);
+  }
+  recentModelEntries.unshift({
+    name: trimmedName || path || t("file.unnamed"),
+    path,
+    handle,
+  });
+  recentModelEntries = recentModelEntries.slice(0, MAX_RECENT_MODELS);
+  saveRecentModelsToStorage();
+  renderRecentModelsMenu();
+}
+
+async function resolveRecentModelHandle(entry) {
+  if (entry?.handle) {
+    return entry.handle;
+  }
+  if (entry?.path && supportsRecentModelPaths()) {
+    try {
+      const handle = window.STGraphXPlatform.createFileHandleFromPath(entry.path);
+      entry.handle = handle;
+      return handle;
+    } catch (_err) {
+      return null;
+    }
+  }
+  return null;
+}
+
+async function openPreparedJsonEntry(rootEntry) {
+  if (!rootEntry) {
+    return false;
+  }
+  submodelTemplateCache.clear();
+  submodelFileHandleCache.clear();
+  submodelSourceCache.clear();
+  const handle = rootEntry.fileHandle;
+  const file = rootEntry.file;
+  const text = rootEntry.text;
+  const rootData = rootEntry.data || JSON.parse(text);
+  const directoryHandle = rootEntry.directoryHandle || await deriveDirectoryHandleFromFileHandle(handle) || null;
+  loadGraphFromJsonText(
+    text,
+    rootEntry.name || (handle && handle.name) || (file && file.name) || "graph.json",
+    handle || null,
+    directoryHandle,
+    true,
+  );
+  await rememberRecentModel(rootEntry.name || (handle && handle.name) || (file && file.name) || "graph.json", handle || null);
+  await preloadSubmodelsAfterLoad();
+  await maybeSelectModelDirectoryForSubmodels(rootData);
+  await preloadSubmodelsAfterLoad();
+  return true;
+}
+
+async function openRecentModelEntry(entry) {
+  try {
+    const handle = await resolveRecentModelHandle(entry);
+    if (!handle) {
+      recentModelEntries = recentModelEntries.filter((item) => item !== entry);
+      saveRecentModelsToStorage();
+      renderRecentModelsMenu();
+      setStatusKey("status.recentMissing");
+      return false;
+    }
+    const rootEntry = await prepareSelectedJsonEntries([handle]);
+    if (!rootEntry) {
+      return false;
+    }
+    return openPreparedJsonEntry(rootEntry);
+  } catch (_err) {
+    recentModelEntries = recentModelEntries.filter((item) => item !== entry);
+    saveRecentModelsToStorage();
+    renderRecentModelsMenu();
+    setStatusKey("status.recentMissing");
+    return false;
+  }
 }
 
 function tryDeriveDirectoryHandleFromFileHandle(fileHandle) {
@@ -8650,6 +8976,7 @@ async function saveGraphJson(forceSaveAs = false) {
     currentModelDirectoryHandle = currentModelDirectoryHandle || await deriveDirectoryHandleFromFileHandle(currentFileHandle) || null;
     submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
     markSavedSnapshot();
+    await rememberRecentModel(currentFileName || filename, currentFileHandle);
     setStatusKey("status.saved");
     return true;
   }
@@ -8667,6 +8994,7 @@ async function saveGraphJson(forceSaveAs = false) {
         currentModelDirectoryHandle = await deriveDirectoryHandleFromFileHandle(currentFileHandle) || currentModelDirectoryHandle || null;
         submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
         markSavedSnapshot();
+        await rememberRecentModel(currentFileName || filename, currentFileHandle);
         setStatusKey("status.saved");
         return true;
       }
@@ -8691,6 +9019,7 @@ async function saveGraphJson(forceSaveAs = false) {
     submodelTemplateCache.set(String(currentFileName || selectedName), buildRuntimeModelFromData(data));
     downloadJsonFile(selectedName, json);
     markSavedSnapshot();
+    await rememberRecentModel(currentFileName || selectedName, currentFileHandle);
     setStatusKey("status.saved");
     return true;
   }
@@ -8724,6 +9053,7 @@ async function saveGraphJson(forceSaveAs = false) {
         currentModelDirectoryHandle = await deriveDirectoryHandleFromFileHandle(currentFileHandle) || currentModelDirectoryHandle || null;
         submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
         markSavedSnapshot();
+        await rememberRecentModel(currentFileName || filename, currentFileHandle);
         setStatusKey("status.savedAs");
         return true;
       }
@@ -8750,28 +9080,19 @@ async function saveGraphJson(forceSaveAs = false) {
   downloadJsonFile(filename, json);
   submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
   markSavedSnapshot();
+  await rememberRecentModel(currentFileName || filename, currentFileHandle);
   setStatusKey(forceSaveAs ? "status.savedAs" : "status.saved");
   return true;
 }
 
 async function loadGraphJsonFile(file) {
   try {
-    submodelTemplateCache.clear();
-    submodelFileHandleCache.clear();
-    submodelSourceCache.clear();
     const extraFiles = Array.from(loadJsonInput.files || []).filter((entry) => entry !== file);
     const rootEntry = await prepareSelectedJsonEntries([file, ...extraFiles]);
     if (!rootEntry) {
       return;
     }
-    const text = rootEntry.text;
-    const rootData = rootEntry.data || JSON.parse(text);
-    const fileHandle = rootEntry.fileHandle || null;
-    const directoryHandle = rootEntry.directoryHandle || await deriveDirectoryHandleFromFileHandle(fileHandle) || null;
-    loadGraphFromJsonText(text, rootEntry.name || file?.name || "graph.json", fileHandle, directoryHandle, true);
-    await preloadSubmodelsAfterLoad();
-    await maybeSelectModelDirectoryForSubmodels(rootData);
-    await preloadSubmodelsAfterLoad();
+    await openPreparedJsonEntry(rootEntry);
   } catch (_err) {
     cancelTransaction();
     setStatusKey("status.readError");
@@ -8801,21 +9122,7 @@ async function openGraphJson() {
       if (!rootEntry) {
         return;
       }
-      const handle = rootEntry.fileHandle;
-      const file = rootEntry.file;
-      const text = rootEntry.text;
-      const rootData = rootEntry.data || JSON.parse(text);
-      const directoryHandle = rootEntry.directoryHandle || await deriveDirectoryHandleFromFileHandle(handle) || null;
-      loadGraphFromJsonText(
-        text,
-        rootEntry.name || (handle && handle.name) || (file && file.name) || "graph.json",
-        handle || null,
-        directoryHandle,
-        true,
-      );
-      await preloadSubmodelsAfterLoad();
-      await maybeSelectModelDirectoryForSubmodels(rootData);
-      await preloadSubmodelsAfterLoad();
+      await openPreparedJsonEntry(rootEntry);
       return;
     } catch (err) {
       if (err && err.name === "AbortError") {
@@ -10900,6 +11207,14 @@ loadJsonInput.addEventListener("change", () => {
   loadJsonInput.value = "";
 });
 
+if (clearRecentModelsBtn) {
+  clearRecentModelsBtn.addEventListener("click", () => {
+    clearRecentModels();
+    closeTopMenus();
+    setStatusKey("status.recentCleared");
+  });
+}
+
 graphViewport.addEventListener(
   "wheel",
   (evt) => {
@@ -11804,6 +12119,8 @@ window.addEventListener("resize", () => {
 
 async function boot() {
   await loadI18n();
+  loadRecentModelsFromStorage();
+  renderRecentModelsMenu();
 
   runAction(() => {
     addNode("rect");

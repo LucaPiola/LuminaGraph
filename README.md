@@ -55,7 +55,7 @@ __Al momento non implementati (rispetto a STGraph):__
 ## Appunti sul progetto
 
 - Comprende le richieste molto bene e la qualità del codice prodotto è quasi sempre eccellente
-- Controlla sempre il lavoro svolto e quasi sempre lo corregge da sé se trova degli errori
+- Anche senza che glielo si chieda, fa test sul codice che ha generato, e quasi sempre lo corregge da sé se trova degli errori
 - Nel caso di estensioni a parti già realizzate, si fa carico automaticamente di mantenere la coerenza
 - Le spiegazioni del lavoro compiuto sono chiare e corrette
 - A volte prende iniziative proponendo o anche implementando estensioni a quanto richiesto
