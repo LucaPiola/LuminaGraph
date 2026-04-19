@@ -9,7 +9,7 @@
     "start": "npm run start:desktop",
     "start:desktop": "electron .",
     "start:web": "node scripts/dev-server.js",
-    "check": "node --check app.js && node --check semantic.js && node --check graph-functions.js && node --check electron/main.js && node --check electron/preload.js && node --check scripts/dev-server.js",
+    "check": "node --check app.js && node --check widgets.js && node --check semantic.js && node --check graph-functions.js && node --check electron/main.js && node --check electron/preload.js && node --check scripts/dev-server.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
@@ -22,6 +22,7 @@
     "asar": true,
     "files": [
       "app.js",
+      "widgets.js",
       "semantic.js",
       "graph-functions.js",
       "index.html",

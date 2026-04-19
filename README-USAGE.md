@@ -387,7 +387,9 @@ Esempi:
 ### Estrazione, permutazione e ordinamento
 
 - `choice(vettore)`
+- `choice(matrice)`
   - estrae casualmente un elemento da un vettore non vuoto
+  - oppure una riga da una matrice non vuota
 
 - `shuffle(vettore)`
   - restituisce una copia del vettore con gli elementi mescolati casualmente
@@ -398,6 +400,7 @@ Esempi:
 Esempi:
 
 - `choice([10,20,30])`
+- `choice([[1,2],[3,4]])` -> `[1,2]` oppure `[3,4]`
 - `shuffle([1,2,3,4])`
 - `sort([3,1,2])` -> `[1,2,3]`
 

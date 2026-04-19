@@ -1,0 +1,605 @@
+{
+  "version": 1,
+  "modelTitle": "Modello di segregazione di Schelling",
+  "modelProperties": [],
+  "nodeCounter": 17,
+  "edgeCounter": 23,
+  "widgetCounter": 6,
+  "textItemCounter": 4,
+  "execution": {
+    "t0": 0,
+    "dt": 1,
+    "t1": 1000,
+    "delayMs": 1,
+    "decimals": 3,
+    "integrator": "euler",
+    "strictDefinitions": false
+  },
+  "nodes": [
+    {
+      "id": 1,
+      "name": "n",
+      "output": false,
+      "type": "parameter",
+      "x": 640,
+      "y": 560,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Lato della griglia quadrata"
+        }
+      ],
+      "valueExpression": "25"
+    },
+    {
+      "id": 2,
+      "name": "vacancy",
+      "output": false,
+      "type": "parameter",
+      "x": 640,
+      "y": 640,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Quota iniziale di celle vuote"
+        }
+      ],
+      "valueExpression": "0.4"
+    },
+    {
+      "id": 3,
+      "name": "tau",
+      "output": false,
+      "type": "parameter",
+      "x": 640,
+      "y": 440,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Soglia minima di vicini simili"
+        }
+      ],
+      "valueExpression": "0.5"
+    },
+    {
+      "id": 4,
+      "name": "space",
+      "output": true,
+      "type": "state",
+      "x": 1060,
+      "y": 660,
+      "width": 170,
+      "height": 90,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "0 = vuoto, 1 = tipo A, 2 = tipo B"
+        }
+      ],
+      "stateTransition": "if(size(unhappyCoords,0)==0 or size(emptyCoords,0)==0, this, setAt(setAt(this, moveTo, this[moveFrom]), moveFrom, 0))",
+      "initialState": "array([n,n], if(rand() < vacancy, 0, if(rand() < 0.5, 1, 2)))"
+    },
+    {
+      "id": 5,
+      "name": "occupiedN",
+      "output": false,
+      "type": "algebraic",
+      "x": 1220,
+      "y": 820,
+      "width": 170,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Numero di vicini occupati"
+        }
+      ],
+      "input": false,
+      "valueExpression": "array(size(space), count($value != 0, neighbors(space, $0, $1, true, true)))"
+    },
+    {
+      "id": 6,
+      "name": "sameN",
+      "output": false,
+      "type": "algebraic",
+      "x": 640,
+      "y": 740,
+      "width": 170,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Numero di vicini dello stesso tipo"
+        }
+      ],
+      "input": false,
+      "valueExpression": "array(size(space), if(space[$0,$1] == 0, 0, count($value == space[$0,$1], neighbors(space, $0, $1, true, true))))"
+    },
+    {
+      "id": 7,
+      "name": "similarity",
+      "output": false,
+      "type": "algebraic",
+      "x": 880,
+      "y": 820,
+      "width": 180,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Quota di vicini simili"
+        }
+      ],
+      "input": false,
+      "valueExpression": "array(size(space), if(space[$0,$1] == 0 or occupiedN[$0,$1] == 0, 1, sameN[$0,$1] / occupiedN[$0,$1]))"
+    },
+    {
+      "id": 8,
+      "name": "unhappyCoords",
+      "output": false,
+      "type": "algebraic",
+      "x": 880,
+      "y": 520,
+      "width": 190,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Coordinate degli agenti insoddisfatti"
+        }
+      ],
+      "input": false,
+      "valueExpression": "filter(similarity[$value] < tau, coords(space), \"rows\")"
+    },
+    {
+      "id": 9,
+      "name": "emptyCoords",
+      "output": false,
+      "type": "algebraic",
+      "x": 900,
+      "y": 320,
+      "width": 190,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Coordinate delle celle vuote"
+        }
+      ],
+      "input": false,
+      "valueExpression": "coords(space, 0)"
+    },
+    {
+      "id": 10,
+      "name": "moveFrom",
+      "output": false,
+      "type": "algebraic",
+      "x": 1260,
+      "y": 400,
+      "width": 160,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Cella di partenza scelta a caso"
+        }
+      ],
+      "input": false,
+      "valueExpression": "if(size(unhappyCoords,0) == 0, [-1,-1], choice(unhappyCoords))"
+    },
+    {
+      "id": 11,
+      "name": "moveTo",
+      "output": false,
+      "type": "algebraic",
+      "x": 1120,
+      "y": 320,
+      "width": 160,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Cella vuota di destinazione scelta a caso"
+        }
+      ],
+      "input": false,
+      "valueExpression": "if(size(emptyCoords,0) == 0, [-1,-1], choice(emptyCoords))"
+    },
+    {
+      "id": 12,
+      "name": "A",
+      "output": true,
+      "type": "algebraic",
+      "x": 1440,
+      "y": 620,
+      "width": 120,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Numero di agenti di tipo A"
+        }
+      ],
+      "input": false,
+      "valueExpression": "count($value == 1, space)"
+    },
+    {
+      "id": 13,
+      "name": "B",
+      "output": true,
+      "type": "algebraic",
+      "x": 1440,
+      "y": 720,
+      "width": 120,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Numero di agenti di tipo B"
+        }
+      ],
+      "input": false,
+      "valueExpression": "count($value == 2, space)"
+    },
+    {
+      "id": 14,
+      "name": "unhappy",
+      "output": true,
+      "type": "algebraic",
+      "x": 1440,
+      "y": 520,
+      "width": 140,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Numero di agenti insoddisfatti"
+        }
+      ],
+      "input": false,
+      "valueExpression": "size(unhappyCoords,0)"
+    }
+  ],
+  "edges": [
+    {
+      "id": 1,
+      "from": 1,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 2,
+      "from": 2,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 3,
+      "from": 4,
+      "to": 5,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 4,
+      "from": 4,
+      "to": 6,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 5,
+      "from": 4,
+      "to": 7,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 6,
+      "from": 5,
+      "to": 7,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 7,
+      "from": 6,
+      "to": 7,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 8,
+      "from": 7,
+      "to": 8,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 9,
+      "from": 3,
+      "to": 8,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 10,
+      "from": 4,
+      "to": 8,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 11,
+      "from": 4,
+      "to": 9,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 12,
+      "from": 8,
+      "to": 10,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 13,
+      "from": 9,
+      "to": 11,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 14,
+      "from": 8,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 15,
+      "from": 9,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 16,
+      "from": 10,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 17,
+      "from": 11,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 18,
+      "from": 4,
+      "to": 12,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 19,
+      "from": 4,
+      "to": 13,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 20,
+      "from": 8,
+      "to": 14,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    }
+  ],
+  "textItems": [
+    {
+      "id": 1,
+      "x": 720,
+      "y": 100,
+      "width": 700,
+      "height": 80,
+      "fillColor": "",
+      "strokeColor": "",
+      "html": "<h1>Schelling su griglia toroidale</h1><p>A ogni passo un agente insoddisfatto scelto a caso si sposta in una cella vuota scelta a caso.</p>"
+    }
+  ],
+  "widgets": [
+    {
+      "id": 1,
+      "type": "matrix",
+      "customTitle": "Spazio",
+      "x": 1665,
+      "y": 42,
+      "width": 520,
+      "height": 540,
+      "minimized": false,
+      "outputOnly": true,
+      "showHistory": false,
+      "xMin": 0,
+      "xMax": 0,
+      "yMin": 0,
+      "yMax": 0,
+      "showGrid": true,
+      "legendPosition": "top-right",
+      "source": "space",
+      "showNumericValues": false,
+      "showIndices": false,
+      "autoFitCells": true,
+      "cellSize": 12,
+      "colorScheme": "heat",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "columns": [],
+      "xyPairs": []
+    },
+    {
+      "id": 2,
+      "type": "xychart",
+      "customTitle": "Conteggi e insoddisfatti",
+      "x": 1665,
+      "y": 610,
+      "width": 525,
+      "height": 332,
+      "minimized": false,
+      "outputOnly": false,
+      "showHistory": false,
+      "xMin": 0,
+      "xMax": 0,
+      "yMin": 0,
+      "yMax": 0,
+      "showGrid": true,
+      "legendPosition": "top-right",
+      "source": "",
+      "showNumericValues": true,
+      "showIndices": true,
+      "autoFitCells": true,
+      "cellSize": 28,
+      "colorScheme": "blue",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "columns": [],
+      "xyPairs": [
+        {
+          "xSource": "time",
+          "ySource": "A",
+          "showTimeSeries": true,
+          "showInstantProfile": false,
+          "color": "#1f77b4",
+          "showLine": true,
+          "lineWidth": 2.2,
+          "lineStyle": "solid",
+          "pointMode": "none",
+          "pointSize": 2.4
+        },
+        {
+          "xSource": "time",
+          "ySource": "B",
+          "showTimeSeries": true,
+          "showInstantProfile": false,
+          "color": "#d62728",
+          "showLine": true,
+          "lineWidth": 2.2,
+          "lineStyle": "solid",
+          "pointMode": "none",
+          "pointSize": 2.4
+        },
+        {
+          "xSource": "time",
+          "ySource": "unhappy",
+          "showTimeSeries": true,
+          "showInstantProfile": false,
+          "color": "#2ca02c",
+          "showLine": true,
+          "lineWidth": 2.2,
+          "lineStyle": "dashed",
+          "pointMode": "none",
+          "pointSize": 2.4
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "customTitle": "Valori correnti",
+      "x": 1666,
+      "y": 959,
+      "width": 523,
+      "height": 198,
+      "minimized": false,
+      "outputOnly": false,
+      "showHistory": false,
+      "xMin": 0,
+      "xMax": 0,
+      "yMin": 0,
+      "yMax": 0,
+      "showGrid": true,
+      "legendPosition": "top-right",
+      "source": "",
+      "showNumericValues": true,
+      "showIndices": true,
+      "autoFitCells": true,
+      "cellSize": 28,
+      "colorScheme": "blue",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "columns": [
+        "time",
+        "A",
+        "B",
+        "unhappy"
+      ],
+      "xyPairs": []
+    }
+  ]
+}

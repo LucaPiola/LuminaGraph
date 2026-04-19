@@ -395,9 +395,19 @@
   }
 
   function chooseRandomElement(values) {
+    if (!Array.isArray(values)) {
+      throw new Error("choice expects a vector or matrix");
+    }
+    const isMatrix = values.every((row) => Array.isArray(row) && row.every((item) => !Array.isArray(item)));
+    if (isMatrix) {
+      if (!values.length) {
+        throw new Error("choice expects a non-empty vector or matrix");
+      }
+      return values[Math.floor(Math.random() * values.length)].slice();
+    }
     const vector = ensureFlatVector(values, "choice");
     if (!vector.length) {
-      throw new Error("choice expects a non-empty vector");
+      throw new Error("choice expects a non-empty vector or matrix");
     }
     return vector[Math.floor(Math.random() * vector.length)];
   }
@@ -1043,7 +1053,7 @@
       grid: { kind: "array", signature: "grid(rows, cols[, collisions[, value]])", descriptionKey: "expr.help.grid", insertText: "grid()", cursorOffset: 5 },
       coords: { kind: "array", signature: "coords(matrix[, value])", descriptionKey: "expr.help.coords", insertText: "coords()", cursorOffset: 7 },
       neighbors: { kind: "array", signature: "neighbors(matrix, row, col[, diagonals[, toroidal]])", descriptionKey: "expr.help.neighbors", insertText: "neighbors()", cursorOffset: 10 },
-      choice: { kind: "probability", signature: "choice(vector)", descriptionKey: "expr.help.choice", insertText: "choice()", cursorOffset: 7 },
+      choice: { kind: "probability", signature: "choice(vector|matrix)", descriptionKey: "expr.help.choice", insertText: "choice()", cursorOffset: 7 },
       shuffle: { kind: "array", signature: "shuffle(vector)", descriptionKey: "expr.help.shuffle", insertText: "shuffle()", cursorOffset: 8 },
       sort: { kind: "array", signature: "sort(vector)", descriptionKey: "expr.help.sort", insertText: "sort()", cursorOffset: 5 },
       size: { kind: "array", signature: "size(array[, axis])", descriptionKey: "expr.help.size", insertText: "size()", cursorOffset: 5 },

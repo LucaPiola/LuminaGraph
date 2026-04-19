@@ -7,6 +7,7 @@ STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
 ## Architettura
 
 STGraphX mantiene un unico codice applicativo per due shell:
+
 - web, per accesso da browser via `http:` (e con qualche limitazione anche `file:`);
 - desktop, mediante `Electron`.
 
@@ -15,27 +16,33 @@ L'obiettivo è evitare duplicazione del codice applicativo e isolare le differen
 ## Struttura del progetto
 
 Frontend condiviso:
+
 - `index.html`
 - `styles.css`
 - `app.js`
+- `widgets.js`
 - `semantic.js`
 - `graph-functions.js`
 - `i18n-inline.js`
 
 Shell Electron:
+
 - `electron/main.js`
 - `electron/preload.js`
 
 Supporto sviluppo:
+
 - `scripts/dev-server.js`
 - `package.json`
 
 ## i18n
 
 La localizzazione runtime è concentrata in:
+
 - `i18n-inline.js`
 
 Il renderer legge i testi tramite:
+
 - `window.STGraphXI18nBundles`
 
 Questo evita dipendenze da `fetch(...)` e riduce i problemi in esecuzione locale o in ambienti con policy diverse sui file.
@@ -45,16 +52,46 @@ Questo evita dipendenze da `fetch(...)` e riduce i problemi in esecuzione locale
 ### Renderer condiviso
 
 Il renderer contiene:
+
 - editor del grafo
 - pannelli di configurazione
 - runtime dei modelli
-- gestione dei widget
 - integrazione UI della semantica delle espressioni
 - risoluzione dei sottomodelli a livello logico
+
+`app.js` resta il punto di orchestrazione principale della UI:
+
+- selezione e navigazione sul canvas
+- menu e finestre flottanti
+- gestione file e recenti
+- esecuzione del modello
+- coordinamento tra sidebar, canvas, semantica e widget
+
+### Modulo widget
+
+`widgets.js` contiene la logica specifica dei widget:
+
+- creazione dei widget
+- sanificazione delle opzioni
+- rendering dei widget
+- rendering del grafico XY
+- aggiornamento runtime dei widget
+- pannello di configurazione dei widget
+
+Espone nel renderer un namespace condiviso:
+
+- `window.Widgets`
+
+In particolare:
+
+- `window.Widgets.renderWidgets(...)`
+- `window.Widgets.refreshWidgetConfigPanel(...)`
+- helper di creazione come `addTableWidget(...)`, `addMatrixWidget(...)`, `addSliderWidget(...)`, `addXYChartWidget(...)`
 
 ### Modulo funzioni
 
 `graph-functions.js` contiene il catalogo centralizzato del linguaggio:
+
 - funzioni matematiche built-in
 - funzioni su vettori e matrici
 - generatori casuali
@@ -62,6 +99,7 @@ Il renderer contiene:
 - metadatazione delle funzioni e variabili di sistema usata dall'editor e dall'help
 
 Espone in particolare:
+
 - `window.GraphFunctions.createMathScope(...)`
 - `window.GraphFunctions.probability`
 - `window.GraphFunctions.expressionDocs`
@@ -69,6 +107,7 @@ Espone in particolare:
 ### Modulo semantico
 
 `semantic.js` contiene:
+
 - parser delle espressioni
 - AST
 - valutazione delle espressioni
@@ -82,22 +121,26 @@ Espone in particolare:
 - runtime dei modelli e delle transizioni di stato
 
 In pratica:
+
 - `graph-functions.js` definisce cosa il linguaggio sa fare
 - `semantic.js` definisce come il linguaggio viene interpretato
 
 ### Layer di piattaforma
 
 `app.js` usa wrapper compatibili per:
+
 - apertura file
 - salvataggio file
 - scelta cartella
 
 API usate dal renderer:
+
 - `showOpenFilePickerCompat(...)`
 - `showSaveFilePickerCompat(...)`
 - `showDirectoryPickerCompat(...)`
 
 Questi wrapper preferiscono:
+
 1. `window.STGraphXPlatform` se disponibile
 2. API native del browser come fallback
 3. fallback HTML input dove necessario
@@ -107,6 +150,7 @@ Questi wrapper preferiscono:
 ### Main process
 
 `electron/main.js` crea la finestra e gestisce tre canali IPC:
+
 - `stgraphx:show-open-dialog`
 - `stgraphx:show-save-dialog`
 - `stgraphx:show-directory-dialog`
@@ -114,6 +158,7 @@ Questi wrapper preferiscono:
 ### Preload
 
 `electron/preload.js` espone nel renderer:
+
 - `window.STGraphXPlatform.showOpenFilePicker(...)`
 - `window.STGraphXPlatform.showSaveFilePicker(...)`
 - `window.STGraphXPlatform.showDirectoryPicker(...)`
@@ -197,12 +242,15 @@ npm run dist:mac
 ### Cosa aspettarsi nella cartella `dist/`
 
 A seconda del sistema operativo, `electron-builder` produrrà file diversi:
+
 - Windows: installer `nsis` e pacchetto `portable`
 - Linux: `AppImage` e archivio `tar.gz`
 - macOS: `dmg` e `zip`
 
 ### Risorse opzionali ma consigliate
+
 La cartella `build/` è predisposta per contenere risorse di packaging, in particolare:
+
 - icone applicative
 - eventuali immagini usate dagli installer
 
@@ -211,6 +259,7 @@ Se non inserisci icone personalizzate, il packaging funziona comunque, ma userà
 ### Nota sui target cross-platform
 
 In generale, il packaging funziona meglio quando viene eseguito sulla piattaforma destinazione:
+
 - build Windows su Windows
 - build macOS su macOS
 - build Linux su Linux
@@ -218,11 +267,13 @@ In generale, il packaging funziona meglio quando viene eseguito sulla piattaform
 Alcuni target possono essere generati anche da altri sistemi, ma per una prima esperienza conviene evitare cross-build aggressivi.
 
 Output previsto:
+
 - cartella `dist/`
 
 ### Estensioni possibili
 
 Passi successivi plausibili:
+
 1. icone dedicate per Windows/macOS/Linux
 2. packaging firmato
 3. eventuale layer di persistenza più esplicito per preferenze applicative
@@ -245,5 +296,6 @@ python3 -m http.server
 ```
 
 Note pratiche:
+
 - con Firefox e Chrome funziona spesso anche `file:`, mentre Opera può essere meno affidabile;
 - per un uso regolare è preferibile `http:`.

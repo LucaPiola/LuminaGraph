@@ -2,10 +2,10 @@
   "version": 1,
   "modelTitle": "",
   "modelProperties": [],
-  "nodeCounter": 11,
-  "edgeCounter": 13,
-  "widgetCounter": 6,
-  "textItemCounter": 2,
+  "nodeCounter": 12,
+  "edgeCounter": 14,
+  "widgetCounter": 7,
+  "textItemCounter": 3,
   "execution": {
     "t0": 0,
     "dt": 0.03125,
@@ -207,6 +207,8 @@
       "y": -20,
       "width": 320,
       "height": 60,
+      "fillColor": "",
+      "strokeColor": "",
       "html": "<h1>Frattale di Lorenz</h1>"
     }
   ],
@@ -227,6 +229,7 @@
       "yMin": 0,
       "yMax": 0,
       "showGrid": true,
+      "legendPosition": "top-left",
       "source": "",
       "showNumericValues": true,
       "showIndices": true,
@@ -246,6 +249,8 @@
           "showInstantProfile": false,
           "color": "#0e7ac4",
           "showLine": true,
+          "lineWidth": 2.2,
+          "lineStyle": "solid",
           "pointMode": "none",
           "pointSize": 2.4
         }

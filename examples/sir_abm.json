@@ -1,0 +1,541 @@
+{
+  "version": 1,
+  "modelTitle": "Modello epidemiologico SIR agent-based",
+  "modelProperties": [],
+  "nodeCounter": 22,
+  "edgeCounter": 43,
+  "widgetCounter": 6,
+  "textItemCounter": 4,
+  "execution": {
+    "t0": 0,
+    "dt": 1,
+    "t1": 200,
+    "delayMs": 1,
+    "decimals": 3,
+    "integrator": "euler",
+    "strictDefinitions": false
+  },
+  "nodes": [
+    {
+      "id": 1,
+      "name": "n",
+      "output": false,
+      "type": "parameter",
+      "x": 140,
+      "y": 360,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Lato della griglia quadrata"
+        }
+      ],
+      "valueExpression": "30"
+    },
+    {
+      "id": 2,
+      "name": "beta",
+      "output": false,
+      "type": "parameter",
+      "x": 120,
+      "y": 140,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Probabilita di contagio per vicino infetto"
+        }
+      ],
+      "valueExpression": "0.27"
+    },
+    {
+      "id": 3,
+      "name": "gamma",
+      "output": false,
+      "type": "parameter",
+      "x": 120,
+      "y": 240,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Probabilita di guarigione per passo"
+        }
+      ],
+      "valueExpression": "0.02"
+    },
+    {
+      "id": 4,
+      "name": "coords_2",
+      "output": false,
+      "type": "algebraic",
+      "x": 360,
+      "y": 360,
+      "width": 150,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Coordinate [riga,colonna] di tutte le celle"
+        }
+      ],
+      "input": false,
+      "valueExpression": "coords(array([n,n],1))"
+    },
+    {
+      "id": 5,
+      "name": "rows",
+      "output": false,
+      "type": "algebraic",
+      "x": 360,
+      "y": 460,
+      "width": 150,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Righe degli agenti"
+        }
+      ],
+      "input": false,
+      "valueExpression": "coords_2[:,0]"
+    },
+    {
+      "id": 6,
+      "name": "cols",
+      "output": false,
+      "type": "algebraic",
+      "x": 360,
+      "y": 560,
+      "width": 150,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Colonne degli agenti"
+        }
+      ],
+      "input": false,
+      "valueExpression": "coords_2[:,1]"
+    },
+    {
+      "id": 7,
+      "name": "sir",
+      "output": true,
+      "type": "state",
+      "x": 380,
+      "y": 180,
+      "width": 160,
+      "height": 86,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "0=suscettibile, 1=infetto, 2=rimosso"
+        }
+      ],
+      "stateTransition": "if(self == 0 and rand() < beta * infNeighbors[$i] / 8, 1, if(self == 1 and rand() < gamma, 2, self))",
+      "initialState": "setAt(array(n*n, 0), randInt(n*n - 1), 1)"
+    },
+    {
+      "id": 8,
+      "name": "space",
+      "output": true,
+      "type": "algebraic",
+      "x": 700,
+      "y": 340,
+      "width": 170,
+      "height": 86,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Griglia: 1=S, 2=I, 3=R"
+        }
+      ],
+      "input": false,
+      "valueExpression": "grid(rows, cols, \"first\", sir + 1)"
+    },
+    {
+      "id": 9,
+      "name": "infNeighbors",
+      "output": false,
+      "type": "algebraic",
+      "x": 700,
+      "y": 520,
+      "width": 190,
+      "height": 86,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Numero di vicini infetti per ogni agente"
+        }
+      ],
+      "input": false,
+      "valueExpression": "array(size(sir), count($value == 2, neighbors(space, rows[$0], cols[$0], true, true)))"
+    },
+    {
+      "id": 10,
+      "name": "S",
+      "output": true,
+      "type": "algebraic",
+      "x": 940,
+      "y": 120,
+      "width": 130,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Numero di suscettibili"
+        }
+      ],
+      "input": false,
+      "valueExpression": "count($value == 0, sir)"
+    },
+    {
+      "id": 11,
+      "name": "I",
+      "output": true,
+      "type": "algebraic",
+      "x": 940,
+      "y": 220,
+      "width": 130,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Numero di infetti"
+        }
+      ],
+      "input": false,
+      "valueExpression": "count($value == 1, sir)"
+    },
+    {
+      "id": 12,
+      "name": "R",
+      "output": true,
+      "type": "algebraic",
+      "x": 940,
+      "y": 320,
+      "width": 130,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Numero di rimossi"
+        }
+      ],
+      "input": false,
+      "valueExpression": "count($value == 2, sir)"
+    }
+  ],
+  "edges": [
+    {
+      "id": 1,
+      "from": 1,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 2,
+      "from": 4,
+      "to": 5,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 3,
+      "from": 4,
+      "to": 6,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 4,
+      "from": 1,
+      "to": 7,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 5,
+      "from": 2,
+      "to": 7,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 6,
+      "from": 3,
+      "to": 7,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 7,
+      "from": 9,
+      "to": 7,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 8,
+      "from": 7,
+      "to": 8,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 9,
+      "from": 5,
+      "to": 8,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 10,
+      "from": 6,
+      "to": 8,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 11,
+      "from": 8,
+      "to": 9,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 12,
+      "from": 5,
+      "to": 9,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 13,
+      "from": 6,
+      "to": 9,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 14,
+      "from": 7,
+      "to": 10,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 15,
+      "from": 7,
+      "to": 11,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 16,
+      "from": 7,
+      "to": 12,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 41,
+      "from": 7,
+      "to": 9,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    }
+  ],
+  "textItems": [
+    {
+      "id": 1,
+      "x": 40,
+      "y": -60,
+      "width": 520,
+      "height": 80,
+      "fillColor": "",
+      "strokeColor": "",
+      "html": "<h1>SIR ABM su griglia toroidale</h1><p>Un agente per cella, contagio dai vicini, transizione S → I → R.</p>"
+    }
+  ],
+  "widgets": [
+    {
+      "id": 1,
+      "type": "matrix",
+      "customTitle": "Spazio SIR",
+      "x": 1055.055741360089,
+      "y": -53.16945373467112,
+      "width": 520,
+      "height": 554,
+      "minimized": false,
+      "outputOnly": true,
+      "showHistory": false,
+      "xMin": 0,
+      "xMax": 0,
+      "yMin": 0,
+      "yMax": 0,
+      "showGrid": true,
+      "legendPosition": "top-right",
+      "source": "space",
+      "showNumericValues": false,
+      "showIndices": false,
+      "autoFitCells": true,
+      "cellSize": 12,
+      "colorScheme": "blue",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "columns": [],
+      "xyPairs": []
+    },
+    {
+      "id": 2,
+      "type": "xychart",
+      "customTitle": "Andamento S, I, R",
+      "x": 1054.055741360089,
+      "y": 511.62876254180605,
+      "width": 523,
+      "height": 331,
+      "minimized": false,
+      "outputOnly": false,
+      "showHistory": false,
+      "xMin": 0,
+      "xMax": 0,
+      "yMin": 0,
+      "yMax": 0,
+      "showGrid": true,
+      "legendPosition": "top-right",
+      "source": "",
+      "showNumericValues": true,
+      "showIndices": true,
+      "autoFitCells": true,
+      "cellSize": 28,
+      "colorScheme": "blue",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "columns": [],
+      "xyPairs": [
+        {
+          "xSource": "time",
+          "ySource": "S",
+          "showTimeSeries": true,
+          "showInstantProfile": false,
+          "color": "#1f77b4",
+          "showLine": true,
+          "lineWidth": 2.2,
+          "lineStyle": "solid",
+          "pointMode": "none",
+          "pointSize": 2.4
+        },
+        {
+          "xSource": "time",
+          "ySource": "I",
+          "showTimeSeries": true,
+          "showInstantProfile": false,
+          "color": "#d62728",
+          "showLine": true,
+          "lineWidth": 2.2,
+          "lineStyle": "solid",
+          "pointMode": "none",
+          "pointSize": 2.4
+        },
+        {
+          "xSource": "time",
+          "ySource": "R",
+          "showTimeSeries": true,
+          "showInstantProfile": false,
+          "color": "#2ca02c",
+          "showLine": true,
+          "lineWidth": 2.2,
+          "lineStyle": "solid",
+          "pointMode": "none",
+          "pointSize": 2.4
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "customTitle": "Conteggi correnti",
+      "x": 533.8416945373467,
+      "y": 720.8539576365663,
+      "width": 500.07803790412487,
+      "height": 121.55072463768117,
+      "minimized": false,
+      "outputOnly": false,
+      "showHistory": false,
+      "xMin": 0,
+      "xMax": 0,
+      "yMin": 0,
+      "yMax": 0,
+      "showGrid": true,
+      "legendPosition": "top-right",
+      "source": "",
+      "showNumericValues": true,
+      "showIndices": true,
+      "autoFitCells": true,
+      "cellSize": 28,
+      "colorScheme": "blue",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "columns": [
+        "time",
+        "S",
+        "I",
+        "R"
+      ],
+      "xyPairs": []
+    }
+  ]
+}

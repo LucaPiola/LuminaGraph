@@ -644,6 +644,33 @@
     return scalarFn(value);
   }
 
+  function vectorizedConditionalOperation(condition, whenTrue, whenFalse) {
+    if (Array.isArray(condition) || Array.isArray(whenTrue) || Array.isArray(whenFalse)) {
+      if (Array.isArray(condition)) {
+        const ref = condition;
+        if ((Array.isArray(whenTrue) && !sameArrayShape(ref, whenTrue)) || (Array.isArray(whenFalse) && !sameArrayShape(ref, whenFalse))) {
+          throw new Error("if arguments must have matching shapes");
+        }
+        return condition.map((item, idx) => vectorizedConditionalOperation(
+          item,
+          Array.isArray(whenTrue) ? whenTrue[idx] : whenTrue,
+          Array.isArray(whenFalse) ? whenFalse[idx] : whenFalse,
+        ));
+      }
+      const ref = Array.isArray(whenTrue) ? whenTrue : whenFalse;
+      const other = Array.isArray(whenTrue) ? whenFalse : whenTrue;
+      if (Array.isArray(other) && !sameArrayShape(ref, other)) {
+        throw new Error("if arguments must have matching shapes");
+      }
+      return ref.map((item, idx) => vectorizedConditionalOperation(
+        condition,
+        Array.isArray(whenTrue) ? whenTrue[idx] : whenTrue,
+        Array.isArray(whenFalse) ? whenFalse[idx] : whenFalse,
+      ));
+    }
+    return condition ? whenTrue : whenFalse;
+  }
+
   function normalizeSliceIndex(value, size, fallback) {
     if (value == null) {
       return fallback;
@@ -1291,6 +1318,20 @@
       case "call": {
         if (node.name === "integral" && hooks?.onIntegralCall) {
           return hooks.onIntegralCall(node, scope);
+        }
+        if (node.name === "__if") {
+          if (node.args.length !== 3) {
+            throw new Error("if expects exactly 3 arguments");
+          }
+          const condition = evaluateAstNode(node.args[0], scope, hooks);
+          if (!Array.isArray(condition)) {
+            return condition
+              ? evaluateAstNode(node.args[1], scope, hooks)
+              : evaluateAstNode(node.args[2], scope, hooks);
+          }
+          const whenTrue = evaluateAstNode(node.args[1], scope, hooks);
+          const whenFalse = evaluateAstNode(node.args[2], scope, hooks);
+          return vectorizedConditionalOperation(condition, whenTrue, whenFalse);
         }
         if (node.name === "array") {
           if (node.args.length !== 2) {

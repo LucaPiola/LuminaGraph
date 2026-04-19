@@ -4,110 +4,110 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <title data-i18n="app.title">STGraphX</title>
+    <title data-i18n="app.title"></title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="app">
       <header class="menu-bar" id="topMenuBar">
         <div class="menu-root">
-          <button class="menu-title" type="button" data-menu="fileMenu" data-i18n="menu.file" data-title-i18n="tooltip.menu.file">File</button>
+          <button class="menu-title" type="button" data-menu="fileMenu" data-i18n="menu.file" data-title-i18n="tooltip.menu.file"></button>
           <div class="menu-panel" id="fileMenu">
-            <button id="newGraphBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.new"><span data-i18n="menu.file.new">Crea modello</span><span class="menu-shortcut">Alt+N</span></button>
-            <button id="loadJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.load"><span data-i18n="menu.file.load">Carica modello...</span><span class="menu-shortcut">Alt+O</span></button>
+            <button id="newGraphBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.new"><span data-i18n="menu.file.new"></span><span class="menu-shortcut">Alt+N</span></button>
+            <button id="loadJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.load"><span data-i18n="menu.file.load"></span><span class="menu-shortcut">Alt+O</span></button>
             <div id="recentModelsMenuRoot" class="menu-submenu hidden">
               <button id="recentModelsMenuBtn" class="menu-submenu-toggle" type="button">
-                <span data-i18n="menu.file.recent">Apri recenti</span>
+                <span data-i18n="menu.file.recent"></span>
                 <span class="menu-shortcut">›</span>
               </button>
               <div id="recentModelsSubmenu" class="menu-submenu-panel">
                 <div id="recentModelsSection"></div>
                 <hr id="recentModelsSep" class="menu-sep" />
-                <button id="clearRecentModelsBtn" class="menu-command" type="button"><span data-i18n="menu.file.clearRecent">Svuota recenti</span></button>
+                <button id="clearRecentModelsBtn" class="menu-command" type="button"><span data-i18n="menu.file.clearRecent"></span></button>
               </div>
             </div>
             <hr class="menu-sep" />
-            <button id="saveJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.save"><span data-i18n="menu.file.save">Salva</span><span class="menu-shortcut">Ctrl+S</span></button>
-            <button id="saveAsJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.saveAs"><span data-i18n="menu.file.saveAs">Salva con nome...</span><span class="menu-shortcut">Ctrl+Shift+S</span></button>
+            <button id="saveJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.save"><span data-i18n="menu.file.save"></span><span class="menu-shortcut">Ctrl+S</span></button>
+            <button id="saveAsJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.saveAs"><span data-i18n="menu.file.saveAs"></span><span class="menu-shortcut">Ctrl+Shift+S</span></button>
             <input id="loadJsonInput" type="file" accept="application/json" class="hidden-file" />
           </div>
         </div>
 
         <div class="menu-root">
-          <button class="menu-title" type="button" data-menu="editMenu" data-i18n="menu.edit" data-title-i18n="tooltip.menu.edit">Modifica</button>
+          <button class="menu-title" type="button" data-menu="editMenu" data-i18n="menu.edit" data-title-i18n="tooltip.menu.edit"></button>
           <div class="menu-panel" id="editMenu">
-            <button id="selectAllBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.selectAll"><span data-i18n="menu.edit.selectAll">Seleziona tutto</span><span class="menu-shortcut">Ctrl+A</span></button>
+            <button id="selectAllBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.selectAll"><span data-i18n="menu.edit.selectAll"></span><span class="menu-shortcut">Ctrl+A</span></button>
             <hr class="menu-sep" />
-            <button id="cutBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.cut"><span data-i18n="menu.edit.cut">Taglia</span><span class="menu-shortcut">Ctrl+X</span></button>
-            <button id="copyBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.copy"><span data-i18n="menu.edit.copy">Copia</span><span class="menu-shortcut">Ctrl+C</span></button>
-            <button id="pasteBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.paste"><span data-i18n="menu.edit.paste">Incolla</span><span class="menu-shortcut">Ctrl+V</span></button>
+            <button id="cutBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.cut"><span data-i18n="menu.edit.cut"></span><span class="menu-shortcut">Ctrl+X</span></button>
+            <button id="copyBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.copy"><span data-i18n="menu.edit.copy"></span><span class="menu-shortcut">Ctrl+C</span></button>
+            <button id="pasteBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.paste"><span data-i18n="menu.edit.paste"></span><span class="menu-shortcut">Ctrl+V</span></button>
             <hr class="menu-sep" />
-            <button id="undoBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.undo"><span data-i18n="menu.edit.undo">Undo</span><span class="menu-shortcut">Ctrl+Z</span></button>
-            <button id="redoBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.redo"><span data-i18n="menu.edit.redo">Redo</span><span class="menu-shortcut">Ctrl+Y</span></button>
-            <button id="deleteBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.delete"><span data-i18n="menu.edit.delete">Elimina selezione</span><span class="menu-shortcut">Del</span></button>
+            <button id="undoBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.undo"><span data-i18n="menu.edit.undo"></span><span class="menu-shortcut">Ctrl+Z</span></button>
+            <button id="redoBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.redo"><span data-i18n="menu.edit.redo"></span><span class="menu-shortcut">Ctrl+Y</span></button>
+            <button id="deleteBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.delete"><span data-i18n="menu.edit.delete"></span><span class="menu-shortcut">Del</span></button>
           </div>
         </div>
 
         <div class="menu-root">
-          <button class="menu-title" type="button" data-menu="insertMenu" data-i18n="menu.insert" data-title-i18n="tooltip.menu.insert">Inserisci</button>
+          <button class="menu-title" type="button" data-menu="insertMenu" data-i18n="menu.insert" data-title-i18n="tooltip.menu.insert"></button>
           <div class="menu-panel" id="insertMenu">
-            <button id="addRectNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.rect"><span data-i18n="menu.insert.rect">Variabile di stato</span><span class="menu-shortcut">Alt+1</span></button>
-            <button id="addEllipseNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.ellipse"><span data-i18n="menu.insert.ellipse">Variabile algebrica</span><span class="menu-shortcut">Alt+2</span></button>
-            <button id="addDiamondNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.diamond"><span data-i18n="menu.insert.diamond">Parametro</span><span class="menu-shortcut">Alt+3</span></button>
-            <button id="addSubmodelNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.submodel"><span data-i18n="menu.insert.submodel">Sottomodello</span><span class="menu-shortcut">Alt+4</span></button>
-            <button id="addTextItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.text"><span data-i18n="menu.insert.text">Testo</span></button>
+            <button id="addRectNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.rect"><span data-i18n="menu.insert.rect"></span><span class="menu-shortcut">Alt+1</span></button>
+            <button id="addEllipseNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.ellipse"><span data-i18n="menu.insert.ellipse"></span><span class="menu-shortcut">Alt+2</span></button>
+            <button id="addDiamondNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.diamond"><span data-i18n="menu.insert.diamond"></span><span class="menu-shortcut">Alt+3</span></button>
+            <button id="addSubmodelNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.submodel"><span data-i18n="menu.insert.submodel"></span><span class="menu-shortcut">Alt+4</span></button>
+            <button id="addTextItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.text"><span data-i18n="menu.insert.text"></span></button>
             <hr class="menu-sep" />
-            <button id="addSliderWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.sliderWidget" data-title-i18n="tooltip.menu.insert.slider">Slider</button>
+            <button id="addSliderWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.sliderWidget" data-title-i18n="tooltip.menu.insert.slider"></button>
             <hr class="menu-sep" />
-            <button id="addMatrixWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.matrixWidget" data-title-i18n="tooltip.menu.insert.matrix">Nuova matrice</button>
-            <button id="addTableWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.tableWidget" data-title-i18n="tooltip.menu.insert.table">Nuova tabella valori</button>
-            <button id="addXYChartWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.xyChartWidget" data-title-i18n="tooltip.menu.insert.chart">Nuovo grafico x-y</button>
+            <button id="addMatrixWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.matrixWidget" data-title-i18n="tooltip.menu.insert.matrix"></button>
+            <button id="addTableWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.tableWidget" data-title-i18n="tooltip.menu.insert.table"></button>
+            <button id="addXYChartWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.xyChartWidget" data-title-i18n="tooltip.menu.insert.chart"></button>
           </div>
         </div>
 
         <div class="menu-root">
-          <button class="menu-title" type="button" data-menu="viewMenu" data-i18n="menu.view" data-title-i18n="tooltip.menu.view">Vista</button>
+          <button class="menu-title" type="button" data-menu="viewMenu" data-i18n="menu.view" data-title-i18n="tooltip.menu.view"></button>
           <div class="menu-panel" id="viewMenu">
-            <button id="fitContentItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.view.fit"><span data-i18n="menu.view.fit">Adatta al contenuto</span><span class="menu-shortcut">Ctrl+Shift+F</span></button>
+            <button id="fitContentItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.view.fit"><span data-i18n="menu.view.fit"></span><span class="menu-shortcut">Ctrl+Shift+F</span></button>
             <hr class="menu-sep" />
-            <button id="zoomInItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.view.zoomIn"><span data-i18n="menu.view.zoomIn">Zoom avanti</span><span class="menu-shortcut">Ctrl++</span></button>
-            <button id="zoomOutItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.view.zoomOut"><span data-i18n="menu.view.zoomOut">Zoom indietro</span><span class="menu-shortcut">Ctrl+-</span></button>
-            <button id="zoomResetItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.view.zoomReset"><span data-i18n="menu.view.zoomReset">Zoom 100%</span><span class="menu-shortcut">Ctrl+0</span></button>
+            <button id="zoomInItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.view.zoomIn"><span data-i18n="menu.view.zoomIn"></span><span class="menu-shortcut">Ctrl++</span></button>
+            <button id="zoomOutItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.view.zoomOut"><span data-i18n="menu.view.zoomOut"></span><span class="menu-shortcut">Ctrl+-</span></button>
+            <button id="zoomResetItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.view.zoomReset"><span data-i18n="menu.view.zoomReset"></span><span class="menu-shortcut">Ctrl+0</span></button>
             <hr class="menu-sep" />
-            <button id="toggleGraphItem" class="menu-command" type="button" data-i18n="menu.view.toggleGraph" data-title-i18n="tooltip.menu.view.toggleGraph">Mostra/Nascondi grafo</button>
-            <button id="toggleWidgetsItem" class="menu-command" type="button" data-i18n="menu.view.toggleWidgets" data-title-i18n="tooltip.menu.view.toggleWidgets">Mostra/Nascondi widget</button>
+            <button id="toggleGraphItem" class="menu-command" type="button" data-i18n="menu.view.toggleGraph" data-title-i18n="tooltip.menu.view.toggleGraph"></button>
+            <button id="toggleWidgetsItem" class="menu-command" type="button" data-i18n="menu.view.toggleWidgets" data-title-i18n="tooltip.menu.view.toggleWidgets"></button>
             <hr class="menu-sep" />
             <label class="menu-check" for="snapToGridInput" data-title-i18n="tooltip.menu.view.snap">
               <input id="snapToGridInput" type="checkbox" checked />
-              <span data-i18n="menu.view.snap">Snap griglia</span>
+              <span data-i18n="menu.view.snap"></span>
             </label>
-            <label class="menu-field" for="gridSizeInput" data-i18n="menu.view.gridStep" data-title-i18n="tooltip.menu.view.gridStep">Passo griglia</label>
+            <label class="menu-field" for="gridSizeInput" data-i18n="menu.view.gridStep" data-title-i18n="tooltip.menu.view.gridStep"></label>
             <input id="gridSizeInput" type="number" min="5" max="100" step="1" value="20" data-title-i18n="tooltip.menu.view.gridStep" />
-            <label class="menu-field" for="decimalDigitsInput" data-i18n="label.decimals" data-title-i18n="tooltip.model.decimals">Cifre decimali max</label>
+            <label class="menu-field" for="decimalDigitsInput" data-i18n="label.decimals" data-title-i18n="tooltip.model.decimals"></label>
             <input id="decimalDigitsInput" type="number" min="0" max="12" step="1" data-title-i18n="tooltip.model.decimals" />
           </div>
         </div>
 
         <div class="menu-root">
-          <button class="menu-title" type="button" data-menu="runMenu" data-i18n="menu.run" data-title-i18n="tooltip.menu.run">Esegui</button>
+          <button class="menu-title" type="button" data-menu="runMenu" data-i18n="menu.run" data-title-i18n="tooltip.menu.run"></button>
           <div class="menu-panel" id="runMenu">
-            <button id="runEvalBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.execute"><span data-i18n="menu.run.execute">Completo</span><span class="menu-shortcut">F7</span></button>
-            <button id="runStepBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.step"><span data-i18n="menu.run.step">Un passo</span><span class="menu-shortcut">F8</span></button>
-            <button id="runTimedToggleBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.timed"><span data-i18n="menu.run.timedToggle">Temporizzato</span><span class="menu-shortcut">F9</span></button>
-            <button id="runResetBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.reset"><span data-i18n="menu.run.reset">Reset</span><span class="menu-shortcut">F10</span></button>
+            <button id="runEvalBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.execute"><span data-i18n="menu.run.execute"></span><span class="menu-shortcut">F7</span></button>
+            <button id="runStepBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.step"><span data-i18n="menu.run.step"></span><span class="menu-shortcut">F8</span></button>
+            <button id="runTimedToggleBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.timed"><span data-i18n="menu.run.timedToggle"></span><span class="menu-shortcut">F9</span></button>
+            <button id="runResetBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.reset"><span data-i18n="menu.run.reset"></span><span class="menu-shortcut">F10</span></button>
             <hr class="menu-sep" />
             <label class="menu-check" for="runStrictDefinitionsInput" data-title-i18n="tooltip.model.strictDefinitions">
               <input id="runStrictDefinitionsInput" type="checkbox" />
-              <span data-i18n="menu.run.strictDefinitions">Definizioni rigorose</span>
+              <span data-i18n="menu.run.strictDefinitions"></span>
             </label>
           </div>
         </div>
 
         <div class="menu-root">
-          <button class="menu-title" type="button" data-menu="helpMenu" data-i18n="menu.help" data-title-i18n="tooltip.menu.help">Help</button>
+          <button class="menu-title" type="button" data-menu="helpMenu" data-i18n="menu.help" data-title-i18n="tooltip.menu.help"></button>
           <div class="menu-panel" id="helpMenu">
-            <button id="functionsHelpBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.help.functions"><span data-i18n="menu.help.functions">Funzioni disponibili...</span><span class="menu-shortcut">F1</span></button>
-            <button id="aboutAppBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.help.about"><span data-i18n="menu.help.about">About...</span></button>
+            <button id="functionsHelpBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.help.functions"><span data-i18n="menu.help.functions"></span><span class="menu-shortcut">F1</span></button>
+            <button id="aboutAppBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.help.about"><span data-i18n="menu.help.about"></span></button>
           </div>
         </div>
 
@@ -118,16 +118,16 @@
           <button id="topRunResetBtn" class="icon-btn menu-run-btn" type="button">↺</button>
         </div>
 
-        <button id="exitSubmodelBtn" class="menu-nav-btn hidden" type="button" data-i18n="action.exitSubmodel">Torna su</button>
+        <button id="exitSubmodelBtn" class="menu-nav-btn hidden" type="button" data-i18n="action.exitSubmodel"></button>
         <div class="menu-breadcrumb hidden" id="modelBreadcrumbText"></div>
-        <div class="menu-file-status" id="fileStatusText">File: (non salvato)</div>
-        <div class="menu-status" id="statusText" data-i18n="status.ready">Pronto.</div>
+        <div class="menu-file-status" id="fileStatusText"></div>
+        <div class="menu-status" id="statusText" data-i18n="status.ready"></div>
       </header>
 
       <main class="layout">
         <section class="canvas-wrap" id="graphViewport">
           <div class="canvas-content" id="canvasContent">
-            <svg id="graphCanvas" viewBox="0 0 1200 800" role="img" aria-label="Canvas grafo"></svg>
+            <svg id="graphCanvas" viewBox="0 0 1200 800" role="img" data-i18n-aria-label="aria.graphCanvas"></svg>
             <div id="widgetLayer" class="widget-layer"></div>
           </div>
         </section>
@@ -135,46 +135,46 @@
         <aside class="sidebar" id="sidebar">
           <div id="noSelection" class="hidden"></div>
           <div id="globalPanel" class="panel hidden">
-            <h3 data-i18n="panel.model">Modello</h3>
+            <h3 data-i18n="panel.model"></h3>
 
             <div class="model-section">
-              <label for="modelTitleInput" data-i18n="label.modelTitle" data-title-i18n="tooltip.model.title">Titolo modello</label>
+              <label for="modelTitleInput" data-i18n="label.modelTitle" data-title-i18n="tooltip.model.title"></label>
               <input id="modelTitleInput" type="text" data-title-i18n="tooltip.model.title" />
             </div>
 
             <div class="model-section">
               <div class="time-row3">
                 <div>
-                  <label for="timeStartInput" data-i18n="label.timeStart" data-title-i18n="tooltip.model.t0">t0</label>
+                  <label for="timeStartInput" data-i18n="label.timeStart" data-title-i18n="tooltip.model.t0"></label>
                   <input id="timeStartInput" type="number" step="any" data-title-i18n="tooltip.model.t0" />
                 </div>
                 <div>
-                  <label for="timeStepInput" data-i18n="label.timeStep" data-title-i18n="tooltip.model.dt">delta t</label>
+                  <label for="timeStepInput" data-i18n="label.timeStep" data-title-i18n="tooltip.model.dt"></label>
                   <input id="timeStepInput" type="number" step="any" data-title-i18n="tooltip.model.dt" />
                 </div>
                 <div>
-                  <label for="timeEndInput" data-i18n="label.timeEnd" data-title-i18n="tooltip.model.t1">t1</label>
+                  <label for="timeEndInput" data-i18n="label.timeEnd" data-title-i18n="tooltip.model.t1"></label>
                   <input id="timeEndInput" type="number" step="any" data-title-i18n="tooltip.model.t1" />
                 </div>
               </div>
 
               <div class="row3-exec model-compact-row">
                 <div>
-                  <label for="timeDelayInput" data-i18n="label.timeDelayMs" data-title-i18n="tooltip.model.delay">Ritardo (ms)</label>
+                  <label for="timeDelayInput" data-i18n="label.timeDelayMs" data-title-i18n="tooltip.model.delay"></label>
                   <input id="timeDelayInput" type="number" min="1" step="1" data-title-i18n="tooltip.model.delay" />
                 </div>
                 <div>
-                  <label for="integratorInput" data-i18n="label.integrator" data-title-i18n="tooltip.model.integrator">Integratore</label>
+                  <label for="integratorInput" data-i18n="label.integrator" data-title-i18n="tooltip.model.integrator"></label>
                   <select id="integratorInput" data-title-i18n="tooltip.model.integrator">
-                    <option value="euler" data-i18n="integrator.euler">Euler</option>
-                    <option value="rk4" data-i18n="integrator.rk4">RK4</option>
+                    <option value="euler" data-i18n="integrator.euler"></option>
+                    <option value="rk4" data-i18n="integrator.rk4"></option>
                   </select>
                 </div>
               </div>
 
               <div class="model-meta-row">
                 <div class="model-current-inline">
-                  <label for="timeCurrentOutput" data-i18n="label.timeCurrent" data-title-i18n="tooltip.model.currentTime">Tempo corrente</label>
+                  <label for="timeCurrentOutput" data-i18n="label.timeCurrent" data-title-i18n="tooltip.model.currentTime"></label>
                   <pre id="timeCurrentOutput" class="value-output">-</pre>
                 </div>
               </div>
@@ -188,43 +188,43 @@
                 <button id="resetExecBtn" class="icon-btn" type="button">↺</button>
               </div>
               <div class="row2-exec">
-                <button id="toggleGraphBtn" class="small-btn" type="button" data-i18n="view.btn.showGraph">Mostra grafo</button>
-                <button id="toggleWidgetsBtn" class="small-btn" type="button" data-i18n="view.btn.showWidgets">Mostra widget</button>
+                <button id="toggleGraphBtn" class="small-btn" type="button" data-i18n="view.btn.showGraph"></button>
+                <button id="toggleWidgetsBtn" class="small-btn" type="button" data-i18n="view.btn.showWidgets"></button>
               </div>
             </div>
 
             <div class="model-section model-properties-section">
-              <h4 data-i18n="panel.propertiesList">Lista proprieta</h4>
+              <h4 data-i18n="panel.propertiesList"></h4>
               <div id="modelPropsList" class="props-list"></div>
-              <button id="addModelPropBtn" class="small-btn" data-i18n="action.addProperty">Aggiungi proprieta</button>
+              <button id="addModelPropBtn" class="small-btn" data-i18n="action.addProperty"></button>
             </div>
           </div>
 
           <div id="nodePanel" class="panel hidden">
-            <h3 data-i18n="panel.node">Nodo</h3>
+            <h3 data-i18n="panel.node"></h3>
 
             <div class="panel-section compact-panel-section">
-              <label for="nodeNameInput" data-i18n="label.name" data-title-i18n="tooltip.node.name">Nome</label>
+              <label for="nodeNameInput" data-i18n="label.name" data-title-i18n="tooltip.node.name"></label>
               <input id="nodeNameInput" type="text" data-title-i18n="tooltip.node.name" />
 
-              <label for="nodeShapeInput" data-i18n="label.shape" data-title-i18n="tooltip.node.type">Tipo</label>
+              <label for="nodeShapeInput" data-i18n="label.shape" data-title-i18n="tooltip.node.type"></label>
               <div class="node-type-row">
                 <select id="nodeShapeInput">
-                  <option value="rect" data-i18n="shape.rect">Variabile di stato</option>
-                  <option value="ellipse" data-i18n="shape.ellipse">Variabile algebrica</option>
-                  <option value="diamond" data-i18n="shape.diamond">parametro</option>
-                  <option value="submodel" data-i18n="shape.submodel">sottomodello</option>
+                  <option value="rect" data-i18n="shape.rect"></option>
+                  <option value="ellipse" data-i18n="shape.ellipse"></option>
+                  <option value="diamond" data-i18n="shape.diamond"></option>
+                  <option value="submodel" data-i18n="shape.submodel"></option>
                 </select>
 
                 <div class="node-flags-col">
                   <label class="menu-check" for="nodeInputInput" data-title-i18n="tooltip.node.input">
                     <input id="nodeInputInput" type="checkbox" />
-                    <span data-i18n="label.input">input</span>
+                    <span data-i18n="label.input"></span>
                   </label>
 
                   <label class="menu-check" for="nodeOutputInput" data-title-i18n="tooltip.node.output">
                     <input id="nodeOutputInput" type="checkbox" />
-                    <span data-i18n="label.output">Nodo di output</span>
+                    <span data-i18n="label.output"></span>
                   </label>
                 </div>
               </div>
@@ -232,93 +232,93 @@
             </div>
 
             <div class="panel-section compact-panel-section">
-              <label id="nodeModelPathLabel" for="nodeModelPathInput" class="hidden" data-i18n="label.submodelPath" data-title-i18n="tooltip.node.submodelPath">File sottomodello</label>
+              <label id="nodeModelPathLabel" for="nodeModelPathInput" class="hidden" data-i18n="label.submodelPath" data-title-i18n="tooltip.node.submodelPath"></label>
               <input id="nodeModelPathInput" class="hidden display-only-input" type="text" readonly tabindex="-1" data-title-i18n="tooltip.node.submodelPath" />
               <div id="submodelActionRow" class="row2-exec hidden">
-                <button id="loadSubmodelBtn" class="small-btn" type="button" data-i18n="action.loadSubmodel" data-title-i18n="tooltip.node.loadSubmodel">Apri</button>
-                <button id="showSubmodelBtn" class="small-btn" type="button" data-i18n="action.showSubmodel" data-title-i18n="tooltip.node.showSubmodel">Mostra</button>
+                <button id="loadSubmodelBtn" class="small-btn" type="button" data-i18n="action.loadSubmodel" data-title-i18n="tooltip.node.loadSubmodel"></button>
+                <button id="showSubmodelBtn" class="small-btn" type="button" data-i18n="action.showSubmodel" data-title-i18n="tooltip.node.showSubmodel"></button>
               </div>
               <div id="nodeSubmodelInfo" class="expr-status hidden"></div>
               <div id="nodeSubmodelBindings" class="submodel-bindings hidden"></div>
 
-              <label id="nodeInitialStateLabel" for="nodeInitialStateInput" data-i18n="label.initialState" data-title-i18n="tooltip.node.initialState">Stato iniziale</label>
+              <label id="nodeInitialStateLabel" for="nodeInitialStateInput" data-i18n="label.initialState" data-title-i18n="tooltip.node.initialState"></label>
               <div id="nodeInitialStateRow" class="expr-inline-row">
                 <input id="nodeInitialStateInput" type="text" data-title-i18n="tooltip.node.initialState" />
-                <button id="editNodeInitialStateBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression">Modifica...</button>
+                <button id="editNodeInitialStateBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression"></button>
               </div>
               <div id="nodeInitialStateStatus" class="expr-status hidden"></div>
 
-              <label id="nodeValueExprLabel" for="nodeValueExprInput" data-i18n="label.behaviorFunction" data-title-i18n="tooltip.node.expressionBehavior">Funzione comportamento</label>
+              <label id="nodeValueExprLabel" for="nodeValueExprInput" data-i18n="label.behaviorFunction" data-title-i18n="tooltip.node.expressionBehavior"></label>
               <div id="nodeValueExprRow" class="expr-inline-row">
                 <input id="nodeValueExprInput" type="text" data-title-i18n="tooltip.node.expressionBehavior" />
-                <button id="editNodeValueExprBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression">Modifica...</button>
+                <button id="editNodeValueExprBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression"></button>
               </div>
               <div id="nodeValueExprStatus" class="expr-status hidden"></div>
             </div>
 
             <div class="panel-section compact-panel-section">
-              <label for="nodeValueOutput" data-i18n="label.valueComputed" data-title-i18n="tooltip.node.computedValue">Valore calcolato</label>
+              <label for="nodeValueOutput" data-i18n="label.valueComputed" data-title-i18n="tooltip.node.computedValue"></label>
               <pre id="nodeValueOutput" class="value-output">-</pre>
             </div>
 
             <div class="panel-section compact-panel-section">
               <div class="row2-exec">
                 <div>
-                  <label for="nodeFillColorInput" data-i18n="label.nodeFillColor">Sfondo</label>
+                  <label for="nodeFillColorInput" data-i18n="label.nodeFillColor"></label>
                   <select id="nodeFillColorInput"></select>
                 </div>
                 <div>
-                  <label for="nodeStrokeColorInput" data-i18n="label.nodeStrokeColor">Bordo</label>
+                  <label for="nodeStrokeColorInput" data-i18n="label.nodeStrokeColor"></label>
                   <select id="nodeStrokeColorInput"></select>
                 </div>
               </div>
             </div>
 
             <div class="panel-section compact-panel-section">
-              <h4 data-i18n="panel.propertiesList">Lista proprieta</h4>
+              <h4 data-i18n="panel.propertiesList"></h4>
               <div id="propsList" class="props-list"></div>
-              <button id="addPropBtn" class="small-btn" data-i18n="action.addProperty">Aggiungi proprieta</button>
+              <button id="addPropBtn" class="small-btn" data-i18n="action.addProperty"></button>
             </div>
           </div>
 
           <div id="edgePanel" class="panel hidden">
-            <h3 data-i18n="panel.edge">Freccia</h3>
+            <h3 data-i18n="panel.edge"></h3>
             <div id="edgeInfo" class="edge-info"></div>
 
             <div class="hint">
-              <span data-i18n="hint.edge.1">Clic sulla linea selezionata: aggiungi punto controllo.</span><br />
-              <span data-i18n="hint.edge.2">Drag punto: sposta.</span><br />
-              <span data-i18n="hint.edge.3">Doppio click punto: rimuovi.</span><br />
-              <span data-i18n="hint.edge.4">Trascina dal centro di un nodo a un altro nodo per creare frecce.</span>
+              <span data-i18n="hint.edge.1"></span><br />
+              <span data-i18n="hint.edge.2"></span><br />
+              <span data-i18n="hint.edge.3"></span><br />
+              <span data-i18n="hint.edge.4"></span>
             </div>
           </div>
 
           <div id="textPanel" class="panel hidden">
-            <h3 data-i18n="panel.text">Testo</h3>
+            <h3 data-i18n="panel.text"></h3>
 
             <div class="panel-section compact-panel-section">
               <div class="row2-exec">
                 <div>
-                  <label for="textWidthInput" data-i18n="label.width">Larghezza</label>
+                  <label for="textWidthInput" data-i18n="label.width"></label>
                   <input id="textWidthInput" type="number" min="40" max="1200" step="10" />
                 </div>
                 <div>
-                  <label for="textHeightInput" data-i18n="label.height">Altezza</label>
+                  <label for="textHeightInput" data-i18n="label.height"></label>
                   <input id="textHeightInput" type="number" min="24" max="1200" step="10" />
                 </div>
               </div>
               <div class="row2-exec">
                 <div>
-                  <label for="textFillColorInput" data-i18n="label.background">Sfondo</label>
+                  <label for="textFillColorInput" data-i18n="label.background"></label>
                   <select id="textFillColorInput"></select>
                 </div>
                 <div>
-                  <label for="textStrokeColorInput" data-i18n="label.border">Bordo</label>
+                  <label for="textStrokeColorInput" data-i18n="label.border"></label>
                   <select id="textStrokeColorInput"></select>
                 </div>
               </div>
-              <div class="hint" data-i18n="hint.textFormatting">Puoi usare HTML semplice come &lt;b&gt;, &lt;i&gt;, &lt;u&gt;, &lt;br&gt;, &lt;p&gt; e stili inline per colore, sfondo, allineamento e dimensione del testo.</div>
-              <label for="textHtmlInput" data-i18n="label.textHtml">Contenuto formattato</label>
+              <div class="hint" data-i18n="hint.textFormatting"></div>
+              <label for="textHtmlInput" data-i18n="label.textHtml"></label>
               <div id="textToolbar" class="text-toolbar">
                 <button type="button" class="small-btn text-tool-btn" data-text-tool="h1">H1</button>
                 <button type="button" class="small-btn text-tool-btn" data-text-tool="h2">H2</button>
@@ -333,7 +333,7 @@
           </div>
 
           <div id="widgetPanel" class="panel hidden">
-            <h3 id="widgetPanelTitle" data-i18n="panel.widget">Widget</h3>
+            <h3 id="widgetPanelTitle" data-i18n="panel.widget"></h3>
             <div id="widgetConfig"></div>
           </div>
         </aside>
@@ -343,11 +343,11 @@
     <div id="expressionEditorModal" class="modal-backdrop modal-modeless hidden">
       <div class="modal-card expression-editor-card" role="dialog" aria-modal="false" aria-labelledby="expressionEditorTitle">
         <div class="modal-head">
-          <h3 id="expressionEditorTitle">Espressione</h3>
-          <button id="expressionEditorCloseBtn" class="icon-btn modal-close-btn" type="button" aria-label="Chiudi">×</button>
+          <h3 id="expressionEditorTitle" data-i18n="expr.editor.title"></h3>
+          <button id="expressionEditorCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
         </div>
         <div class="expression-editor-toolbar">
-          <div id="expressionEditorHint" class="expression-editor-hint" data-i18n="expr.hint">Tab: indentazione, Shift+Tab: riduci, Ctrl+Enter: applica.</div>
+          <div id="expressionEditorHint" class="expression-editor-hint" data-i18n="expr.hint"></div>
         </div>
         <div class="expression-editor-layout">
           <div class="expression-editor-main">
@@ -357,19 +357,19 @@
             </div>
           </div>
           <aside id="expressionSidebar" class="expression-sidebar">
-            <input id="expressionSymbolsFilter" class="expression-symbols-filter" type="text" data-i18n-placeholder="expr.filter.placeholder" placeholder="Filtra simboli..." />
+            <input id="expressionSymbolsFilter" class="expression-symbols-filter" type="text" data-i18n-placeholder="expr.filter.placeholder" />
             <div id="expressionLibrary" class="expression-library"></div>
-            <div id="expressionHelp" class="expression-help" data-i18n="expr.help.empty">Seleziona o scrivi un simbolo per vedere l'help contestuale.</div>
+            <div id="expressionHelp" class="expression-help" data-i18n="expr.help.empty"></div>
           </aside>
         </div>
         <div id="expressionPreviewBox" class="expression-preview">
-          <div id="expressionPreviewLabel" class="expression-preview-label" data-i18n="expr.preview.title">Valore attuale</div>
-          <pre id="expressionPreviewValue" class="expression-preview-value" data-i18n="expr.preview.empty">Nessuna anteprima.</pre>
+          <div id="expressionPreviewLabel" class="expression-preview-label" data-i18n="expr.preview.title"></div>
+          <pre id="expressionPreviewValue" class="expression-preview-value" data-i18n="expr.preview.empty"></pre>
         </div>
         <div id="expressionEditorStatus" class="expr-status hidden"></div>
         <div class="modal-actions">
-          <button id="expressionEditorCancelBtn" type="button" data-i18n="action.cancel">Annulla</button>
-          <button id="expressionEditorApplyBtn" type="button" data-i18n="action.apply">Applica</button>
+          <button id="expressionEditorCancelBtn" type="button" data-i18n="action.cancel"></button>
+          <button id="expressionEditorApplyBtn" type="button" data-i18n="action.apply"></button>
         </div>
         <div id="expressionEditorResizeHandle" class="expression-editor-resize-handle" aria-hidden="true"></div>
       </div>
@@ -377,58 +377,58 @@
     <div id="functionsHelpModal" class="modal-backdrop hidden">
       <div class="modal-card functions-help-card" role="dialog" aria-modal="true" aria-labelledby="functionsHelpTitle">
         <div class="modal-head">
-          <h3 id="functionsHelpTitle" data-i18n="help.title">Funzioni disponibili</h3>
-          <button id="functionsHelpCloseBtn" class="icon-btn modal-close-btn" type="button" aria-label="Chiudi">×</button>
+          <h3 id="functionsHelpTitle" data-i18n="help.title"></h3>
+          <button id="functionsHelpCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
         </div>
-        <div id="functionsHelpIntro" class="help-intro" data-i18n="help.intro">Elenco delle funzioni e delle variabili disponibili nelle espressioni.</div>
+        <div id="functionsHelpIntro" class="help-intro" data-i18n="help.intro"></div>
         <div id="functionsHelpContent" class="functions-help-content"></div>
         <div class="modal-actions">
-          <button id="functionsHelpDismissBtn" type="button" data-i18n="action.close">Chiudi</button>
+          <button id="functionsHelpDismissBtn" type="button" data-i18n="action.close"></button>
         </div>
       </div>
     </div>
     <div id="aboutAppModal" class="modal-backdrop hidden">
       <div class="modal-card about-app-card" role="dialog" aria-modal="true" aria-labelledby="aboutAppTitle">
         <div class="modal-head">
-          <h3 id="aboutAppTitle" data-i18n="about.title">About STGraphX</h3>
-          <button id="aboutAppCloseBtn" class="icon-btn modal-close-btn" type="button" aria-label="Chiudi">×</button>
+          <h3 id="aboutAppTitle" data-i18n="about.title"></h3>
+          <button id="aboutAppCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
         </div>
         <div id="aboutAppContent" class="about-app-content">
           <div class="about-app-hero">
-            <img class="about-app-icon" src="icon.svg" alt="STGraphX icon" />
+            <img class="about-app-icon" src="icon.svg" data-i18n-alt="about.iconAlt" alt="" />
             <div class="about-app-copy">
               <div class="about-app-name">STGraphX</div>
-              <div class="about-app-subtitle" data-i18n="about.subtitle">Variable-based modeling workbench</div>
+              <div class="about-app-subtitle" data-i18n="about.subtitle"></div>
             </div>
           </div>
           <div class="about-app-meta">
             <div class="about-app-row">
-              <span class="about-app-label" data-i18n="about.versionLabel">Versione</span>
+              <span class="about-app-label" data-i18n="about.versionLabel"></span>
               <span class="about-app-value">0.1.0</span>
             </div>
             <div class="about-app-row">
-              <span class="about-app-label" data-i18n="about.authorLabel">Autore</span>
+              <span class="about-app-label" data-i18n="about.authorLabel"></span>
               <span class="about-app-value">Luca Mari</span>
             </div>
           </div>
-          <div class="about-app-note" data-i18n="about.body">Versione sperimentale con shell web ed Electron.</div>
+          <div class="about-app-note" data-i18n="about.body"></div>
         </div>
         <div class="modal-actions">
-          <button id="aboutAppDismissBtn" type="button" data-i18n="action.close">Chiudi</button>
+          <button id="aboutAppDismissBtn" type="button" data-i18n="action.close"></button>
         </div>
       </div>
     </div>
     <div id="expressionEditorSwitchModal" class="modal-backdrop hidden">
       <div class="modal-card expression-switch-card" role="dialog" aria-modal="true" aria-labelledby="expressionEditorSwitchTitle">
         <div class="modal-head">
-          <h3 id="expressionEditorSwitchTitle" data-i18n="expr.switch.title">Modifiche non applicate</h3>
-          <button id="expressionEditorSwitchCloseBtn" class="icon-btn modal-close-btn" type="button" aria-label="Chiudi">×</button>
+          <h3 id="expressionEditorSwitchTitle" data-i18n="expr.switch.title"></h3>
+          <button id="expressionEditorSwitchCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
         </div>
-        <div id="expressionEditorSwitchBody" class="expression-switch-body" data-i18n="expr.switch.body">L'espressione corrente ha modifiche non applicate. Vuoi applicarle prima di cambiare selezione?</div>
+        <div id="expressionEditorSwitchBody" class="expression-switch-body" data-i18n="expr.switch.body"></div>
         <div class="modal-actions">
-          <button id="expressionEditorSwitchCancelBtn" type="button" data-i18n="action.cancel">Annulla</button>
-          <button id="expressionEditorSwitchDiscardBtn" type="button" data-i18n="expr.switch.discard">Scarta e cambia</button>
-          <button id="expressionEditorSwitchApplyBtn" type="button" data-i18n="expr.switch.applyAndChange">Applica e cambia</button>
+          <button id="expressionEditorSwitchCancelBtn" type="button" data-i18n="action.cancel"></button>
+          <button id="expressionEditorSwitchDiscardBtn" type="button" data-i18n="expr.switch.discard"></button>
+          <button id="expressionEditorSwitchApplyBtn" type="button" data-i18n="expr.switch.applyAndChange"></button>
         </div>
       </div>
     </div>
@@ -437,6 +437,7 @@
     <script src="graph-functions.js"></script>
     <script src="semantic.js"></script>
     <script src="i18n-inline.js"></script>
+    <script src="widgets.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

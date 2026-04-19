@@ -10,6 +10,8 @@ STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
 
 (si può provare <a href="https://lmari.github.io/STGraphX" target="_blank" rel="noopener noreferrer">qui</a>)
 
+Ho guardato ma mai toccato il codice generato, che al momento è di circa 500 linee HTML, 2000 linee CSS, e di oltre 15000 linee JS.
+
 ## Stato del progetto
 
 Applicazione JavaScript con doppia shell e logica condivisa:
@@ -54,6 +56,7 @@ __Al momento non implementati (rispetto a STGraph):__
 * lettura e scrittura di file dati (xls, csv, ...);
 * interfaccia a tab per più modelli;
 * strumenti di monitoraggio e debugging;
+* una pagina di esempi;
 * ...
 
 ## Appunti sul progetto
@@ -69,6 +72,7 @@ __Al momento non implementati (rispetto a STGraph):__
 * Quando si chiede di realizzare cose complesse, suggerisce di farlo per passi successivi ("Se vuoi, il prossimo passo utile è...")
 * Scrive ottima documentazione a partire dal codice, e aggiorna automaticamente la documentazione
 * È come un dialogo con uno sviluppatore esperto (inclusi suoi commenti come "Il patch è saltato su un punto di contesto nel CSS. Lo rifaccio in blocchi più piccoli così non rischiamo di lasciare roba a metà.")
+* Sa usare il software che genera: in questo caso, sa creare modelli stg
 * ...
 
 ## Documentazione aggiuntiva
