@@ -879,6 +879,14 @@ button:disabled {
   font-size: 0.84rem;
 }
 
+.widget-section-title {
+  margin: 0 0 2px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #345066;
+  letter-spacing: 0.01em;
+}
+
 #nodePanel label,
 #textPanel label,
 #widgetPanel label {
@@ -1082,6 +1090,7 @@ button:disabled {
 .widget-config-grid {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 #nodePanel .small-btn,
@@ -1095,6 +1104,25 @@ button:disabled {
 #nodePanel .props-list,
 #widgetPanel .props-list {
   gap: 4px;
+}
+
+#widgetPanel,
+#widgetConfig,
+#widgetPanel .panel-section,
+#widgetPanel .compact-field,
+#widgetPanel .chart-pair-list-row,
+#widgetPanel .chart-pair-top,
+#widgetPanel .chart-pair-modes,
+#widgetPanel .chart-pair-style-row,
+#widgetPanel .row2-exec {
+  min-width: 0;
+}
+
+#widgetPanel input,
+#widgetPanel select,
+#widgetPanel button {
+  min-width: 0;
+  max-width: 100%;
 }
 
 #widgetPanel .menu-check.compact-bool {
@@ -1114,7 +1142,7 @@ button:disabled {
 }
 
 #widgetPanel .menu-check.compact-bool span {
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .chart-pair-row {
@@ -1152,28 +1180,69 @@ button:disabled {
 
 .chart-pair-top {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
 }
 
 .chart-pair-modes {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   align-items: center;
 }
 
 .chart-pair-style-row {
   display: grid;
-  grid-template-columns: auto auto 1fr 84px;
   gap: 4px;
-  align-items: center;
+  align-items: start;
 }
 
-.chart-pair-style-row input[type="color"] {
+.chart-pair-style-main,
+.chart-pair-style-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
+.chart-pair-style-main input[type="color"] {
   width: 32px;
   min-width: 32px;
   padding: 2px;
+}
+
+.chart-pair-style-main > label,
+.chart-pair-style-secondary > label {
+  flex: 0 1 auto;
+}
+
+.chart-pair-style-main select,
+.chart-pair-style-secondary select {
+  flex: 1 1 120px;
+}
+
+.chart-pair-style-main input[type="number"],
+.chart-pair-style-secondary input[type="number"] {
+  flex: 0 0 76px;
+}
+
+#widgetPanel .row2-exec {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1100px) {
+  #widgetPanel .row2-exec {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .chart-pair-top {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .chart-pair-modes {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
 }
 
 .edge-line {

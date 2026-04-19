@@ -1,0 +1,333 @@
+{
+  "version": 1,
+  "modelTitle": "Modello epidemiologico SIR",
+  "modelProperties": [],
+  "nodeCounter": 10,
+  "edgeCounter": 12,
+  "widgetCounter": 3,
+  "textItemCounter": 3,
+  "execution": {
+    "t0": 0,
+    "dt": 0.1,
+    "t1": 160,
+    "delayMs": 10,
+    "decimals": 3,
+    "integrator": "rk4",
+    "strictDefinitions": false
+  },
+  "nodes": [
+    {
+      "id": 1,
+      "name": "beta",
+      "output": false,
+      "type": "parameter",
+      "x": 140,
+      "y": 140,
+      "width": 110,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "valueExpression": "0.3"
+    },
+    {
+      "id": 2,
+      "name": "gamma",
+      "output": false,
+      "type": "parameter",
+      "x": 140,
+      "y": 300,
+      "width": 110,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "valueExpression": "0.1"
+    },
+    {
+      "id": 3,
+      "name": "N",
+      "output": false,
+      "type": "parameter",
+      "x": 140,
+      "y": 220,
+      "width": 110,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "valueExpression": "1000"
+    },
+    {
+      "id": 4,
+      "name": "S",
+      "output": true,
+      "type": "state",
+      "x": 640,
+      "y": 120,
+      "width": 130,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "stateTransition": "integral(-incidence)",
+      "initialState": "999"
+    },
+    {
+      "id": 5,
+      "name": "I",
+      "output": true,
+      "type": "state",
+      "x": 640,
+      "y": 240,
+      "width": 130,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "stateTransition": "integral(incidence - recovery)",
+      "initialState": "1"
+    },
+    {
+      "id": 6,
+      "name": "R",
+      "output": true,
+      "type": "state",
+      "x": 640,
+      "y": 360,
+      "width": 130,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "stateTransition": "integral(recovery)",
+      "initialState": "0"
+    },
+    {
+      "id": 7,
+      "name": "incidence",
+      "output": false,
+      "type": "algebraic",
+      "x": 360,
+      "y": 200,
+      "width": 150,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "input": false,
+      "valueExpression": "beta * S * I / N"
+    },
+    {
+      "id": 8,
+      "name": "recovery",
+      "output": false,
+      "type": "algebraic",
+      "x": 360,
+      "y": 300,
+      "width": 150,
+      "height": 76,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "input": false,
+      "valueExpression": "gamma * I"
+    }
+  ],
+  "edges": [
+    {
+      "id": 1,
+      "from": 1,
+      "to": 7,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 2,
+      "from": 3,
+      "to": 7,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 3,
+      "from": 4,
+      "to": 7,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 4,
+      "from": 5,
+      "to": 7,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 5,
+      "from": 2,
+      "to": 8,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 6,
+      "from": 5,
+      "to": 8,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 7,
+      "from": 7,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 8,
+      "from": 7,
+      "to": 5,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 9,
+      "from": 8,
+      "to": 5,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 10,
+      "from": 8,
+      "to": 6,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    }
+  ],
+  "textItems": [
+    {
+      "id": 2,
+      "x": -2.639666795730591,
+      "y": -28.160377502441406,
+      "width": 540,
+      "height": 80,
+      "fillColor": "",
+      "strokeColor": "",
+      "html": "<h1>Un modello epidemiologico SIR</h1>\n(Codex GPT-5.4, 4.26)"
+    }
+  ],
+  "widgets": [
+    {
+      "id": 1,
+      "type": "xychart",
+      "customTitle": "Dinamica SIR",
+      "x": 756.71875,
+      "y": 39.4140625,
+      "width": 626.4453125,
+      "height": 439.9609375,
+      "minimized": false,
+      "outputOnly": false,
+      "showHistory": false,
+      "xMin": 0,
+      "xMax": 0,
+      "yMin": 0,
+      "yMax": 1000,
+      "showGrid": true,
+      "source": "",
+      "showNumericValues": true,
+      "showIndices": true,
+      "autoFitCells": true,
+      "cellSize": 28,
+      "colorScheme": "blue",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "columns": [],
+      "xyPairs": [
+        {
+          "xSource": "time",
+          "ySource": "S",
+          "showTimeSeries": true,
+          "showInstantProfile": false,
+          "color": "#0e7ac4",
+          "showLine": true,
+          "pointMode": "all",
+          "pointSize": 2.4
+        },
+        {
+          "xSource": "time",
+          "ySource": "I",
+          "showTimeSeries": true,
+          "showInstantProfile": false,
+          "color": "#c0392b",
+          "showLine": true,
+          "pointMode": "all",
+          "pointSize": 2.4
+        },
+        {
+          "xSource": "time",
+          "ySource": "R",
+          "showTimeSeries": true,
+          "showInstantProfile": false,
+          "color": "#27ae60",
+          "showLine": true,
+          "pointMode": "all",
+          "pointSize": 2.4
+        }
+      ]
+    }
+  ]
+}

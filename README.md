@@ -63,7 +63,7 @@ __Al momento non implementati (rispetto a STGraph):__
 * Nel caso di estensioni a parti già realizzate, si fa carico automaticamente di mantenere la coerenza
 * Le spiegazioni del lavoro compiuto sono chiare e corrette
 * A volte prende iniziative proponendo o anche implementando estensioni a quanto richiesto
-* È in grado di fare refactoring e ottimizzazione
+* È in grado di fare refactoring e ottimizzazione, e fa refactoring anche autonomamente quando si accorge che è opportuno
 * Si possono chiedere pareri o comunque indicazioni su come si potrebbero risolvere problemi
 * Una stessa richiesta può includere cose diverse da realizzare
 * Quando si chiede di realizzare cose complesse, suggerisce di farlo per passi successivi ("Se vuoi, il prossimo passo utile è...")

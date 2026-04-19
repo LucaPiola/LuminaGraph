@@ -3646,6 +3646,9 @@ function exportGraphData() {
       yMin: Number.isFinite(Number(w.yMin)) ? Number(w.yMin) : null,
       yMax: Number.isFinite(Number(w.yMax)) ? Number(w.yMax) : null,
       showGrid: w.showGrid !== false,
+      legendPosition: ["top-right", "top-left", "bottom-right", "bottom-left"].includes(String(w.legendPosition ?? ""))
+        ? String(w.legendPosition)
+        : "top-right",
       source: String(w.source ?? ""),
       showNumericValues: w.showNumericValues !== false,
       showIndices: w.showIndices !== false,
@@ -3667,6 +3670,8 @@ function exportGraphData() {
           showInstantProfile: normalizeChartSeriesToggle(pair?.showInstantProfile, pair?.seriesMode === "instant" ? true : false),
           color: /^#[0-9a-fA-F]{6}$/.test(String(pair?.color ?? "")) ? String(pair.color) : defaultChartSeriesColor(idx),
           showLine: pair?.showLine !== false,
+          lineWidth: Number.isFinite(Number(pair?.lineWidth)) ? clamp(Number(pair.lineWidth), 1, 8) : 2.2,
+          lineStyle: normalizeChartLineStyle(pair?.lineStyle),
           pointMode: normalizeChartPointMode(pair?.pointMode, pair?.showPoints),
           pointSize: Number.isFinite(Number(pair?.pointSize)) ? clamp(Number(pair.pointSize), 1, 12) : 2.4,
         }))
@@ -3845,6 +3850,9 @@ function applyGraphData(data) {
         yMin: Number.isFinite(Number(w.yMin)) ? Number(w.yMin) : null,
         yMax: Number.isFinite(Number(w.yMax)) ? Number(w.yMax) : null,
         showGrid: w.showGrid !== false,
+        legendPosition: ["top-right", "top-left", "bottom-right", "bottom-left"].includes(String(w.legendPosition ?? ""))
+          ? String(w.legendPosition)
+          : "top-right",
         source: String(w.source ?? ""),
         showNumericValues: w.showNumericValues !== false,
         showIndices: w.showIndices !== false,
@@ -3867,6 +3875,8 @@ function applyGraphData(data) {
             showInstantProfile: normalizeChartSeriesToggle(pair?.showInstantProfile, pair?.seriesMode === "instant" ? true : false),
             color: /^#[0-9a-fA-F]{6}$/.test(String(pair?.color ?? "")) ? String(pair.color) : defaultChartSeriesColor(idx),
             showLine: pair?.showLine !== false,
+            lineWidth: Number.isFinite(Number(pair?.lineWidth)) ? clamp(Number(pair.lineWidth), 1, 8) : 2.2,
+            lineStyle: normalizeChartLineStyle(pair?.lineStyle),
             pointMode: normalizeChartPointMode(pair?.pointMode, pair?.showPoints),
             pointSize: Number.isFinite(Number(pair?.pointSize)) ? clamp(Number(pair.pointSize), 1, 12) : 2.4,
             points: [],
@@ -3883,6 +3893,8 @@ function applyGraphData(data) {
               showInstantProfile: false,
               color: defaultChartSeriesColor(idx),
               showLine: true,
+              lineWidth: 2.2,
+              lineStyle: "solid",
               pointMode: "all",
               pointSize: 2.4,
               points: [],
@@ -4560,6 +4572,7 @@ function addXYChartWidget(at = null) {
     yMin: null,
     yMax: null,
     showGrid: true,
+    legendPosition: "top-right",
     xyPairs: [
       {
         xSource: "time",
@@ -4568,6 +4581,8 @@ function addXYChartWidget(at = null) {
         showInstantProfile: false,
         color: defaultChartSeriesColor(0),
         showLine: true,
+        lineWidth: 2.2,
+        lineStyle: "solid",
         pointMode: "all",
         pointSize: 2.4,
         points: [],
@@ -4615,6 +4630,23 @@ function normalizeChartSeriesToggle(value, fallback = false) {
   return value == null ? Boolean(fallback) : value !== false;
 }
 
+function normalizeChartLineStyle(value) {
+  if (value === "solid" || value === "dashed" || value === "dotted") {
+    return value;
+  }
+  return "solid";
+}
+
+function chartLineDash(style) {
+  if (style === "dashed") {
+    return [8, 5];
+  }
+  if (style === "dotted") {
+    return [2, 4];
+  }
+  return [];
+}
+
 function sanitizeWidgetColumns(widget) {
   if (!Array.isArray(widget.columns)) {
     widget.columns = [];
@@ -4654,6 +4686,8 @@ function sanitizeWidgetXYPairs(widget) {
       showInstantProfile: normalizeChartSeriesToggle(pair?.showInstantProfile, pair?.seriesMode === "instant" ? true : false),
       color: /^#[0-9a-fA-F]{6}$/.test(String(pair?.color ?? "")) ? String(pair.color) : defaultChartSeriesColor(idx),
       showLine: pair?.showLine !== false,
+      lineWidth: Number.isFinite(Number(pair?.lineWidth)) ? clamp(Number(pair.lineWidth), 1, 8) : 2.2,
+      lineStyle: normalizeChartLineStyle(pair?.lineStyle),
       pointMode: normalizeChartPointMode(pair?.pointMode, pair?.showPoints),
       pointSize: Number.isFinite(Number(pair?.pointSize)) ? clamp(Number(pair.pointSize), 1, 12) : 2.4,
       seriesData: Array.isArray(pair?.seriesData)
@@ -4695,6 +4729,9 @@ function sanitizeXYChartOptions(widget) {
   widget.yMin = parseNumOrNull(widget.yMin);
   widget.yMax = parseNumOrNull(widget.yMax);
   widget.showGrid = widget.showGrid !== false;
+  widget.legendPosition = ["top-right", "top-left", "bottom-right", "bottom-left"].includes(String(widget.legendPosition ?? ""))
+    ? String(widget.legendPosition)
+    : "top-right";
 }
 
 function isFiniteScalar(value) {
@@ -4868,23 +4905,37 @@ function drawXYChart(canvas, seriesList = [], options = null) {
   if (!ctx) {
     return;
   }
+  const drawRoundedRectPath = (x, y, w, h, r) => {
+    const radius = Math.max(0, Math.min(r, w / 2, h / 2));
+    if (typeof ctx.roundRect === "function") {
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, radius);
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + w - radius, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+    ctx.lineTo(x + w, y + h - radius);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+    ctx.lineTo(x + radius, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+  };
   const width = canvas.width;
   const height = canvas.height;
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
 
-  const pad = 24;
-  const plotW = Math.max(10, width - pad * 2);
-  const plotH = Math.max(10, height - pad * 2);
-  ctx.strokeStyle = "#d9e2ea";
-  ctx.strokeRect(pad, pad, plotW, plotH);
-
   const activeSeries = (Array.isArray(seriesList) ? seriesList : [])
     .map((s, idx) => ({
       label: String(s?.label ?? ""),
       color: /^#[0-9a-fA-F]{6}$/.test(String(s?.color ?? "")) ? String(s.color) : defaultChartSeriesColor(idx),
       showLine: s?.showLine !== false,
+      lineWidth: Number.isFinite(Number(s?.lineWidth)) ? clamp(Number(s.lineWidth), 1, 8) : 2.2,
+      lineStyle: normalizeChartLineStyle(s?.lineStyle),
       pointMode: normalizeChartPointMode(s?.pointMode, s?.showPoints),
       pointSize: Number.isFinite(Number(s?.pointSize)) ? clamp(Number(s.pointSize), 1, 12) : 2.4,
       points: Array.isArray(s?.points)
@@ -4905,6 +4956,9 @@ function drawXYChart(canvas, seriesList = [], options = null) {
     yMin: Number.isFinite(Number(options?.yMin)) ? Number(options.yMin) : null,
     yMax: Number.isFinite(Number(options?.yMax)) ? Number(options.yMax) : null,
     showGrid: options?.showGrid !== false,
+    legendPosition: ["top-right", "top-left", "bottom-right", "bottom-left"].includes(String(options?.legendPosition ?? ""))
+      ? String(options.legendPosition)
+      : "top-right",
   };
 
   let minX = activeSeries[0].points[0].x;
@@ -4936,8 +4990,66 @@ function drawXYChart(canvas, seriesList = [], options = null) {
     maxY += 1;
   }
 
-  const sx = (x) => pad + ((x - minX) / (maxX - minX)) * plotW;
-  const sy = (y) => pad + plotH - ((y - minY) / (maxY - minY)) * plotH;
+  const niceStep = (span, approxTicks = 5) => {
+    const raw = Math.abs(span) / Math.max(1, approxTicks);
+    if (!Number.isFinite(raw) || raw <= 0) {
+      return 1;
+    }
+    const power = 10 ** Math.floor(Math.log10(raw));
+    const scaled = raw / power;
+    let base = 1;
+    if (scaled <= 1) {
+      base = 1;
+    } else if (scaled <= 2) {
+      base = 2;
+    } else if (scaled <= 5) {
+      base = 5;
+    } else {
+      base = 10;
+    }
+    return base * power;
+  };
+
+  const buildTicks = (min, max, approxTicks = 5) => {
+    const span = max - min;
+    if (!Number.isFinite(span) || span <= 0) {
+      return [min];
+    }
+    const step = niceStep(span, approxTicks);
+    const start = Math.ceil(min / step) * step;
+    const ticks = [min];
+    for (let value = start; value < max; value += step) {
+      if (Math.abs(value - min) < step * 0.25 || Math.abs(value - max) < step * 0.25) {
+        continue;
+      }
+      ticks.push(Number(value.toFixed(12)));
+    }
+    ticks.push(max);
+    return ticks.filter((value, index, arr) => index === 0 || Math.abs(value - arr[index - 1]) > step * 0.25);
+  };
+
+  ctx.font = "11px Segoe UI, Tahoma, sans-serif";
+  const provisionalXTicks = buildTicks(minX, maxX, Math.max(4, Math.floor((width - 48) / 90)));
+  const provisionalYTicks = buildTicks(minY, maxY, Math.max(4, Math.floor((height - 48) / 60)));
+  const maxYLabelWidth = provisionalYTicks.reduce((max, tick) => {
+    const label = formatNumberValue(tick);
+    return Math.max(max, ctx.measureText(label).width);
+  }, 0);
+  const leftPad = Math.max(30, Math.ceil(maxYLabelWidth) + 14);
+  const rightPad = 24;
+  const topPad = 24;
+  const bottomPad = 30;
+  const plotW = Math.max(10, width - leftPad - rightPad);
+  const plotH = Math.max(10, height - topPad - bottomPad);
+
+  ctx.strokeStyle = "#c4d3df";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(leftPad, topPad, plotW, plotH);
+
+  const sx = (x) => leftPad + ((x - minX) / (maxX - minX)) * plotW;
+  const sy = (y) => topPad + plotH - ((y - minY) / (maxY - minY)) * plotH;
+  const xTicks = buildTicks(minX, maxX, Math.max(4, Math.floor(plotW / 90)));
+  const yTicks = buildTicks(minY, maxY, Math.max(4, Math.floor(plotH / 60)));
   const chartPointBudget = Math.max(200, Math.floor(plotW * 2));
   const sampleSeriesPoints = (points) => {
     if (!Array.isArray(points) || points.length <= chartPointBudget) {
@@ -4955,28 +5067,41 @@ function drawXYChart(canvas, seriesList = [], options = null) {
   };
 
   if (cfg.showGrid) {
-    const steps = 10;
-    ctx.strokeStyle = "#eef3f7";
+    ctx.strokeStyle = "#d3dee8";
     ctx.lineWidth = 1;
-    for (let i = 1; i < steps; i += 1) {
-      const gx = pad + (plotW / steps) * i;
+    xTicks.slice(1, -1).forEach((tick) => {
+      const gx = sx(tick);
       ctx.beginPath();
-      ctx.moveTo(gx, pad);
-      ctx.lineTo(gx, pad + plotH);
+      ctx.moveTo(gx, topPad);
+      ctx.lineTo(gx, topPad + plotH);
       ctx.stroke();
-      const gy = pad + (plotH / steps) * i;
+    });
+    yTicks.slice(1, -1).forEach((tick) => {
+      const gy = sy(tick);
       ctx.beginPath();
-      ctx.moveTo(pad, gy);
-      ctx.lineTo(pad + plotW, gy);
+      ctx.moveTo(leftPad, gy);
+      ctx.lineTo(leftPad + plotW, gy);
       ctx.stroke();
-    }
+    });
   }
+
+  ctx.strokeStyle = "#aebfd0";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(leftPad, topPad + plotH);
+  ctx.lineTo(leftPad + plotW, topPad + plotH);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(leftPad, topPad);
+  ctx.lineTo(leftPad, topPad + plotH);
+  ctx.stroke();
 
   activeSeries.forEach((series, s) => {
     const color = series.color || defaultChartSeriesColor(s);
     const chartPoints = sampleSeriesPoints(series.points);
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = series.lineWidth;
+    ctx.setLineDash(chartLineDash(series.lineStyle));
     if (series.showLine) {
       ctx.beginPath();
       let moved = false;
@@ -4994,6 +5119,7 @@ function drawXYChart(canvas, seriesList = [], options = null) {
         ctx.stroke();
       }
     }
+    ctx.setLineDash([]);
     if (series.pointMode !== "none") {
       ctx.fillStyle = color;
       const pointsToDraw = series.pointMode === "last"
@@ -5009,12 +5135,52 @@ function drawXYChart(canvas, seriesList = [], options = null) {
     }
   });
 
+  ctx.strokeStyle = "#b8c8d8";
+  ctx.lineWidth = 1;
+  xTicks.forEach((tick) => {
+    const x = sx(tick);
+    ctx.beginPath();
+    ctx.moveTo(x, topPad + plotH);
+    ctx.lineTo(x, topPad + plotH + 4);
+    ctx.stroke();
+  });
+  yTicks.forEach((tick) => {
+    const y = sy(tick);
+    ctx.beginPath();
+    ctx.moveTo(leftPad - 4, y);
+    ctx.lineTo(leftPad, y);
+    ctx.stroke();
+  });
+
   ctx.fillStyle = "#4e6072";
-  ctx.font = "11px Segoe UI, Tahoma, sans-serif";
-  ctx.fillText(formatNumberValue(minX), pad, height - 6);
-  ctx.fillText(formatNumberValue(maxX), width - pad - 36, height - 6);
-  ctx.fillText(formatNumberValue(maxY), 2, pad + 4);
-  ctx.fillText(formatNumberValue(minY), 2, height - pad);
+  ctx.textBaseline = "top";
+  ctx.textAlign = "center";
+  xTicks.forEach((tick, index) => {
+    const label = formatNumberValue(tick);
+    const x = sx(tick);
+    if (index === 0) {
+      ctx.textAlign = "left";
+      ctx.fillText(label, leftPad, topPad + plotH + 8);
+    } else if (index === xTicks.length - 1) {
+      ctx.textAlign = "right";
+      ctx.fillText(label, leftPad + plotW, topPad + plotH + 8);
+    } else {
+      ctx.textAlign = "center";
+      ctx.fillText(label, x, topPad + plotH + 8);
+    }
+  });
+  ctx.textAlign = "right";
+  yTicks.forEach((tick, index) => {
+    const label = formatNumberValue(tick);
+    const y = sy(tick);
+    if (index === 0) {
+      ctx.fillText(label, leftPad - 8, topPad + plotH - 6);
+    } else if (index === yTicks.length - 1) {
+      ctx.fillText(label, leftPad - 8, topPad - 6);
+    } else {
+      ctx.fillText(label, leftPad - 8, y - 6);
+    }
+  });
 
   const legendSeries = [];
   const seenLegendLabels = new Set();
@@ -5026,13 +5192,63 @@ function drawXYChart(canvas, seriesList = [], options = null) {
     seenLegendLabels.add(key);
     legendSeries.push({ ...series, legendIndex: idx });
   });
+  const visibleLegend = legendSeries.slice(0, 10);
+  if (visibleLegend.length > 0) {
+    ctx.font = "11px Segoe UI, Tahoma, sans-serif";
+    const sampleWidth = 18;
+    const sampleGap = 8;
+    const rowHeight = 18;
+    const legendPaddingX = 10;
+    const legendPaddingY = 8;
+    const maxLabelWidth = visibleLegend.reduce((max, series, idx) => {
+      return Math.max(max, ctx.measureText(series.label || `s${idx + 1}`).width);
+    }, 0);
+    const legendWidth = Math.ceil(legendPaddingX * 2 + sampleWidth + sampleGap + maxLabelWidth);
+    const legendHeight = Math.ceil(legendPaddingY * 2 + visibleLegend.length * rowHeight);
+    let legendLeft = leftPad + plotW - legendWidth - 8;
+    let legendTop = topPad + 8;
+    if (cfg.legendPosition === "top-left") {
+      legendLeft = leftPad + 8;
+      legendTop = topPad + 8;
+    } else if (cfg.legendPosition === "bottom-right") {
+      legendLeft = leftPad + plotW - legendWidth - 8;
+      legendTop = topPad + plotH - legendHeight - 8;
+    } else if (cfg.legendPosition === "bottom-left") {
+      legendLeft = leftPad + 8;
+      legendTop = topPad + plotH - legendHeight - 8;
+    }
 
-  legendSeries.slice(0, 10).forEach((series, idx) => {
-    ctx.fillStyle = series.color || defaultChartSeriesColor(series.legendIndex ?? idx);
-    ctx.fillRect(width - 120, 8 + idx * 14, 8, 8);
-    ctx.fillStyle = "#334b60";
-    ctx.fillText(series.label || `s${idx + 1}`, width - 108, 16 + idx * 14);
-  });
+    ctx.fillStyle = "rgba(255, 255, 255, 0.88)";
+    ctx.strokeStyle = "#d2dde7";
+    ctx.lineWidth = 1;
+    drawRoundedRectPath(legendLeft, legendTop, legendWidth, legendHeight, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    visibleLegend.forEach((series, idx) => {
+      const rowY = legendTop + legendPaddingY + idx * rowHeight + rowHeight / 2;
+      const sampleX = legendLeft + legendPaddingX;
+      ctx.strokeStyle = series.color || defaultChartSeriesColor(series.legendIndex ?? idx);
+      ctx.lineWidth = series.lineWidth || 2.2;
+      ctx.setLineDash(chartLineDash(series.lineStyle));
+      ctx.beginPath();
+      ctx.moveTo(sampleX, rowY);
+      ctx.lineTo(sampleX + sampleWidth, rowY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (series.pointMode !== "none") {
+        ctx.fillStyle = series.color || defaultChartSeriesColor(series.legendIndex ?? idx);
+        ctx.beginPath();
+        ctx.arc(sampleX + sampleWidth / 2, rowY, Math.min(3, series.pointSize || 2.4), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#334b60";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(series.label || `s${idx + 1}`, sampleX + sampleWidth + sampleGap, rowY);
+    });
+    ctx.textBaseline = "top";
+  }
 }
 
 function updateXYWidgetsFromComputedValues(timeValue = null, nodeMap = buildNodeNameMap()) {
@@ -5529,6 +5745,8 @@ function refreshChartWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap(
         label: series.label || `${pair.xSource} -> ${pair.ySource}${seriesData.length > 1 ? ` [${idx}]` : ""}`,
         color: pair.color,
         showLine: pair.showLine,
+        lineWidth: pair.lineWidth,
+        lineStyle: pair.lineStyle,
         pointMode: pair.pointMode,
         pointSize: pair.pointSize,
         points: series.points || [],
@@ -5542,6 +5760,8 @@ function refreshChartWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap(
         label: series.label || `${pair.xSource} -> ${pair.ySource}`,
         color: pair.color,
         showLine: pair.showLine,
+        lineWidth: pair.lineWidth,
+        lineStyle: pair.lineStyle,
         pointMode: pair.pointMode === "last" ? "all" : pair.pointMode,
         pointSize: pair.pointSize,
         points: series.points || [],
@@ -5787,6 +6007,8 @@ function renderWidgets() {
             label: series.label || `${pair.xSource} -> ${pair.ySource}${seriesData.length > 1 ? ` [${idx}]` : ""}`,
             color: pair.color,
             showLine: pair.showLine,
+            lineWidth: pair.lineWidth,
+            lineStyle: pair.lineStyle,
             pointMode: pair.pointMode,
             pointSize: pair.pointSize,
             points: series.points || [],
@@ -5800,6 +6022,8 @@ function renderWidgets() {
             label: series.label || `${pair.xSource} -> ${pair.ySource}`,
             color: pair.color,
             showLine: pair.showLine,
+            lineWidth: pair.lineWidth,
+            lineStyle: pair.lineStyle,
             pointMode: pair.pointMode === "last" ? "all" : pair.pointMode,
             pointSize: pair.pointSize,
             points: series.points || [],
@@ -6613,6 +6837,24 @@ function refreshWidgetConfigPanel(widget) {
     return section;
   };
 
+  const appendWidgetSectionTitle = (section, labelKey) => {
+    const title = document.createElement("h4");
+    title.className = "widget-section-title";
+    title.textContent = t(labelKey);
+    section.appendChild(title);
+    return title;
+  };
+
+  const createCompactField = (labelKey, inputEl) => {
+    const wrap = document.createElement("label");
+    wrap.className = "compact-field";
+    const text = document.createElement("span");
+    text.textContent = t(labelKey);
+    wrap.appendChild(text);
+    wrap.appendChild(inputEl);
+    return wrap;
+  };
+
   const mainSection = createWidgetSection();
 
   const titleLabel = document.createElement("label");
@@ -6660,15 +6902,6 @@ function refreshWidgetConfigPanel(widget) {
 
     const rangeRow = document.createElement("div");
     rangeRow.className = "row3-exec";
-    const createRangeField = (labelKey, inputEl) => {
-      const wrap = document.createElement("label");
-      wrap.className = "compact-field";
-      const text = document.createElement("span");
-      text.textContent = t(labelKey);
-      wrap.appendChild(text);
-      wrap.appendChild(inputEl);
-      return wrap;
-    };
     const minInput = document.createElement("input");
     minInput.type = "number";
     minInput.step = "any";
@@ -6700,9 +6933,9 @@ function refreshWidgetConfigPanel(widget) {
         sanitizeSliderWidgetOptions(widget);
       });
     });
-    rangeRow.appendChild(createRangeField("widget.sliderMin", minInput));
-    rangeRow.appendChild(createRangeField("widget.sliderStep", stepInput));
-    rangeRow.appendChild(createRangeField("widget.sliderMax", maxInput));
+    rangeRow.appendChild(createCompactField("widget.sliderMin", minInput));
+    rangeRow.appendChild(createCompactField("widget.sliderStep", stepInput));
+    rangeRow.appendChild(createCompactField("widget.sliderMax", maxInput));
     sliderSection.appendChild(rangeRow);
     return;
   }
@@ -6782,16 +7015,6 @@ function refreshWidgetConfigPanel(widget) {
 
     const matrixOptionsRow = document.createElement("div");
     matrixOptionsRow.className = "row3-exec";
-
-    const createCompactField = (labelKey, inputEl) => {
-      const wrap = document.createElement("label");
-      wrap.className = "compact-field";
-      const text = document.createElement("span");
-      text.textContent = t(labelKey);
-      wrap.appendChild(text);
-      wrap.appendChild(inputEl);
-      return wrap;
-    };
 
     const cellSizeInput = document.createElement("input");
     cellSizeInput.type = "number";
@@ -6933,10 +7156,7 @@ function refreshWidgetConfigPanel(widget) {
   sanitizeXYChartOptions(widget);
   const choices = ["time", ...nodeNames];
   const chartPairsSection = createWidgetSection();
-
-  const pairsLabel = document.createElement("label");
-  pairsLabel.textContent = t("widget.xyPairsLabel");
-  chartPairsSection.appendChild(pairsLabel);
+  appendWidgetSectionTitle(chartPairsSection, "widget.xyPairsLabel");
 
   const pairList = document.createElement("div");
   pairList.className = "chart-pair-list";
@@ -6999,17 +7219,19 @@ function refreshWidgetConfigPanel(widget) {
   addBtn.addEventListener("click", () => {
     runAction(() => {
       const defaultY = nodeNames[0] || "time";
-      widget.xyPairs.push({
-        xSource: "time",
-        ySource: defaultY,
-        showTimeSeries: true,
-        showInstantProfile: false,
-        color: defaultChartSeriesColor(widget.xyPairs.length),
-        showLine: true,
-        pointMode: "all",
-        pointSize: 2.4,
-        points: [],
-      });
+        widget.xyPairs.push({
+          xSource: "time",
+          ySource: defaultY,
+          showTimeSeries: true,
+          showInstantProfile: false,
+          color: defaultChartSeriesColor(widget.xyPairs.length),
+          showLine: true,
+          lineWidth: 2.2,
+          lineStyle: "solid",
+          pointMode: "all",
+          pointSize: 2.4,
+          points: [],
+        });
       ui.activeChartPairByWidgetId.set(widget.id, widget.xyPairs.length - 1);
     });
   });
@@ -7017,9 +7239,7 @@ function refreshWidgetConfigPanel(widget) {
 
   if (activePairIndex >= 0 && widget.xyPairs[activePairIndex]) {
     const activePairSection = createWidgetSection();
-    const activePairLabel = document.createElement("label");
-    activePairLabel.textContent = t("widget.activePairLabel");
-    activePairSection.appendChild(activePairLabel);
+    appendWidgetSectionTitle(activePairSection, "widget.activePairLabel");
 
     const pair = widget.xyPairs[activePairIndex];
 
@@ -7066,8 +7286,6 @@ function refreshWidgetConfigPanel(widget) {
     topRow.appendChild(ySel);
     activePairSection.appendChild(topRow);
 
-    const bottomRow = document.createElement("div");
-    bottomRow.className = "chart-pair-bottom";
     const modesRow = document.createElement("div");
     modesRow.className = "chart-pair-modes";
 
@@ -7167,10 +7385,48 @@ function refreshWidgetConfigPanel(widget) {
       });
     });
 
-    styleRow.appendChild(colorInput);
-    styleRow.appendChild(lineLabel);
-    styleRow.appendChild(pointsSelect);
-    styleRow.appendChild(pointSizeInput);
+    const lineStyleSelect = document.createElement("select");
+    setTooltipText(lineStyleSelect, t("widget.lineStyle"));
+    ["solid", "dashed", "dotted"].forEach((mode) => {
+      const opt = document.createElement("option");
+      opt.value = mode;
+      opt.textContent = t(`widget.lineStyleMode.${mode}`);
+      lineStyleSelect.appendChild(opt);
+    });
+    lineStyleSelect.value = normalizeChartLineStyle(pair.lineStyle);
+    lineStyleSelect.addEventListener("change", () => {
+      runAction(() => {
+        widget.xyPairs[activePairIndex].lineStyle = normalizeChartLineStyle(lineStyleSelect.value);
+      });
+    });
+
+    const lineWidthInput = document.createElement("input");
+    lineWidthInput.type = "number";
+    lineWidthInput.step = "0.2";
+    lineWidthInput.min = "1";
+    lineWidthInput.max = "8";
+    lineWidthInput.value = String(Number(pair.lineWidth ?? 2.2));
+    setTooltipText(lineWidthInput, t("widget.lineWidth"));
+    lineWidthInput.addEventListener("change", () => {
+      runAction(() => {
+        widget.xyPairs[activePairIndex].lineWidth = clamp(Number(lineWidthInput.value) || 2.2, 1, 8);
+      });
+    });
+
+    const primaryStyleRow = document.createElement("div");
+    primaryStyleRow.className = "chart-pair-style-main";
+    primaryStyleRow.appendChild(colorInput);
+    primaryStyleRow.appendChild(lineLabel);
+    primaryStyleRow.appendChild(createCompactField("widget.lineStyle", lineStyleSelect));
+    primaryStyleRow.appendChild(createCompactField("widget.lineWidth", lineWidthInput));
+
+    const secondaryStyleRow = document.createElement("div");
+    secondaryStyleRow.className = "chart-pair-style-secondary";
+    secondaryStyleRow.appendChild(createCompactField("widget.seriesPoints", pointsSelect));
+    secondaryStyleRow.appendChild(createCompactField("widget.pointSize", pointSizeInput));
+
+    styleRow.appendChild(primaryStyleRow);
+    styleRow.appendChild(secondaryStyleRow);
     activePairSection.appendChild(styleRow);
   } else {
     const emptyPairs = document.createElement("div");
@@ -7180,10 +7436,7 @@ function refreshWidgetConfigPanel(widget) {
   }
 
   const chartAxisSection = createWidgetSection();
-
-  const limitsLabel = document.createElement("label");
-  limitsLabel.textContent = t("widget.axisLimitsLabel");
-  chartAxisSection.appendChild(limitsLabel);
+  appendWidgetSectionTitle(chartAxisSection, "widget.axisLimitsLabel");
 
   const parseLimitInput = (text) => {
     const trimmed = String(text ?? "").trim();
@@ -7216,8 +7469,8 @@ function refreshWidgetConfigPanel(widget) {
       widget.xMax = parseLimitInput(xMaxInput.value);
     });
   });
-  xLimitRow.appendChild(xMinInput);
-  xLimitRow.appendChild(xMaxInput);
+  xLimitRow.appendChild(createCompactField("widget.axisXMin", xMinInput));
+  xLimitRow.appendChild(createCompactField("widget.axisXMax", xMaxInput));
   chartAxisSection.appendChild(xLimitRow);
 
   const yLimitRow = document.createElement("div");
@@ -7242,8 +7495,8 @@ function refreshWidgetConfigPanel(widget) {
       widget.yMax = parseLimitInput(yMaxInput.value);
     });
   });
-  yLimitRow.appendChild(yMinInput);
-  yLimitRow.appendChild(yMaxInput);
+  yLimitRow.appendChild(createCompactField("widget.axisYMin", yMinInput));
+  yLimitRow.appendChild(createCompactField("widget.axisYMax", yMaxInput));
   chartAxisSection.appendChild(yLimitRow);
 
   const gridLabel = document.createElement("label");
@@ -7261,6 +7514,21 @@ function refreshWidgetConfigPanel(widget) {
   gridLabel.appendChild(gridInput);
   gridLabel.appendChild(gridSpan);
   chartAxisSection.appendChild(gridLabel);
+
+  const legendPositionSelect = document.createElement("select");
+  ["top-right", "top-left", "bottom-right", "bottom-left"].forEach((pos) => {
+    const opt = document.createElement("option");
+    opt.value = pos;
+    opt.textContent = t(`widget.legendPositionMode.${pos}`);
+    legendPositionSelect.appendChild(opt);
+  });
+  legendPositionSelect.value = widget.legendPosition || "top-right";
+  legendPositionSelect.addEventListener("change", () => {
+    runAction(() => {
+      widget.legendPosition = legendPositionSelect.value;
+    });
+  });
+  chartAxisSection.appendChild(createCompactField("widget.legendPosition", legendPositionSelect));
 }
 
 function refreshSidebar() {
@@ -8386,6 +8654,9 @@ function importGraphData(data) {
         yMin: Number.isFinite(Number(w.yMin)) ? Number(w.yMin) : null,
         yMax: Number.isFinite(Number(w.yMax)) ? Number(w.yMax) : null,
         showGrid: w.showGrid !== false,
+        legendPosition: ["top-right", "top-left", "bottom-right", "bottom-left"].includes(String(w.legendPosition ?? ""))
+          ? String(w.legendPosition)
+          : "top-right",
         source: String(w.source ?? ""),
         showNumericValues: w.showNumericValues !== false,
         showIndices: w.showIndices !== false,
@@ -8402,13 +8673,15 @@ function importGraphData(data) {
         columns: Array.isArray(w.columns) ? w.columns.map((c) => String(c)) : [],
         xyPairs: Array.isArray(w.xyPairs)
           ? w.xyPairs.map((pair, idx) => ({
-            xSource: String(pair.xSource ?? "time"),
-            ySource: String(pair.ySource ?? ""),
-            color: /^#[0-9a-fA-F]{6}$/.test(String(pair?.color ?? "")) ? String(pair.color) : defaultChartSeriesColor(idx),
-            showLine: pair?.showLine !== false,
-            pointMode: normalizeChartPointMode(pair?.pointMode, pair?.showPoints),
-            pointSize: Number.isFinite(Number(pair?.pointSize)) ? clamp(Number(pair.pointSize), 1, 12) : 2.4,
-            points: [],
+          xSource: String(pair.xSource ?? "time"),
+          ySource: String(pair.ySource ?? ""),
+          color: /^#[0-9a-fA-F]{6}$/.test(String(pair?.color ?? "")) ? String(pair.color) : defaultChartSeriesColor(idx),
+          showLine: pair?.showLine !== false,
+          lineWidth: Number.isFinite(Number(pair?.lineWidth)) ? clamp(Number(pair.lineWidth), 1, 8) : 2.2,
+          lineStyle: normalizeChartLineStyle(pair?.lineStyle),
+          pointMode: normalizeChartPointMode(pair?.pointMode, pair?.showPoints),
+          pointSize: Number.isFinite(Number(pair?.pointSize)) ? clamp(Number(pair.pointSize), 1, 12) : 2.4,
+          points: [],
           }))
           : (() => {
             const legacyX = String(w.xSource ?? w.xNode ?? "time");
@@ -8420,6 +8693,8 @@ function importGraphData(data) {
               ySource: yNode,
               color: defaultChartSeriesColor(idx),
               showLine: true,
+              lineWidth: 2.2,
+              lineStyle: "solid",
               pointMode: "all",
               pointSize: 2.4,
               points: [],
@@ -8528,6 +8803,25 @@ function clearRecentModels() {
   renderRecentModelsMenu();
 }
 
+async function maybeSaveUnsavedChangesBeforeModelReplace(confirmKey) {
+  if (!hasUnsavedChanges()) {
+    return true;
+  }
+  const shouldSave = window.confirm(t(confirmKey));
+  if (!shouldSave) {
+    return true;
+  }
+  return saveGraphJson(false);
+}
+
+function notifyMissingRecentModelEntry(entry) {
+  recentModelEntries = recentModelEntries.filter((item) => item !== entry);
+  saveRecentModelsToStorage();
+  renderRecentModelsMenu();
+  setStatusKey("status.recentMissing");
+  window.alert(t("error.recentMissing"));
+}
+
 function renderRecentModelsMenu() {
   if (!recentModelsMenuRoot || !recentModelsSection || !recentModelsSep || !clearRecentModelsBtn) {
     return;
@@ -8631,10 +8925,11 @@ async function openRecentModelEntry(entry) {
   try {
     const handle = await resolveRecentModelHandle(entry);
     if (!handle) {
-      recentModelEntries = recentModelEntries.filter((item) => item !== entry);
-      saveRecentModelsToStorage();
-      renderRecentModelsMenu();
-      setStatusKey("status.recentMissing");
+      notifyMissingRecentModelEntry(entry);
+      return false;
+    }
+    const proceed = await maybeSaveUnsavedChangesBeforeModelReplace("confirm.openGraph.save");
+    if (!proceed) {
       return false;
     }
     const rootEntry = await prepareSelectedJsonEntries([handle]);
@@ -8643,10 +8938,7 @@ async function openRecentModelEntry(entry) {
     }
     return openPreparedJsonEntry(rootEntry);
   } catch (_err) {
-    recentModelEntries = recentModelEntries.filter((item) => item !== entry);
-    saveRecentModelsToStorage();
-    renderRecentModelsMenu();
-    setStatusKey("status.recentMissing");
+    notifyMissingRecentModelEntry(entry);
     return false;
   }
 }
@@ -9568,6 +9860,10 @@ async function loadGraphJsonFile(file) {
 }
 
 async function openGraphJson() {
+  const proceed = await maybeSaveUnsavedChangesBeforeModelReplace("confirm.openGraph.save");
+  if (!proceed) {
+    return;
+  }
   modelContextStack.length = 0;
   if (supportsOpenFilePicker()) {
     try {
@@ -9603,16 +9899,11 @@ async function openGraphJson() {
 }
 
 async function createNewGraph() {
-  modelContextStack.length = 0;
-  if (hasUnsavedChanges()) {
-    const shouldSave = window.confirm(t("confirm.newGraph.save"));
-    if (shouldSave) {
-      const saved = await saveGraphJson();
-      if (!saved) {
-        return;
-      }
-    }
+  const proceed = await maybeSaveUnsavedChangesBeforeModelReplace("confirm.newGraph.save");
+  if (!proceed) {
+    return;
   }
+  modelContextStack.length = 0;
 
   graph.modelTitle = "";
   graph.properties = [];

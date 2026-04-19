@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "modelTitle": "",
+  "modelProperties": [],
+  "nodeCounter": 11,
+  "edgeCounter": 9,
+  "widgetCounter": 7,
+  "execution": {
+    "t0": 0,
+    "dt": 1,
+    "t1": 1000,
+    "delayMs": 1,
+    "decimals": 3,
+    "integrator": "euler",
+    "strictDefinitions": false
+  },
+  "nodes": [
+    {
+      "id": 3,
+      "name": "n",
+      "output": false,
+      "type": "parameter",
+      "x": 120,
+      "y": 160,
+      "width": 120,
+      "height": 70,
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "valueExpression": "50"
+    },
+    {
+      "id": 4,
+      "name": "x",
+      "output": true,
+      "type": "state",
+      "x": 300,
+      "y": 160,
+      "width": 120,
+      "height": 70,
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "stateTransition": "(neig==3) or (this and (neig==2))",
+      "initialState": "array([n,n],rand()<0.2)"
+    },
+    {
+      "id": 6,
+      "name": "neig",
+      "output": true,
+      "type": "algebraic",
+      "x": 300,
+      "y": 320,
+      "width": 120,
+      "height": 70,
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "input": false,
+      "valueExpression": "array(size(x),sum(neighbors(x,$0,$1,1,1)))"
+    }
+  ],
+  "edges": [
+    {
+      "id": 1,
+      "from": 3,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 3,
+      "from": 4,
+      "to": 6,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 4,
+      "from": 6,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    }
+  ],
+  "widgets": [
+    {
+      "id": 1,
+      "type": "matrix",
+      "customTitle": "",
+      "x": 424.71767074072596,
+      "y": -74.23400776029631,
+      "width": 781.5783909187727,
+      "height": 811.8518777354467,
+      "minimized": false,
+      "outputOnly": true,
+      "showHistory": false,
+      "xMin": 0,
+      "xMax": 0,
+      "yMin": 0,
+      "yMax": 0,
+      "showGrid": true,
+      "source": "x",
+      "showNumericValues": false,
+      "showIndices": false,
+      "autoFitCells": true,
+      "cellSize": 9,
+      "colorScheme": "heat",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "columns": [],
+      "xyPairs": []
+    }
+  ]
+}
