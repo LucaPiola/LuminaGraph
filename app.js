@@ -29,6 +29,10 @@ const runEvalBtn = document.getElementById("runEvalBtn");
 const runStepBtn = document.getElementById("runStepBtn");
 const runTimedToggleBtn = document.getElementById("runTimedToggleBtn");
 const runResetBtn = document.getElementById("runResetBtn");
+const topRunEvalBtn = document.getElementById("topRunEvalBtn");
+const topRunStepBtn = document.getElementById("topRunStepBtn");
+const topRunTimedBtn = document.getElementById("topRunTimedBtn");
+const topRunResetBtn = document.getElementById("topRunResetBtn");
 const runStrictDefinitionsInput = document.getElementById("runStrictDefinitionsInput");
 const selectAllBtn = document.getElementById("selectAllBtn");
 const cutBtn = document.getElementById("cutBtn");
@@ -42,6 +46,7 @@ const newGraphBtn = document.getElementById("newGraphBtn");
 const saveJsonBtn = document.getElementById("saveJsonBtn");
 const saveAsJsonBtn = document.getElementById("saveAsJsonBtn");
 const loadJsonBtn = document.getElementById("loadJsonBtn");
+const recentModelsMenuRoot = document.getElementById("recentModelsMenuRoot");
 const recentModelsSep = document.getElementById("recentModelsSep");
 const recentModelsSection = document.getElementById("recentModelsSection");
 const clearRecentModelsBtn = document.getElementById("clearRecentModelsBtn");
@@ -120,6 +125,8 @@ const expressionEditorSurface = document.querySelector(".expression-editor-surfa
 const expressionSymbolsFilter = document.getElementById("expressionSymbolsFilter");
 const expressionSidebar = document.getElementById("expressionSidebar");
 const expressionHelp = document.getElementById("expressionHelp");
+const expressionPreviewBox = document.getElementById("expressionPreviewBox");
+const expressionPreviewValue = document.getElementById("expressionPreviewValue");
 const expressionLibrary = document.getElementById("expressionLibrary");
 const expressionEditorHint = document.getElementById("expressionEditorHint");
 const expressionEditorStatus = document.getElementById("expressionEditorStatus");
@@ -137,6 +144,11 @@ const functionsHelpContent = document.getElementById("functionsHelpContent");
 const aboutAppModal = document.getElementById("aboutAppModal");
 const aboutAppCloseBtn = document.getElementById("aboutAppCloseBtn");
 const aboutAppDismissBtn = document.getElementById("aboutAppDismissBtn");
+const expressionEditorSwitchModal = document.getElementById("expressionEditorSwitchModal");
+const expressionEditorSwitchCloseBtn = document.getElementById("expressionEditorSwitchCloseBtn");
+const expressionEditorSwitchCancelBtn = document.getElementById("expressionEditorSwitchCancelBtn");
+const expressionEditorSwitchDiscardBtn = document.getElementById("expressionEditorSwitchDiscardBtn");
+const expressionEditorSwitchApplyBtn = document.getElementById("expressionEditorSwitchApplyBtn");
 const appTooltip = document.getElementById("appTooltip");
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -275,6 +287,8 @@ const ui = {
   lastNodeActivate: null,
   textDrag: null,
   textResize: null,
+  expressionPreviewTimer: null,
+  expressionEditorPendingSelectionAction: null,
 };
 
 const history = {
@@ -1136,6 +1150,48 @@ function expressionEditorMeta() {
   return expressionFieldMeta(ui.expressionEditor.fieldKey, node);
 }
 
+function effectiveExpressionEditorFieldForNode(node, preferredFieldKey) {
+  if (!node) {
+    return null;
+  }
+  if (expressionFieldMeta(preferredFieldKey, node)) {
+    return preferredFieldKey;
+  }
+  if (preferredFieldKey !== "value" && expressionFieldMeta("value", node)) {
+    return "value";
+  }
+  return null;
+}
+
+function syncExpressionEditorToSelectedNode() {
+  if (!ui.expressionEditor || ui.expressionEditor.fieldKey === "__custom__" || !expressionEditorTextarea || !expressionEditorTitle) {
+    return;
+  }
+  const selectedNode = selectedNodeForSidebar();
+  if (!selectedNode) {
+    return;
+  }
+  const nextFieldKey = effectiveExpressionEditorFieldForNode(selectedNode, ui.expressionEditor.fieldKey);
+  if (!nextFieldKey) {
+    return;
+  }
+  if (ui.expressionEditor.nodeId === selectedNode.id && ui.expressionEditor.fieldKey === nextFieldKey) {
+    return;
+  }
+  const meta = expressionFieldMeta(nextFieldKey, selectedNode);
+  if (!meta) {
+    return;
+  }
+  ui.expressionEditor.nodeId = selectedNode.id;
+  ui.expressionEditor.fieldKey = meta.key;
+  ui.expressionEditor.baseTitle = meta.title;
+  ui.expressionEditor.initialValue = meta.value;
+  ui.expressionEditor.syntaxOk = true;
+  expressionEditorTitle.textContent = meta.title;
+  expressionEditorTextarea.value = meta.value;
+  refreshExpressionEditorValidation();
+}
+
 function expressionDocMap() {
   const docs = window.GraphFunctions?.expressionDocs || globalThis.GraphFunctions?.expressionDocs;
   if (!docs) {
@@ -1165,6 +1221,9 @@ function helpGroupLabel(kind) {
   if (kind === "variable") {
     return t("help.group.variables");
   }
+  if (kind === "array") {
+    return t("help.group.array");
+  }
   if (kind === "probability") {
     return t("help.group.probability");
   }
@@ -1188,7 +1247,7 @@ function renderFunctionsHelp() {
     groups.get(key).push(entry);
   });
 
-  ["variable", "function", "probability", "math"].forEach((kind) => {
+  ["variable", "function", "array", "probability", "math"].forEach((kind) => {
     const entries = (groups.get(kind) || []).slice().sort((left, right) => left.name.localeCompare(right.name));
     if (!entries || !entries.length) {
       return;
@@ -1420,6 +1479,69 @@ function closeAboutApp() {
   aboutAppModal.classList.add("hidden");
 }
 
+function expressionEditorHasUnsavedChanges() {
+  return Boolean(
+    ui.expressionEditor
+    && ui.expressionEditor.fieldKey !== "__custom__"
+    && expressionEditorTextarea
+    && expressionEditorTextarea.value !== String(ui.expressionEditor.initialValue ?? ""),
+  );
+}
+
+function openExpressionEditorSwitchModal() {
+  if (!expressionEditorSwitchModal) {
+    return;
+  }
+  expressionEditorSwitchModal.classList.remove("hidden");
+  if (expressionEditorSwitchApplyBtn) {
+    expressionEditorSwitchApplyBtn.disabled = !Boolean(ui.expressionEditor?.syntaxOk);
+  }
+  (expressionEditorSwitchApplyBtn && !expressionEditorSwitchApplyBtn.disabled
+    ? expressionEditorSwitchApplyBtn
+    : expressionEditorSwitchCancelBtn)?.focus();
+}
+
+function closeExpressionEditorSwitchModal() {
+  if (!expressionEditorSwitchModal) {
+    return;
+  }
+  expressionEditorSwitchModal.classList.add("hidden");
+  ui.expressionEditorPendingSelectionAction = null;
+  expressionEditorTextarea?.focus();
+}
+
+function currentExpressionEditorSelectionKey() {
+  if (!ui.expressionEditor || ui.expressionEditor.fieldKey === "__custom__" || !ui.expressionEditor.nodeId) {
+    return "";
+  }
+  return `node:${ui.expressionEditor.nodeId}`;
+}
+
+function requestExpressionEditorSelectionChange(action, nextSelectionKey = "") {
+  if (typeof action !== "function") {
+    return false;
+  }
+  if (nextSelectionKey && nextSelectionKey === currentExpressionEditorSelectionKey()) {
+    action();
+    return true;
+  }
+  if (!expressionEditorHasUnsavedChanges()) {
+    action();
+    return true;
+  }
+  ui.expressionEditorPendingSelectionAction = action;
+  openExpressionEditorSwitchModal();
+  return false;
+}
+
+function runPendingExpressionEditorSelectionAction() {
+  const action = ui.expressionEditorPendingSelectionAction;
+  closeExpressionEditorSwitchModal();
+  if (typeof action === "function") {
+    action();
+  }
+}
+
 function expressionCatalogForEditor() {
   const meta = expressionEditorMeta();
   if (!meta) {
@@ -1502,14 +1624,16 @@ function expressionEntryKindOrder(kind) {
       return 0;
     case "function":
       return 1;
-    case "probability":
+    case "array":
       return 2;
-    case "property":
+    case "probability":
       return 3;
-    case "math":
+    case "property":
       return 4;
-    case "node":
+    case "math":
       return 5;
+    case "node":
+      return 6;
     default:
       return 99;
   }
@@ -1741,6 +1865,88 @@ function setExpressionHelp(entry = null) {
     entry.description || "",
   ].filter(Boolean);
   expressionHelp.textContent = lines.join("\n");
+  const preview = expressionValuePreviewForEntry(entry);
+  if (!preview) {
+    return;
+  }
+  const valueEl = document.createElement("div");
+  valueEl.className = `expression-help-value${preview.error ? " error" : ""}`;
+  valueEl.textContent = `${t("expr.preview.title")}: ${preview.text}`;
+  expressionHelp.appendChild(valueEl);
+  if (preview.typeLabel) {
+    const typeEl = document.createElement("div");
+    typeEl.className = "expression-help-type";
+    typeEl.textContent = `${t("expr.preview.type")}: ${preview.typeLabel}`;
+    expressionHelp.appendChild(typeEl);
+  }
+}
+
+function expressionValuePreviewForEntry(entry) {
+  if (!entry) {
+    return null;
+  }
+  const node = expressionPreviewNode();
+  const globals = buildExpressionPreviewGlobals();
+  const baseContext = { ...globals };
+  if (node) {
+    Object.assign(baseContext, nodePropertyAccessForContext(node));
+    graph.edges
+      .filter((edge) => edge.to === node.id)
+      .map((edge) => getNodeById(edge.from))
+      .filter(Boolean)
+      .forEach((depNode) => {
+        if (!depNode.computedError) {
+          baseContext[depNode.name] = depNode.computedValue;
+        }
+      });
+  }
+
+  if (entry.kind === "variable") {
+    if (entry.name === "this" && node && isStateNode(node)) {
+      const selfValue = node.computedValue;
+      if (selfValue == null) {
+        return { text: t("expr.preview.unavailableState"), error: true };
+      }
+      return {
+        text: summarizeExpressionPreviewValue(selfValue),
+        typeLabel: describeExpressionPreviewShape(selfValue),
+        error: false,
+      };
+    }
+    if (entry.name === "self" && node) {
+      let selfValue = node.computedValue;
+      if (selfValue == null && isStateNode(node)) {
+        const initialPreview = evaluateInitialStatePreviewValue(node, globals);
+        if (initialPreview.ok) {
+          selfValue = initialPreview.value;
+        }
+      }
+      if (selfValue == null) {
+        return { text: t("expr.preview.unavailableState"), error: true };
+      }
+      if (Array.isArray(selfValue)) {
+        return {
+          text: summarizeExpressionPreviewValue(selfValue[0]),
+          typeLabel: describeExpressionPreviewShape(selfValue[0]),
+          error: false,
+        };
+      }
+      return {
+        text: summarizeExpressionPreviewValue(selfValue),
+        typeLabel: describeExpressionPreviewShape(selfValue),
+        error: false,
+      };
+    }
+    if (Object.prototype.hasOwnProperty.call(baseContext, entry.name)) {
+      return {
+        text: summarizeExpressionPreviewValue(baseContext[entry.name]),
+        typeLabel: describeExpressionPreviewShape(baseContext[entry.name]),
+        error: false,
+      };
+    }
+    return null;
+  }
+  return null;
 }
 
 function renderExpressionAutocomplete() {
@@ -1886,11 +2092,160 @@ function resetExpressionEditorCardPosition() {
   card.style.transform = "translate(-50%, -50%)";
 }
 
+function clearExpressionPreviewTimer() {
+  if (ui.expressionPreviewTimer != null) {
+    window.clearTimeout(ui.expressionPreviewTimer);
+    ui.expressionPreviewTimer = null;
+  }
+}
+
+function setExpressionPreviewState(text, tone = "") {
+  if (!expressionPreviewBox || !expressionPreviewValue) {
+    return;
+  }
+  expressionPreviewValue.textContent = String(text ?? "");
+  expressionPreviewBox.classList.toggle("error", tone === "error");
+}
+
+function expressionPreviewNode() {
+  if (!ui.expressionEditor) {
+    return null;
+  }
+  if (ui.expressionEditor.nodeId) {
+    return getNodeById(ui.expressionEditor.nodeId);
+  }
+  return selectedNodeForSidebar();
+}
+
+function buildExpressionPreviewGlobals() {
+  const timeValue = graph.execution.currentTime == null
+    ? Number(graph.execution.t0)
+    : Number(graph.execution.currentTime);
+  return buildExecutionGlobals(timeValue);
+}
+
+function evaluateInitialStatePreviewValue(node, globals) {
+  if (!node || !isStateNode(node)) {
+    return { ok: false };
+  }
+  const context = {
+    ...globals,
+    ...nodePropertyAccessForContext(node),
+  };
+  graph.edges
+    .filter((edge) => edge.to === node.id)
+    .map((edge) => getNodeById(edge.from))
+    .filter((depNode) => depNode && depNode.shape === "diamond")
+    .forEach((depNode) => {
+      if (!depNode.computedError) {
+        context[depNode.name] = depNode.computedValue;
+      }
+    });
+  return semantics.evaluateValueExpression(String(node.initialStateExpression ?? ""), context);
+}
+
+function buildExpressionPreviewEvaluation() {
+  if (!ui.expressionEditor || !expressionEditorTextarea) {
+    return null;
+  }
+  const source = String(expressionEditorTextarea.value ?? "");
+  if (!source.trim()) {
+    return { ok: true, empty: true, value: null };
+  }
+  const meta = expressionEditorMeta();
+  const node = expressionPreviewNode();
+  const globals = buildExpressionPreviewGlobals();
+  const context = {
+    ...globals,
+  };
+  if (node) {
+    Object.assign(context, nodePropertyAccessForContext(node));
+    graph.edges
+      .filter((edge) => edge.to === node.id)
+      .map((edge) => getNodeById(edge.from))
+      .filter(Boolean)
+      .filter((depNode) => (meta?.key !== "initial") || depNode.shape === "diamond")
+      .forEach((depNode) => {
+        if (!depNode.computedError) {
+          context[depNode.name] = depNode.computedValue;
+        }
+      });
+  }
+
+  const isStateTransition = Boolean(meta?.key === "value" && node && isStateNode(node));
+  if (isStateTransition) {
+    let selfValue = node.computedValue;
+    if (selfValue == null) {
+      const initialPreview = evaluateInitialStatePreviewValue(node, globals);
+      if (initialPreview.ok) {
+        selfValue = initialPreview.value;
+      }
+    }
+    if (selfValue == null) {
+      return { ok: false, reason: "runtime", message: t("expr.preview.unavailableState") };
+    }
+    context.__self = selfValue;
+    if (String(source).includes("integral(")) {
+      const derivativeList = semantics.evaluateIntegralDerivativeList(source, context, {
+        allowThisAlias: true,
+      });
+      if (!derivativeList.ok) {
+        return derivativeList;
+      }
+      const dt = Number(graph.execution.dt);
+      const integralValues = (derivativeList.value || []).map((derivativeValue) => addTensorValues(selfValue, scaleTensorValue(derivativeValue, dt)));
+      return semantics.evaluateStateTransitionExpressionWithIntegralValues(
+        source,
+        context,
+        integralValues,
+        { allowThisAlias: true },
+      );
+    }
+    return semantics.evaluateValueExpression(source, context, {
+      allowThisAlias: true,
+      allowIntegral: true,
+    });
+  }
+  return semantics.evaluateValueExpression(source, context);
+}
+
+function refreshExpressionPreviewNow() {
+  clearExpressionPreviewTimer();
+  if (!expressionPreviewBox || !expressionPreviewValue) {
+    return;
+  }
+  const result = buildExpressionPreviewEvaluation();
+  if (!result || result.empty) {
+    setExpressionPreviewState(t("expr.preview.empty"));
+    return;
+  }
+  if (!result.ok) {
+    const msg = result.message ? localizeExpressionErrorMessage(result.message) : t(`error.evalReason.${result.reason || "runtime"}`);
+    setExpressionPreviewState(t("expr.preview.error", { message: msg }), "error");
+    return;
+  }
+  setExpressionPreviewState(`${t("expr.preview.type")}: ${describeExpressionPreviewShape(result.value)}\n${summarizeExpressionPreviewValue(result.value)}`);
+}
+
+function scheduleExpressionPreviewRefresh(delay = 180) {
+  clearExpressionPreviewTimer();
+  if (!ui.expressionEditor) {
+    setExpressionPreviewState(t("expr.preview.empty"));
+    return;
+  }
+  setExpressionPreviewState(t("expr.preview.pending"));
+  ui.expressionPreviewTimer = window.setTimeout(() => {
+    ui.expressionPreviewTimer = null;
+    refreshExpressionPreviewNow();
+  }, delay);
+}
+
 function closeExpressionEditor() {
   if (!expressionEditorModal) {
     return;
   }
   expressionEditorModal.classList.add("hidden");
+  closeExpressionEditorSwitchModal();
   ui.expressionEditor = null;
   ui.modalDrag = null;
   if (expressionEditorTextarea) {
@@ -1912,6 +2267,8 @@ function closeExpressionEditor() {
   expressionSidebar?.classList.remove("hidden");
   setExpressionHelp(null);
   hideExpressionStatus(expressionEditorStatus);
+  clearExpressionPreviewTimer();
+  setExpressionPreviewState(t("expr.preview.empty"));
   ui.modalResize = null;
   resetExpressionEditorCardPosition();
 }
@@ -1933,9 +2290,13 @@ function refreshExpressionEditorValidation() {
   );
   expressionEditorSurface?.classList.toggle("invalid", !syntaxResult.ok);
   expressionEditorApplyBtn.disabled = !syntaxResult.ok;
+  if (expressionEditorSwitchApplyBtn && expressionEditorSwitchModal && !expressionEditorSwitchModal.classList.contains("hidden")) {
+    expressionEditorSwitchApplyBtn.disabled = !syntaxResult.ok;
+  }
   ui.expressionEditor.syntaxOk = syntaxResult.ok;
   renderExpressionHighlight();
   renderExpressionAutocomplete();
+  scheduleExpressionPreviewRefresh(syntaxResult.ok ? 180 : 0);
   return syntaxResult;
 }
 
@@ -2043,6 +2404,10 @@ function openNodePrimaryEditor(node) {
     void openSubmodelNode(node);
     return;
   }
+  if (ui.expressionEditor && !expressionEditorModal?.classList.contains("hidden")) {
+    selectSingleNode(node.id);
+    return;
+  }
   selectSingleNode(node.id);
   openExpressionEditor("value");
 }
@@ -2072,23 +2437,30 @@ function openCustomExpressionEditor(title, initialValue, onApply) {
   expressionEditorTextarea.select();
 }
 
-function applyExpressionEditor() {
+function commitExpressionEditorValue(closeAfter = true) {
   if (!ui.expressionEditor || !ui.expressionEditor.syntaxOk || isExecutionFrozen()) {
-    return;
+    return false;
   }
   if (ui.expressionEditor.fieldKey === "__custom__") {
     const nextValue = expressionEditorTextarea ? expressionEditorTextarea.value : "";
     if (typeof ui.expressionEditor.onApplyCustom === "function") {
       ui.expressionEditor.onApplyCustom(nextValue);
     }
-    closeExpressionEditor();
-    return;
+    if (closeAfter) {
+      closeExpressionEditor();
+    } else {
+      ui.expressionEditor.initialValue = nextValue;
+      refreshExpressionEditorValidation();
+    }
+    return true;
   }
   const node = getNodeById(ui.expressionEditor.nodeId);
   const meta = expressionFieldMeta(ui.expressionEditor.fieldKey, node);
   if (!node || !meta || !expressionEditorTextarea) {
-    closeExpressionEditor();
-    return;
+    if (closeAfter) {
+      closeExpressionEditor();
+    }
+    return false;
   }
   const nextValue = expressionEditorTextarea.value;
   runAction(() => {
@@ -2098,7 +2470,18 @@ function applyExpressionEditor() {
     meta.inputEl.value = nextValue;
   }
   updateExpressionFieldState(meta.inputEl, meta.statusEl, nextValue, false, meta.key);
-  closeExpressionEditor();
+  if (closeAfter) {
+    closeExpressionEditor();
+  } else {
+    ui.expressionEditor.initialValue = nextValue;
+    ui.expressionEditor.baseTitle = meta.title;
+    refreshExpressionEditorValidation();
+  }
+  return true;
+}
+
+function applyExpressionEditor() {
+  commitExpressionEditorValue(true);
 }
 
 function isFirefoxBrowser() {
@@ -2286,6 +2669,54 @@ function summarizeTooltipValue(value) {
     }
   }
   return formatComputedValue(value);
+}
+
+function summarizeExpressionPreviewValue(value) {
+  if (Array.isArray(value)) {
+    const isMatrix =
+      value.length > 0 &&
+      value.every((row) => Array.isArray(row)) &&
+      value.every((row) => row.length === value[0].length);
+    if (isMatrix) {
+      const rows = value.length;
+      const cols = value[0]?.length ?? 0;
+      if ((rows * cols) > 25) {
+        return t("text.matrixSummary", { rows, cols });
+      }
+    } else if (value.every((item) => !Array.isArray(item)) && value.length > 12) {
+      return t("text.vectorSummary", { size: value.length });
+    }
+  }
+  return formatComputedValue(value);
+}
+
+function describeExpressionPreviewShape(value) {
+  if (value === null || value === undefined) {
+    return t("expr.preview.shape.empty");
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return t("expr.preview.shape.scalar");
+  }
+  if (typeof value === "string") {
+    return t("expr.preview.shape.text");
+  }
+  if (Array.isArray(value)) {
+    const isMatrix =
+      value.length > 0 &&
+      value.every((row) => Array.isArray(row)) &&
+      value.every((row) => row.length === value[0].length);
+    if (isMatrix) {
+      return t("expr.preview.shape.matrix", { rows: value.length, cols: value[0]?.length ?? 0 });
+    }
+    if (value.every((item) => !Array.isArray(item))) {
+      return t("expr.preview.shape.vector", { size: value.length });
+    }
+    return t("expr.preview.shape.array");
+  }
+  if (typeof value === "object") {
+    return t("expr.preview.shape.object");
+  }
+  return t("expr.preview.shape.scalar");
 }
 
 function normalizeExecutionConfig(raw) {
@@ -2824,6 +3255,24 @@ function applyCanvasVisibility() {
 
 function updateModelRunButtons() {
   const blocked = hasStrictExecutionBlock();
+  if (topRunEvalBtn) {
+    setTooltipText(topRunEvalBtn, `${t("menu.run.execute")} (F7)`);
+    topRunEvalBtn.disabled = blocked;
+  }
+  if (topRunStepBtn) {
+    setTooltipText(topRunStepBtn, `${t("menu.run.step")} (F8)`);
+    topRunStepBtn.disabled = blocked;
+  }
+  if (topRunTimedBtn) {
+    const timedKey = ui.timedRunHandle == null ? "action.timedStart" : "action.timedStop";
+    topRunTimedBtn.textContent = ui.timedRunHandle == null ? "⏱" : "⏸";
+    setTooltipText(topRunTimedBtn, `${t(timedKey)} (F9)`);
+    topRunTimedBtn.disabled = blocked && ui.timedRunHandle == null;
+    topRunTimedBtn.classList.toggle("active", ui.timedRunHandle != null);
+  }
+  if (topRunResetBtn) {
+    setTooltipText(topRunResetBtn, `${t("menu.run.reset")} (F10)`);
+  }
   if (runFullModelBtn) {
     setTooltipText(runFullModelBtn, `${t("menu.run.execute")} (F7)`);
     runFullModelBtn.disabled = blocked;
@@ -2988,10 +3437,13 @@ function getTextItemById(id) {
 }
 
 function clearAllSelection() {
-  ui.selected = null;
-  ui.selectedNodes.clear();
-  ui.selectedControlPoint = null;
-  ui.lastControlPointTap = null;
+  requestExpressionEditorSelectionChange(() => {
+    ui.selected = null;
+    ui.selectedNodes.clear();
+    ui.selectedControlPoint = null;
+    ui.lastControlPointTap = null;
+    refreshSidebar();
+  }, "");
 }
 
 function syncNodeSelectionFocus() {
@@ -3031,54 +3483,73 @@ function syncNodeSelectionFocus() {
 }
 
 function selectEdge(id) {
-  ui.selected = { type: "edge", id };
-  ui.selectedNodes.clear();
-  ui.selectedControlPoint = null;
-  refreshSidebar();
+  requestExpressionEditorSelectionChange(() => {
+    ui.selected = { type: "edge", id };
+    ui.selectedNodes.clear();
+    ui.selectedControlPoint = null;
+    refreshSidebar();
+  }, `edge:${id}`);
 }
 
 function selectWidget(id) {
-  ui.selected = { type: "widget", id };
-  ui.selectedNodes.clear();
-  ui.selectedControlPoint = null;
-  refreshSidebar();
+  requestExpressionEditorSelectionChange(() => {
+    ui.selected = { type: "widget", id };
+    ui.selectedNodes.clear();
+    ui.selectedControlPoint = null;
+    refreshSidebar();
+  }, `widget:${id}`);
 }
 
 function selectTextItem(id) {
-  ui.selected = { type: "text", id };
-  ui.selectedNodes.clear();
-  ui.selectedControlPoint = null;
-  refreshSidebar();
+  requestExpressionEditorSelectionChange(() => {
+    ui.selected = { type: "text", id };
+    ui.selectedNodes.clear();
+    ui.selectedControlPoint = null;
+    refreshSidebar();
+  }, `text:${id}`);
 }
 
 function selectSingleNode(id) {
-  ui.selected = { type: "node", id };
-  ui.selectedNodes = new Set([id]);
-  ui.selectedControlPoint = null;
-  refreshSidebar();
+  requestExpressionEditorSelectionChange(() => {
+    ui.selected = { type: "node", id };
+    ui.selectedNodes = new Set([id]);
+    ui.selectedControlPoint = null;
+    refreshSidebar();
+  }, `node:${id}`);
 }
 
 function toggleNodeSelection(id) {
-  if (ui.selectedNodes.has(id)) {
-    ui.selectedNodes.delete(id);
-  } else {
-    ui.selectedNodes.add(id);
-  }
-  ui.selectedControlPoint = null;
-  ui.selected = null;
-  syncNodeSelectionFocus();
-  refreshSidebar();
+  const nextSelectionKey =
+    ui.selectedNodes.size === 1 && ui.selectedNodes.has(id)
+      ? ""
+      : "";
+  requestExpressionEditorSelectionChange(() => {
+    if (ui.selectedNodes.has(id)) {
+      ui.selectedNodes.delete(id);
+    } else {
+      ui.selectedNodes.add(id);
+    }
+    ui.selectedControlPoint = null;
+    ui.selected = null;
+    syncNodeSelectionFocus();
+    refreshSidebar();
+  }, nextSelectionKey);
 }
 
 function setNodeSelection(ids, additive = false) {
-  if (!additive) {
-    ui.selectedNodes.clear();
-  }
-  ids.forEach((id) => ui.selectedNodes.add(id));
-  ui.selected = null;
-  ui.selectedControlPoint = null;
-  syncNodeSelectionFocus();
-  refreshSidebar();
+  const nextIds = new Set(additive ? [...ui.selectedNodes] : []);
+  ids.forEach((id) => nextIds.add(id));
+  const nextSelectionKey = nextIds.size === 1 ? `node:${[...nextIds][0]}` : "";
+  requestExpressionEditorSelectionChange(() => {
+    if (!additive) {
+      ui.selectedNodes.clear();
+    }
+    ids.forEach((id) => ui.selectedNodes.add(id));
+    ui.selected = null;
+    ui.selectedControlPoint = null;
+    syncNodeSelectionFocus();
+    refreshSidebar();
+  }, nextSelectionKey);
 }
 
 function exportGraphData() {
@@ -6794,6 +7265,7 @@ function refreshWidgetConfigPanel(widget) {
 
 function refreshSidebar() {
   syncNodeSelectionFocus();
+  syncExpressionEditorToSelectedNode();
   updateDeleteActionLabel();
   updateEditActionButtons();
 
@@ -8057,21 +8529,17 @@ function clearRecentModels() {
 }
 
 function renderRecentModelsMenu() {
-  if (!recentModelsSection || !recentModelsSep || !clearRecentModelsBtn) {
+  if (!recentModelsMenuRoot || !recentModelsSection || !recentModelsSep || !clearRecentModelsBtn) {
     return;
   }
   recentModelsSection.innerHTML = "";
   const hasRecent = recentModelEntries.length > 0;
-  recentModelsSection.classList.toggle("hidden", !hasRecent);
+  recentModelsMenuRoot.classList.toggle("hidden", !hasRecent);
   recentModelsSep.classList.toggle("hidden", !hasRecent);
   clearRecentModelsBtn.classList.toggle("hidden", !hasRecent);
   if (!hasRecent) {
     return;
   }
-  const title = document.createElement("div");
-  title.className = "menu-recent-title";
-  title.textContent = t("menu.file.recent");
-  recentModelsSection.appendChild(title);
   recentModelEntries.forEach((entry, idx) => {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -11080,6 +11548,24 @@ if (runFullModelBtn) {
     void executeNodeExpressions();
   });
 }
+if (topRunEvalBtn) {
+  topRunEvalBtn.addEventListener("click", () => {
+    void executeNodeExpressions();
+  });
+}
+if (topRunStepBtn) {
+  topRunStepBtn.addEventListener("click", () => {
+    void runManualStep();
+  });
+}
+if (topRunTimedBtn) {
+  topRunTimedBtn.addEventListener("click", () => {
+    void toggleTimedExecution();
+  });
+}
+if (topRunResetBtn) {
+  topRunResetBtn.addEventListener("click", resetExecution);
+}
 runEvalBtn.addEventListener("click", () => {
   void executeNodeExpressions();
 });
@@ -11755,6 +12241,48 @@ if (expressionEditorModal) {
     });
   }
 }
+if (functionsHelpModal) {
+  const modalHead = functionsHelpModal.querySelector(".modal-head");
+  const modalCard = functionsHelpModal.querySelector(".functions-help-card");
+  if (modalHead && modalCard) {
+    modalHead.addEventListener("pointerdown", (evt) => {
+      if (evt.target.closest("button")) {
+        return;
+      }
+      const rect = modalCard.getBoundingClientRect();
+      modalCard.style.transform = "none";
+      modalCard.style.left = `${rect.left}px`;
+      modalCard.style.top = `${rect.top}px`;
+      ui.modalDrag = {
+        pointerId: evt.pointerId,
+        offsetX: evt.clientX - rect.left,
+        offsetY: evt.clientY - rect.top,
+        card: modalCard,
+      };
+    });
+  }
+}
+if (aboutAppModal) {
+  const modalHead = aboutAppModal.querySelector(".modal-head");
+  const modalCard = aboutAppModal.querySelector(".about-app-card");
+  if (modalHead && modalCard) {
+    modalHead.addEventListener("pointerdown", (evt) => {
+      if (evt.target.closest("button")) {
+        return;
+      }
+      const rect = modalCard.getBoundingClientRect();
+      modalCard.style.transform = "none";
+      modalCard.style.left = `${rect.left}px`;
+      modalCard.style.top = `${rect.top}px`;
+      ui.modalDrag = {
+        pointerId: evt.pointerId,
+        offsetX: evt.clientX - rect.left,
+        offsetY: evt.clientY - rect.top,
+        card: modalCard,
+      };
+    });
+  }
+}
 if (functionsHelpBtn) {
   functionsHelpBtn.addEventListener("click", () => {
     closeTopMenus();
@@ -11779,6 +12307,23 @@ if (aboutAppCloseBtn) {
 if (aboutAppDismissBtn) {
   aboutAppDismissBtn.addEventListener("click", closeAboutApp);
 }
+if (expressionEditorSwitchCloseBtn) {
+  expressionEditorSwitchCloseBtn.addEventListener("click", closeExpressionEditorSwitchModal);
+}
+if (expressionEditorSwitchCancelBtn) {
+  expressionEditorSwitchCancelBtn.addEventListener("click", closeExpressionEditorSwitchModal);
+}
+if (expressionEditorSwitchDiscardBtn) {
+  expressionEditorSwitchDiscardBtn.addEventListener("click", runPendingExpressionEditorSelectionAction);
+}
+if (expressionEditorSwitchApplyBtn) {
+  expressionEditorSwitchApplyBtn.addEventListener("click", () => {
+    if (!commitExpressionEditorValue(false)) {
+      return;
+    }
+    runPendingExpressionEditorSelectionAction();
+  });
+}
 if (functionsHelpModal) {
   functionsHelpModal.addEventListener("pointerdown", (evt) => {
     if (evt.target === functionsHelpModal) {
@@ -11790,6 +12335,13 @@ if (aboutAppModal) {
   aboutAppModal.addEventListener("pointerdown", (evt) => {
     if (evt.target === aboutAppModal) {
       closeAboutApp();
+    }
+  });
+}
+if (expressionEditorSwitchModal) {
+  expressionEditorSwitchModal.addEventListener("pointerdown", (evt) => {
+    if (evt.target === expressionEditorSwitchModal) {
+      closeExpressionEditorSwitchModal();
     }
   });
 }
@@ -11888,7 +12440,23 @@ window.addEventListener("keydown", (evt) => {
 }, true);
 
 document.addEventListener("keydown", (evt) => {
-  if (!expressionEditorModal?.classList.contains("hidden")) {
+  if (!expressionEditorSwitchModal?.classList.contains("hidden")) {
+    if (evt.key === "Escape") {
+      evt.preventDefault();
+      closeExpressionEditorSwitchModal();
+    } else if ((evt.ctrlKey || evt.metaKey) && evt.key === "Enter") {
+      evt.preventDefault();
+      if (commitExpressionEditorValue(false)) {
+        runPendingExpressionEditorSelectionAction();
+      }
+    }
+    return;
+  }
+
+  const expressionEditorActive =
+    !expressionEditorModal?.classList.contains("hidden")
+    && expressionEditorModal.contains(document.activeElement);
+  if (expressionEditorActive) {
     if (evt.key === "Escape") {
       evt.preventDefault();
       closeExpressionEditor();

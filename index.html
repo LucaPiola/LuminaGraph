@@ -15,9 +15,17 @@
           <div class="menu-panel" id="fileMenu">
             <button id="newGraphBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.new"><span data-i18n="menu.file.new">Crea modello</span><span class="menu-shortcut">Alt+N</span></button>
             <button id="loadJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.load"><span data-i18n="menu.file.load">Carica modello...</span><span class="menu-shortcut">Alt+O</span></button>
-            <hr id="recentModelsSep" class="menu-sep hidden" />
-            <div id="recentModelsSection" class="hidden"></div>
-            <button id="clearRecentModelsBtn" class="menu-command hidden" type="button"><span data-i18n="menu.file.clearRecent">Svuota recenti</span></button>
+            <div id="recentModelsMenuRoot" class="menu-submenu hidden">
+              <button id="recentModelsMenuBtn" class="menu-submenu-toggle" type="button">
+                <span data-i18n="menu.file.recent">Apri recenti</span>
+                <span class="menu-shortcut">›</span>
+              </button>
+              <div id="recentModelsSubmenu" class="menu-submenu-panel">
+                <div id="recentModelsSection"></div>
+                <hr id="recentModelsSep" class="menu-sep" />
+                <button id="clearRecentModelsBtn" class="menu-command" type="button"><span data-i18n="menu.file.clearRecent">Svuota recenti</span></button>
+              </div>
+            </div>
             <hr class="menu-sep" />
             <button id="saveJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.save"><span data-i18n="menu.file.save">Salva</span><span class="menu-shortcut">Ctrl+S</span></button>
             <button id="saveAsJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.saveAs"><span data-i18n="menu.file.saveAs">Salva con nome...</span><span class="menu-shortcut">Ctrl+Shift+S</span></button>
@@ -101,6 +109,13 @@
             <button id="functionsHelpBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.help.functions"><span data-i18n="menu.help.functions">Funzioni disponibili...</span><span class="menu-shortcut">F1</span></button>
             <button id="aboutAppBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.help.about"><span data-i18n="menu.help.about">About...</span></button>
           </div>
+        </div>
+
+        <div class="menu-run-toolbar" id="topRunToolbar">
+          <button id="topRunEvalBtn" class="icon-btn menu-run-btn" type="button">▶▶</button>
+          <button id="topRunStepBtn" class="icon-btn menu-run-btn" type="button">▶</button>
+          <button id="topRunTimedBtn" class="icon-btn menu-run-btn" type="button">⏱</button>
+          <button id="topRunResetBtn" class="icon-btn menu-run-btn" type="button">↺</button>
         </div>
 
         <button id="exitSubmodelBtn" class="menu-nav-btn hidden" type="button" data-i18n="action.exitSubmodel">Torna su</button>
@@ -325,8 +340,8 @@
       </main>
     </div>
     <div id="contextMenu" class="context-menu hidden"></div>
-    <div id="expressionEditorModal" class="modal-backdrop hidden">
-      <div class="modal-card expression-editor-card" role="dialog" aria-modal="true" aria-labelledby="expressionEditorTitle">
+    <div id="expressionEditorModal" class="modal-backdrop modal-modeless hidden">
+      <div class="modal-card expression-editor-card" role="dialog" aria-modal="false" aria-labelledby="expressionEditorTitle">
         <div class="modal-head">
           <h3 id="expressionEditorTitle">Espressione</h3>
           <button id="expressionEditorCloseBtn" class="icon-btn modal-close-btn" type="button" aria-label="Chiudi">×</button>
@@ -346,6 +361,10 @@
             <div id="expressionLibrary" class="expression-library"></div>
             <div id="expressionHelp" class="expression-help" data-i18n="expr.help.empty">Seleziona o scrivi un simbolo per vedere l'help contestuale.</div>
           </aside>
+        </div>
+        <div id="expressionPreviewBox" class="expression-preview">
+          <div id="expressionPreviewLabel" class="expression-preview-label" data-i18n="expr.preview.title">Valore attuale</div>
+          <pre id="expressionPreviewValue" class="expression-preview-value" data-i18n="expr.preview.empty">Nessuna anteprima.</pre>
         </div>
         <div id="expressionEditorStatus" class="expr-status hidden"></div>
         <div class="modal-actions">
@@ -396,6 +415,20 @@
         </div>
         <div class="modal-actions">
           <button id="aboutAppDismissBtn" type="button" data-i18n="action.close">Chiudi</button>
+        </div>
+      </div>
+    </div>
+    <div id="expressionEditorSwitchModal" class="modal-backdrop hidden">
+      <div class="modal-card expression-switch-card" role="dialog" aria-modal="true" aria-labelledby="expressionEditorSwitchTitle">
+        <div class="modal-head">
+          <h3 id="expressionEditorSwitchTitle" data-i18n="expr.switch.title">Modifiche non applicate</h3>
+          <button id="expressionEditorSwitchCloseBtn" class="icon-btn modal-close-btn" type="button" aria-label="Chiudi">×</button>
+        </div>
+        <div id="expressionEditorSwitchBody" class="expression-switch-body" data-i18n="expr.switch.body">L'espressione corrente ha modifiche non applicate. Vuoi applicarle prima di cambiare selezione?</div>
+        <div class="modal-actions">
+          <button id="expressionEditorSwitchCancelBtn" type="button" data-i18n="action.cancel">Annulla</button>
+          <button id="expressionEditorSwitchDiscardBtn" type="button" data-i18n="expr.switch.discard">Scarta e cambia</button>
+          <button id="expressionEditorSwitchApplyBtn" type="button" data-i18n="expr.switch.applyAndChange">Applica e cambia</button>
         </div>
       </div>
     </div>

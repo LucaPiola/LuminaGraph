@@ -1,6 +1,6 @@
 # STGraphX: readme di uso
 
-_Luca Mari, versione 6 aprile 2026_
+_Luca Mari, versione 19 aprile 2026_
 
 STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
 
@@ -127,14 +127,21 @@ Esempi:
     - `map($0+$value, [10,20,30])`
     - `map($0+$1, [[1,2],[3,4]])`
 
-- `filter(condizione, array)`
+- `filter(condizione, array[, modo])`
   - filtra un vettore o una matrice
+  - con `modo` omesso o `elements`, filtra gli elementi
+  - con `modo = "rows"`, filtra le righe di una matrice
+  - con `modo = "cols"`, filtra le colonne di una matrice
   - dentro `condizione`:
     - `$value` è il valore corrente
     - `$0`, `$1`, ... sono gli indici locali
+  - in modalità `rows`, `$value` è la riga corrente
+  - in modalità `cols`, `$value` è la colonna corrente
   - esempi:
     - `filter($value>0, [-2,0,3,4])`
     - `filter($0%2===0, [10,20,30,40])`
+    - `filter($value[0] > 0, [[1,2],[-1,5],[3,4]], "rows")`
+    - `filter(sum($value) > 3, [[1,2,3],[4,5,6]], "cols")`
 
 ### Riduzione
 
@@ -286,6 +293,15 @@ Esempi:
 - `setAt(matrice, riga, vettoreRiga)`
   - restituisce una copia della matrice con una riga sostituita
 
+- `removeAt(vettore, indice)`
+  - restituisce una copia del vettore senza l'elemento indicato
+
+- `removeAt(matrice, indice)`
+  - restituisce una copia della matrice senza la riga indicata
+
+- `removeAt(matrice, indice, 1)`
+  - restituisce una copia della matrice senza la colonna indicata
+
 Esempi:
 
 - `indicesWhere([0,1,0,1])` -> `[1,3]`
@@ -294,6 +310,9 @@ Esempi:
 - `indicesWhere($0 === $1, [[1,2],[3,4]])` -> `[[0,0],[1,1]]`
 - `setAt([1,2,3], 1, 9)` -> `[1,9,3]`
 - `setAt([[1,2],[3,4]], [1,0], 8)` -> `[[1,2],[8,4]]`
+- `removeAt([1,2,3], 1)` -> `[1,3]`
+- `removeAt([[1,2],[3,4]], 0)` -> `[[3,4]]`
+- `removeAt([[1,2],[3,4]], 1, 1)` -> `[[1],[3]]`
 
 ### Coordinate e griglie spaziali
 
@@ -436,6 +455,7 @@ Nel pannello `Modifica...`, per il campo `stato iniziale`, l'elenco dei simboli 
 STGraphX supporta i `sottomodelli` come nodi speciali che referenziano un altro modello salvato in un file JSON separato.
 
 Principi d'uso:
+
 - un `sottomodello` è un nodo del modello padre
 - il file del `sottomodello` è esterno, non incorporato inline nel JSON del modello padre
 - il file padre e i file figlio devono stare nella stessa cartella
@@ -443,12 +463,14 @@ Principi d'uso:
 - gli input del `sottomodello` possono avere binding espliciti nel modello padre, oppure restare vuoti e usare i default definiti nel modello figlio
 
 Uso pratico:
+
 1. crea o seleziona un nodo di tipo `sottomodello`
 2. usa `Apri` per scegliere il file JSON del `sottomodello` oppure per aggiornarlo
 3. una volta disponibile, usa `Mostra` per aprire il modello figlio
 4. quando carichi un modello padre che contiene `sottomodelli`, l'app può chiedere anche la cartella del modello per risolvere automaticamente i file figlio
 
 Note:
+
 - le uscite del `sottomodello` sono accessibili nel modello padre con la notazione `nomeSottomodello.nomeOutput`
 - lo stato interno dei nodi di stato del `sottomodello` resta locale al modello figlio
 - padre e figli condividono la stessa base dei tempi: `time`, `t0`, `t1`, `dt`
@@ -575,6 +597,7 @@ Per ogni coppia `x -> y`, il widget supporta due opzioni indipendenti:
       - ...
 
 In tutti questi casi la legenda resta semplificata e usa la forma:
+
 - `x -> y`
 
 ### Casi non supportati

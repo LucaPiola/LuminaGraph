@@ -1191,7 +1191,38 @@
         }
         throw new Error("indexing requires an array or matrix");
       }
-      let idx = Number(evaluateAstNode(accessor.index, scope, hooks));
+      const rawIndex = evaluateAstNode(accessor.index, scope, hooks);
+      if (Array.isArray(rawIndex)) {
+        if (
+          rawIndex.length === 2 &&
+          target.every((row) => Array.isArray(row))
+        ) {
+          let rowIdx = Number(rawIndex[0]);
+          let colIdx = Number(rawIndex[1]);
+          if (!Number.isInteger(rowIdx) || !Number.isInteger(colIdx)) {
+            throw new Error("matrix index must be a pair of integers");
+          }
+          if (rowIdx < 0) {
+            rowIdx += target.length;
+          }
+          if (rowIdx < 0 || rowIdx >= target.length) {
+            throw new Error("matrix row index out of range");
+          }
+          const row = target[rowIdx];
+          if (!Array.isArray(row)) {
+            throw new Error("matrix index requires a matrix target");
+          }
+          if (colIdx < 0) {
+            colIdx += row.length;
+          }
+          if (colIdx < 0 || colIdx >= row.length) {
+            throw new Error("matrix column index out of range");
+          }
+          return row[colIdx];
+        }
+        throw new Error("array index must be an integer or a [row, col] pair");
+      }
+      let idx = Number(rawIndex);
       if (!Number.isInteger(idx)) {
         throw new Error("array index must be an integer");
       }
@@ -1315,12 +1346,40 @@
           return mapArray(target, []);
         }
         if (node.name === "filter") {
-          if (node.args.length !== 2) {
-            throw new Error("filter expects exactly 2 arguments");
+          if (node.args.length < 2 || node.args.length > 3) {
+            throw new Error("filter expects 2 or 3 arguments");
           }
           const target = evaluateAstNode(node.args[1], scope, hooks);
           if (!Array.isArray(target)) {
             throw new Error("filter expects a vector or matrix");
+          }
+          const modeValue = node.args.length === 3 ? String(evaluateAstNode(node.args[2], scope, hooks) ?? "").trim().toLowerCase() : "elements";
+          const mode = modeValue || "elements";
+          if (!["elements", "rows", "cols", "columns"].includes(mode)) {
+            throw new Error("filter mode must be 'elements', 'rows', or 'cols'");
+          }
+          const isMatrix = target.length > 0 && target.every((row) => Array.isArray(row));
+          if (mode !== "elements") {
+            if (!isMatrix) {
+              throw new Error("filter mode 'rows' or 'cols' requires a matrix");
+            }
+            const rowCount = target.length;
+            const colCount = rowCount > 0 ? target[0].length : 0;
+            if (!target.every((row) => row.length === colCount)) {
+              throw new Error("filter mode 'rows' or 'cols' requires a rectangular matrix");
+            }
+            if (mode === "rows") {
+              return target.filter((row, rowIdx) => {
+                const localScope = { ...scope, $value: row.slice(), $0: rowIdx };
+                return coerceBooleanToNumber(evaluateAstNode(node.args[0], localScope, hooks));
+              }).map((row) => row.slice());
+            }
+            const keptColumns = Array.from({ length: colCount }, (_, colIdx) => {
+              const column = target.map((row) => row[colIdx]);
+              const localScope = { ...scope, $value: column, $0: colIdx };
+              return coerceBooleanToNumber(evaluateAstNode(node.args[0], localScope, hooks)) ? colIdx : null;
+            }).filter((colIdx) => colIdx != null);
+            return target.map((row) => keptColumns.map((colIdx) => row[colIdx]));
           }
           const filterArray = (value, localIndices) => {
             if (!Array.isArray(value)) {

@@ -550,6 +550,37 @@
     return matrix;
   }
 
+  function removeAtValue(target, indexValue, axis = null) {
+    if (!Array.isArray(target)) {
+      throw new Error("removeAt expects a vector or matrix");
+    }
+    const isMatrix = target.every((row) => Array.isArray(row));
+    if (!isMatrix) {
+      if (axis != null) {
+        throw new Error("removeAt does not accept axis for vectors");
+      }
+      const vector = ensureFlatVector(target, "removeAt").slice();
+      const idx = normalizeIndex(Number(indexValue), vector.length, "removeAt");
+      vector.splice(idx, 1);
+      return vector;
+    }
+    const rowCount = target.length;
+    const colCount = rowCount > 0 ? target[0].length : 0;
+    if (!target.every((row) => row.length === colCount && row.every((item) => !Array.isArray(item)))) {
+      throw new Error("removeAt expects a rectangular matrix");
+    }
+    const normalizedAxis = axis == null ? 0 : Number(axis);
+    if (!Number.isInteger(normalizedAxis) || (normalizedAxis !== 0 && normalizedAxis !== 1)) {
+      throw new Error("removeAt axis for matrices must be 0 or 1");
+    }
+    if (normalizedAxis === 0) {
+      const rowIdx = normalizeIndex(Number(indexValue), rowCount, "removeAt");
+      return target.filter((_, idx) => idx !== rowIdx).map((row) => row.slice());
+    }
+    const colIdx = normalizeIndex(Number(indexValue), colCount, "removeAt");
+    return target.map((row) => row.filter((_, idx) => idx !== colIdx));
+  }
+
   function sizeOfValue(value, axis = null) {
     if (!Array.isArray(value)) {
       throw new Error("size expects a vector or matrix");
@@ -946,6 +977,7 @@
       union: unionArrayValues,
       intersection: intersectArrayValues,
       flatten: flattenMatrixValues,
+      removeAt: removeAtValue,
       choice: chooseRandomElement,
       shuffle: shuffleVectorValues,
       sort: sortVectorValues,
@@ -994,28 +1026,29 @@
       setProperty: { kind: "function", signature: "setProperty(name, value)", descriptionKey: "expr.help.setProperty", insertText: "setProperty()", cursorOffset: 12 },
       getModelProperty: { kind: "function", signature: "getModelProperty(name, fallback)", descriptionKey: "expr.help.getModelProperty", insertText: "getModelProperty()", cursorOffset: 17 },
       setModelProperty: { kind: "function", signature: "setModelProperty(name, value)", descriptionKey: "expr.help.setModelProperty", insertText: "setModelProperty()", cursorOffset: 17 },
-      array: { kind: "function", signature: "array(dim | [d0,d1,...], expr)", descriptionKey: "expr.help.array", insertText: "array()", cursorOffset: 6 },
+      array: { kind: "array", signature: "array(dim | [d0,d1,...], expr)", descriptionKey: "expr.help.array", insertText: "array()", cursorOffset: 6 },
       map: { kind: "function", signature: "map(expr, array)", descriptionKey: "expr.help.map", insertText: "map()", cursorOffset: 4 },
-      filter: { kind: "function", signature: "filter(cond, array)", descriptionKey: "expr.help.filter", insertText: "filter()", cursorOffset: 7 },
+      filter: { kind: "array", signature: "filter(cond, array[, mode])", descriptionKey: "expr.help.filter", insertText: "filter()", cursorOffset: 7 },
       reduce: { kind: "function", signature: "reduce(op|fn, vector[, init]) | reduce(op|fn, matrix, axis[, init])", descriptionKey: "expr.help.reduce", insertText: "reduce()", cursorOffset: 7 },
-      append: { kind: "function", signature: "append(vector, value|vector) | append(matrix, rowVector)", descriptionKey: "expr.help.append", insertText: "append()", cursorOffset: 7 },
-      set: { kind: "function", signature: "set(vector)", descriptionKey: "expr.help.set", insertText: "set()", cursorOffset: 4 },
-      union: { kind: "function", signature: "union(vectorA, vectorB)", descriptionKey: "expr.help.union", insertText: "union()", cursorOffset: 6 },
-      intersection: { kind: "function", signature: "intersection(vectorA, vectorB)", descriptionKey: "expr.help.intersection", insertText: "intersection()", cursorOffset: 13 },
-      flatten: { kind: "function", signature: "flatten(matrix)", descriptionKey: "expr.help.flatten", insertText: "flatten()", cursorOffset: 8 },
-      sum: { kind: "function", signature: "sum(array[, axis])", descriptionKey: "expr.help.sum", insertText: "sum()", cursorOffset: 4 },
-      count: { kind: "function", signature: "count(array[, axis]) | count(cond, array[, axis])", descriptionKey: "expr.help.count", insertText: "count()", cursorOffset: 6 },
-      indicesWhere: { kind: "function", signature: "indicesWhere(array) | indicesWhere(cond, array)", descriptionKey: "expr.help.indicesWhere", insertText: "indicesWhere()", cursorOffset: 13 },
-      setAt: { kind: "function", signature: "setAt(vector, index, value) | setAt(matrix, [row,col], value) | setAt(matrix, row, rowVector)", descriptionKey: "expr.help.setAt", insertText: "setAt()", cursorOffset: 6 },
-      grid: { kind: "function", signature: "grid(rows, cols[, collisions[, value]])", descriptionKey: "expr.help.grid", insertText: "grid()", cursorOffset: 5 },
-      coords: { kind: "function", signature: "coords(matrix[, value])", descriptionKey: "expr.help.coords", insertText: "coords()", cursorOffset: 7 },
-      neighbors: { kind: "function", signature: "neighbors(matrix, row, col[, diagonals[, toroidal]])", descriptionKey: "expr.help.neighbors", insertText: "neighbors()", cursorOffset: 10 },
-      choice: { kind: "function", signature: "choice(vector)", descriptionKey: "expr.help.choice", insertText: "choice()", cursorOffset: 7 },
-      shuffle: { kind: "function", signature: "shuffle(vector)", descriptionKey: "expr.help.shuffle", insertText: "shuffle()", cursorOffset: 8 },
-      sort: { kind: "function", signature: "sort(vector)", descriptionKey: "expr.help.sort", insertText: "sort()", cursorOffset: 5 },
-      size: { kind: "function", signature: "size(array[, axis])", descriptionKey: "expr.help.size", insertText: "size()", cursorOffset: 5 },
-      average: { kind: "function", signature: "average(array[, axis])", descriptionKey: "expr.help.average", insertText: "average()", cursorOffset: 8 },
-      stdev: { kind: "function", signature: "stdev(array[, axis])", descriptionKey: "expr.help.stdev", insertText: "stdev()", cursorOffset: 6 },
+      append: { kind: "array", signature: "append(vector, value|vector) | append(matrix, rowVector)", descriptionKey: "expr.help.append", insertText: "append()", cursorOffset: 7 },
+      set: { kind: "array", signature: "set(vector)", descriptionKey: "expr.help.set", insertText: "set()", cursorOffset: 4 },
+      union: { kind: "array", signature: "union(vectorA, vectorB)", descriptionKey: "expr.help.union", insertText: "union()", cursorOffset: 6 },
+      intersection: { kind: "array", signature: "intersection(vectorA, vectorB)", descriptionKey: "expr.help.intersection", insertText: "intersection()", cursorOffset: 13 },
+      flatten: { kind: "array", signature: "flatten(matrix)", descriptionKey: "expr.help.flatten", insertText: "flatten()", cursorOffset: 8 },
+      sum: { kind: "array", signature: "sum(array[, axis])", descriptionKey: "expr.help.sum", insertText: "sum()", cursorOffset: 4 },
+      count: { kind: "probability", signature: "count(array[, axis]) | count(cond, array[, axis])", descriptionKey: "expr.help.count", insertText: "count()", cursorOffset: 6 },
+      indicesWhere: { kind: "array", signature: "indicesWhere(array) | indicesWhere(cond, array)", descriptionKey: "expr.help.indicesWhere", insertText: "indicesWhere()", cursorOffset: 13 },
+      setAt: { kind: "array", signature: "setAt(vector, index, value) | setAt(matrix, [row,col], value) | setAt(matrix, row, rowVector)", descriptionKey: "expr.help.setAt", insertText: "setAt()", cursorOffset: 6 },
+      removeAt: { kind: "array", signature: "removeAt(vector, index) | removeAt(matrix, index[, axis])", descriptionKey: "expr.help.removeAt", insertText: "removeAt()", cursorOffset: 9 },
+      grid: { kind: "array", signature: "grid(rows, cols[, collisions[, value]])", descriptionKey: "expr.help.grid", insertText: "grid()", cursorOffset: 5 },
+      coords: { kind: "array", signature: "coords(matrix[, value])", descriptionKey: "expr.help.coords", insertText: "coords()", cursorOffset: 7 },
+      neighbors: { kind: "array", signature: "neighbors(matrix, row, col[, diagonals[, toroidal]])", descriptionKey: "expr.help.neighbors", insertText: "neighbors()", cursorOffset: 10 },
+      choice: { kind: "probability", signature: "choice(vector)", descriptionKey: "expr.help.choice", insertText: "choice()", cursorOffset: 7 },
+      shuffle: { kind: "array", signature: "shuffle(vector)", descriptionKey: "expr.help.shuffle", insertText: "shuffle()", cursorOffset: 8 },
+      sort: { kind: "array", signature: "sort(vector)", descriptionKey: "expr.help.sort", insertText: "sort()", cursorOffset: 5 },
+      size: { kind: "array", signature: "size(array[, axis])", descriptionKey: "expr.help.size", insertText: "size()", cursorOffset: 5 },
+      average: { kind: "probability", signature: "average(array[, axis])", descriptionKey: "expr.help.average", insertText: "average()", cursorOffset: 8 },
+      stdev: { kind: "probability", signature: "stdev(array[, axis])", descriptionKey: "expr.help.stdev", insertText: "stdev()", cursorOffset: 6 },
       range: { kind: "function", signature: "range(stop) | range(start, stop[, step])", descriptionKey: "expr.help.range", insertText: "range()", cursorOffset: 6 },
       gaussian: { kind: "probability", signature: "gaussian([params], x, mode)", descriptionKey: "expr.help.gaussian", insertText: "gaussian()", cursorOffset: 9 },
       uniform: { kind: "probability", signature: "uniform([params], x, mode)", descriptionKey: "expr.help.uniform", insertText: "uniform()", cursorOffset: 8 },
