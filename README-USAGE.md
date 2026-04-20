@@ -392,7 +392,9 @@ Esempi:
   - oppure una riga da una matrice non vuota
 
 - `shuffle(vettore)`
+- `shuffle(matrice)`
   - restituisce una copia del vettore con gli elementi mescolati casualmente
+  - oppure una copia della matrice con le righe mescolate casualmente
 
 - `sort(vettore)`
   - restituisce una copia del vettore ordinata in senso crescente
@@ -402,6 +404,7 @@ Esempi:
 - `choice([10,20,30])`
 - `choice([[1,2],[3,4]])` -> `[1,2]` oppure `[3,4]`
 - `shuffle([1,2,3,4])`
+- `shuffle([[1,2],[3,4],[5,6]])`
 - `sort([3,1,2])` -> `[1,2,3]`
 
 ### Nota semantica

@@ -4,6 +4,7 @@ const sidebar = document.getElementById("sidebar");
 const statusText = document.getElementById("statusText");
 const fileStatusText = document.getElementById("fileStatusText");
 const modelBreadcrumbText = document.getElementById("modelBreadcrumbText");
+const menuTimeText = document.getElementById("menuTimeText");
 const topMenuBar = document.getElementById("topMenuBar");
 const menuRoots = Array.from(document.querySelectorAll(".menu-root"));
 const menuTitles = Array.from(document.querySelectorAll(".menu-title"));
@@ -13,7 +14,9 @@ const addEllipseNodeItem = document.getElementById("addEllipseNodeItem");
 const addDiamondNodeItem = document.getElementById("addDiamondNodeItem");
 const addSubmodelNodeItem = document.getElementById("addSubmodelNodeItem");
 const addTextItem = document.getElementById("addTextItem");
+const addButtonWidgetItem = document.getElementById("addButtonWidgetItem");
 const addSliderWidgetItem = document.getElementById("addSliderWidgetItem");
+const addLedWidgetItem = document.getElementById("addLedWidgetItem");
 const addMatrixWidgetItem = document.getElementById("addMatrixWidgetItem");
 const addTableWidgetItem = document.getElementById("addTableWidgetItem");
 const addXYChartWidgetItem = document.getElementById("addXYChartWidgetItem");
@@ -71,6 +74,8 @@ const strictDefinitionsInput = document.getElementById("strictDefinitionsInput")
 const timeCurrentOutput = document.getElementById("timeCurrentOutput");
 const modelPropsList = document.getElementById("modelPropsList");
 const addModelPropBtn = document.getElementById("addModelPropBtn");
+const zoomRangeInput = document.getElementById("zoomRangeInput");
+const zoomRangeValue = document.getElementById("zoomRangeValue");
 const runFullModelBtn = document.getElementById("runFullModelBtn");
 const manualStepBtn = document.getElementById("manualStepBtn");
 const timedToggleBtn = document.getElementById("timedToggleBtn");
@@ -153,6 +158,8 @@ const appTooltip = document.getElementById("appTooltip");
 
 const {
   addCanvasText,
+  addLedWidget,
+  addButtonWidget,
   addSliderWidget,
   addMatrixWidget,
   addTableWidget,
@@ -1307,7 +1314,7 @@ function validateExpressionDraft(value, fieldKey = null) {
         if (node.shape === "diamond") {
           return { ok: false, empty: true, message: nodeDefinitionIssueText({ reason: "missingValue" }) };
         }
-        if (!(canBindSliderToNode(node) && hasSliderBinding(node))) {
+        if (!hasInputWidgetBinding(node)) {
           return { ok: false, empty: true, message: nodeDefinitionIssueText({ reason: "missingBehavior" }) };
         }
       }
@@ -1392,7 +1399,7 @@ function validateNodeDefinition(node) {
     return { ok: true };
   }
 
-  if (canBindSliderToNode(node) && hasSliderBinding(node)) {
+  if (hasInputWidgetBinding(node)) {
     return { ok: true };
   }
   if (!valueExpr.trim()) {
@@ -3199,6 +3206,9 @@ function propagateNodeRenameInExpressions(oldName, newName) {
     if (widget.type === "matrix" && widget.source === oldName) {
       widget.source = newName;
     }
+    if (widget.type === "led" && widget.source === oldName) {
+      widget.source = newName;
+    }
     if (widget.type === "xychart") {
       if (Array.isArray(widget.xyPairs)) {
         widget.xyPairs = widget.xyPairs.map((pair) => ({
@@ -3208,7 +3218,7 @@ function propagateNodeRenameInExpressions(oldName, newName) {
         }));
       }
     }
-    if (widget.type === "slider" && widget.source === oldName) {
+    if ((widget.type === "slider" || widget.type === "button") && widget.source === oldName) {
       widget.source = newName;
     }
   });
@@ -3225,6 +3235,9 @@ function removeNodeFromAllWidgetDisplays(nodeName) {
     if (widget.type === "matrix" && widget.source === nodeName) {
       widget.source = "";
     }
+    if (widget.type === "led" && widget.source === nodeName) {
+      widget.source = "";
+    }
     if (widget.type === "xychart") {
       if (Array.isArray(widget.xyPairs)) {
         widget.xyPairs = widget.xyPairs.filter((pair) => pair.xSource !== nodeName && pair.ySource !== nodeName);
@@ -3233,12 +3246,12 @@ function removeNodeFromAllWidgetDisplays(nodeName) {
   });
 }
 
-function removeNodeFromSliderBindings(nodeName) {
+function removeNodeFromInputWidgetBindings(nodeName) {
   if (!nodeName) {
     return;
   }
   graph.widgets.forEach((widget) => {
-    if (widget.type === "slider" && widget.source === nodeName) {
+    if ((widget.type === "slider" || widget.type === "button") && widget.source === nodeName) {
       widget.source = "";
     }
   });
@@ -3266,6 +3279,10 @@ function nodeHasIncomingEdges(nodeId) {
 
 function canMarkNodeAsInput(node) {
   return isAlgebraicNode(node) && !nodeHasIncomingEdges(node.id);
+}
+
+function canBindButtonToNode(node) {
+  return Boolean(node && (node.shape === "diamond" || node.input));
 }
 
 function canBindSliderToNode(node) {
@@ -3511,12 +3528,24 @@ function hasSliderBinding(node) {
   return Boolean(node && graph.widgets.some((widget) => widget.type === "slider" && widget.source === node.name));
 }
 
+function hasButtonBinding(node) {
+  return Boolean(node && graph.widgets.some((widget) => widget.type === "button" && widget.source === node.name));
+}
+
+function hasInputWidgetBinding(node) {
+  return hasSliderBinding(node) || hasButtonBinding(node);
+}
+
 function normalizeInputNodeFlags() {
   graph.nodes.forEach((node) => {
     if (!canMarkNodeAsInput(node)) {
       node.input = false;
     }
   });
+}
+
+function buttonBindableNodeNames() {
+  return graph.nodes.filter((node) => canBindButtonToNode(node)).map((node) => node.name);
 }
 
 function sliderBindableNodeNames() {
@@ -3662,6 +3691,12 @@ function updateZoomButtons() {
   zoomInItem.disabled = ui.zoom >= MAX_ZOOM;
   zoomOutItem.disabled = ui.zoom <= MIN_ZOOM;
   zoomResetItem.disabled = Math.abs(ui.zoom - 1) < 0.001;
+  if (zoomRangeInput && document.activeElement !== zoomRangeInput) {
+    zoomRangeInput.value = String(Math.round(ui.zoom * 100));
+  }
+  if (zoomRangeValue) {
+    zoomRangeValue.textContent = `${Math.round(ui.zoom * 100)}%`;
+  }
 }
 
 function applyCanvasVisibility() {
@@ -3779,6 +3814,7 @@ function applyZoom(nextZoom, anchorClientX = null, anchorClientY = null) {
   renderWidgets();
 
   updateZoomButtons();
+  refreshSidebar();
   setStatusKey("status.zoom", { value: Math.round(ui.zoom * 100) });
 }
 
@@ -4096,7 +4132,9 @@ function exportGraphData() {
       min: Number.isFinite(Number(w.min)) ? Number(w.min) : 0,
       max: Number.isFinite(Number(w.max)) ? Number(w.max) : 100,
       step: Number.isFinite(Number(w.step)) ? Number(w.step) : 1,
-      value: Number.isFinite(Number(w.value)) ? Number(w.value) : 0,
+      value: w.type === "button"
+        ? Boolean(w.value)
+        : (Number.isFinite(Number(w.value)) ? Number(w.value) : 0),
       columns: Array.isArray(w.columns) ? w.columns.map(normalizeTableColumnName) : [],
       xyPairs: Array.isArray(w.xyPairs)
         ? w.xyPairs.map((pair, idx) => ({
@@ -4269,7 +4307,7 @@ function applyGraphData(data) {
     : [];
   graph.widgets = Array.isArray(data.widgets)
     ? data.widgets
-      .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider" || w.type === "matrix"))
+      .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider" || w.type === "matrix" || w.type === "button" || w.type === "led"))
       .map((w) => ({
         id: w.id,
         type: w.type,
@@ -4300,7 +4338,9 @@ function applyGraphData(data) {
         min: Number.isFinite(Number(w.min)) ? Number(w.min) : 0,
         max: Number.isFinite(Number(w.max)) ? Number(w.max) : 100,
         step: Number.isFinite(Number(w.step)) ? Number(w.step) : 1,
-        value: Number.isFinite(Number(w.value)) ? Number(w.value) : 0,
+        value: w.type === "button"
+          ? (w.value === true || w.value === "true" || w.value === 1 || w.value === "1")
+          : (Number.isFinite(Number(w.value)) ? Number(w.value) : 0),
         rows: [],
         columns: Array.isArray(w.columns) ? w.columns.map(normalizeTableColumnName) : [],
         xyPairs: Array.isArray(w.xyPairs)
@@ -4507,8 +4547,9 @@ function updateEditingLockUi() {
     addDiamondNodeItem,
     addSubmodelNodeItem,
     addTextItem,
-    addSliderWidgetItem,
-    addMatrixWidgetItem,
+  addButtonWidgetItem,
+  addSliderWidgetItem,
+  addMatrixWidgetItem,
     addTableWidgetItem,
     addXYChartWidgetItem,
   ].forEach((btn) => {
@@ -4891,7 +4932,7 @@ function addEdge(fromId, toId) {
   graph.edges.push(edge);
   sanitizeEdgePorts(edge);
   if (targetNode?.input) {
-    removeNodeFromSliderBindings(targetNode.name);
+    removeNodeFromInputWidgetBindings(targetNode.name);
     targetNode.input = false;
   }
   selectEdge(edge.id);
@@ -5011,7 +5052,11 @@ function refreshSidebar() {
         ? t("panel.widgetChart")
         : (widget.type === "slider"
           ? t("panel.widgetSlider")
-          : (widget.type === "matrix" ? t("panel.widgetMatrix") : t("panel.widgetTable")));
+          : (widget.type === "button"
+            ? t("panel.widgetButton")
+            : (widget.type === "led"
+              ? t("panel.widgetLed")
+              : (widget.type === "matrix" ? t("panel.widgetMatrix") : t("panel.widgetTable")))));
     }
     refreshWidgetConfigPanel(widget);
     return;
@@ -5302,6 +5347,12 @@ function refreshSidebar() {
     }
     if (strictDefinitionsInput) {
       strictDefinitionsInput.checked = Boolean(graph.execution.strictDefinitions);
+    }
+    if (zoomRangeInput && document.activeElement !== zoomRangeInput) {
+      zoomRangeInput.value = String(Math.round(ui.zoom * 100));
+    }
+    if (zoomRangeValue) {
+      zoomRangeValue.textContent = `${Math.round(ui.zoom * 100)}%`;
     }
     timeCurrentOutput.textContent =
       graph.execution.currentTime == null
@@ -6005,10 +6056,16 @@ function importGraphData(data) {
   const maxTextItemId = textItems.reduce((max, item) => Math.max(max, item.id), 0);
   const widgets = Array.isArray(data.widgets)
     ? data.widgets
-      .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider" || w.type === "matrix"))
+      .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider" || w.type === "matrix" || w.type === "button" || w.type === "led"))
       .map((w) => ({
         id: w.id,
-        type: w.type === "xychart" ? "xychart" : (w.type === "slider" ? "slider" : (w.type === "matrix" ? "matrix" : "table")),
+        type: w.type === "xychart"
+          ? "xychart"
+          : (w.type === "slider"
+            ? "slider"
+            : (w.type === "matrix"
+              ? "matrix"
+              : (w.type === "button" ? "button" : (w.type === "led" ? "led" : "table")))),
         customTitle: String(w.customTitle ?? ""),
         x: Number.isFinite(Number(w.x)) ? Number(w.x) : 40,
         y: Number.isFinite(Number(w.y)) ? Number(w.y) : 40,
@@ -6036,7 +6093,9 @@ function importGraphData(data) {
         min: Number.isFinite(Number(w.min)) ? Number(w.min) : 0,
         max: Number.isFinite(Number(w.max)) ? Number(w.max) : 100,
         step: Number.isFinite(Number(w.step)) ? Number(w.step) : 1,
-        value: Number.isFinite(Number(w.value)) ? Number(w.value) : 0,
+        value: w.type === "button"
+          ? (w.value === true || w.value === "true" || w.value === 1 || w.value === "1")
+          : (Number.isFinite(Number(w.value)) ? Number(w.value) : 0),
         rows: [],
         columns: Array.isArray(w.columns) ? w.columns.map(normalizeTableColumnName) : [],
         xyPairs: Array.isArray(w.xyPairs)
@@ -8037,7 +8096,17 @@ function hasInitializedStateSnapshot(model = graph) {
 }
 
 function updateMenuTimeLabel() {
-  return;
+  if (!menuTimeText) {
+    return;
+  }
+  const baseTime = graph.execution.currentTime == null
+    ? Number(graph.execution.t0)
+    : Number(graph.execution.currentTime);
+  if (!Number.isFinite(baseTime)) {
+    menuTimeText.textContent = "";
+    return;
+  }
+  menuTimeText.textContent = t("menu.time", { time: formatNumberValue(baseTime) });
 }
 
 function ensureExecutionPlan() {
@@ -9148,6 +9217,24 @@ if (addTextItem) {
   });
 }
 
+if (addButtonWidgetItem) {
+  addButtonWidgetItem.addEventListener("click", () => {
+    runAction(() => {
+      addButtonWidget();
+    });
+    setStatusKey("status.widgetButtonCreated");
+  });
+}
+
+if (addLedWidgetItem) {
+  addLedWidgetItem.addEventListener("click", () => {
+    runAction(() => {
+      addLedWidget();
+    });
+    setStatusKey("status.widgetLedCreated");
+  });
+}
+
 addSliderWidgetItem.addEventListener("click", () => {
   runAction(() => {
     addSliderWidget();
@@ -9190,6 +9277,12 @@ zoomOutItem.addEventListener("click", () => {
 zoomResetItem.addEventListener("click", () => {
   applyZoom(1);
 });
+
+if (zoomRangeInput) {
+  zoomRangeInput.addEventListener("input", () => {
+    applyZoom(Number(zoomRangeInput.value) / 100);
+  });
+}
 toggleGraphItem.addEventListener("click", () => {
   toggleGraphVisibility();
 });
@@ -9474,7 +9567,7 @@ nodeShapeInput.addEventListener("change", () => {
     node.__runtimeSubmodelPath = "";
     normalizeInputNodeFlags();
     if (wasSliderBindable && !canBindSliderToNode(node)) {
-      removeNodeFromSliderBindings(node.name);
+      removeNodeFromInputWidgetBindings(node.name);
     }
   });
 });
@@ -9552,7 +9645,7 @@ nodeInputInput.addEventListener("change", () => {
   runAction(() => {
     node.input = nodeInputInput.checked;
     if (wasInput && !node.input) {
-      removeNodeFromSliderBindings(node.name);
+      removeNodeFromInputWidgetBindings(node.name);
     }
   });
 });

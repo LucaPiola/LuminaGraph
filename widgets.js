@@ -66,6 +66,29 @@ function addMatrixWidget(at = null) {
   });
 }
 
+function addLedWidget(at = null) {
+  const id = widgetCounter++;
+  const z = Math.max(0.0001, ui.zoom || 1);
+  const x = at?.x ?? (graphViewport.scrollLeft + 60) / z;
+  const y = at?.y ?? (graphViewport.scrollTop + 60) / z;
+  const outputNames = graph.nodes.filter((n) => n.output).map((n) => n.name);
+  graph.widgets.push({
+    id,
+    type: "led",
+    customTitle: "",
+    x,
+    y,
+    width: 220,
+    height: 120,
+    minimized: false,
+    outputOnly: true,
+    source: outputNames[0] || "",
+    rows: [],
+    columns: [],
+    xyPairs: [],
+  });
+}
+
 function addSliderWidget(at = null) {
   const id = widgetCounter++;
   const z = Math.max(0.0001, ui.zoom || 1);
@@ -87,6 +110,30 @@ function addSliderWidget(at = null) {
     max: 100,
     step: 1,
     value: 0,
+    rows: [],
+    columns: [],
+    xyPairs: [],
+  });
+}
+
+function addButtonWidget(at = null) {
+  const id = widgetCounter++;
+  const z = Math.max(0.0001, ui.zoom || 1);
+  const x = at?.x ?? (graphViewport.scrollLeft + 80) / z;
+  const y = at?.y ?? (graphViewport.scrollTop + 80) / z;
+  const bindableNames = buttonBindableNodeNames();
+  graph.widgets.push({
+    id,
+    type: "button",
+    customTitle: "",
+    x,
+    y,
+    width: 260,
+    height: 108,
+    minimized: false,
+    outputOnly: false,
+    source: bindableNames[0] || "",
+    value: false,
     rows: [],
     columns: [],
     xyPairs: [],
@@ -232,6 +279,14 @@ function sanitizeMatrixWidgetOptions(widget) {
   widget.cellSize = Number.isFinite(Number(widget.cellSize)) ? clamp(Number(widget.cellSize), 2, 96) : 28;
   const allowedPalettes = new Set(["blue", "heat", "grayscale", "diverging", "none"]);
   widget.colorScheme = allowedPalettes.has(String(widget.colorScheme ?? "")) ? String(widget.colorScheme) : "blue";
+}
+
+function sanitizeLedWidgetOptions(widget) {
+  const allowedNames = new Set(graph.nodes.filter((n) => n.output).map((n) => n.name));
+  widget.source = String(widget.source ?? "");
+  if (widget.source && !allowedNames.has(widget.source)) {
+    widget.source = "";
+  }
 }
 
 function sanitizeWidgetXYPairs(widget) {
@@ -381,6 +436,15 @@ function sanitizeSliderWidgetOptions(widget) {
   }
 }
 
+function sanitizeButtonWidgetOptions(widget) {
+  const allowedNames = new Set(buttonBindableNodeNames());
+  widget.source = String(widget.source ?? "");
+  if (widget.source && !allowedNames.has(widget.source)) {
+    widget.source = "";
+  }
+  widget.value = widget.value === true || widget.value === "true" || widget.value === 1 || widget.value === "1";
+}
+
 function isFiniteMatrix(value) {
   return Array.isArray(value)
     && value.length >= 0
@@ -416,6 +480,8 @@ function applyWidgetDrivenNodeValues() {
   graph.widgets.forEach((widget) => {
     if (widget.type === "slider") {
       applySliderWidgetValueToNode(widget);
+    } else if (widget.type === "button") {
+      applyButtonWidgetValueToNode(widget);
     }
   });
 }
@@ -433,6 +499,25 @@ function applySliderWidgetValueToNode(widget) {
     return;
   }
   const value = Number(widget.value);
+  node.externalValueEnabled = true;
+  node.externalValue = value;
+  node.computedValue = value;
+  node.computedError = "";
+}
+
+function applyButtonWidgetValueToNode(widget) {
+  if (!widget || widget.type !== "button") {
+    return;
+  }
+  sanitizeButtonWidgetOptions(widget);
+  if (!widget.source) {
+    return;
+  }
+  const node = getNodeByName(widget.source);
+  if (!canBindButtonToNode(node)) {
+    return;
+  }
+  const value = widget.value ? 1 : 0;
   node.externalValueEnabled = true;
   node.externalValue = value;
   node.computedValue = value;
@@ -1032,6 +1117,12 @@ function widgetDefaultTitle(widget) {
   if (widget.type === "slider") {
     return t("widget.sliderTitle", { id: widget.id });
   }
+  if (widget.type === "button") {
+    return t("widget.buttonTitle", { id: widget.id });
+  }
+  if (widget.type === "led") {
+    return t("widget.ledTitle", { id: widget.id });
+  }
   return t("widget.tableTitle", { id: widget.id });
 }
 
@@ -1097,6 +1188,71 @@ function matrixCellBackgroundColor(value, minValue, maxValue, scheme) {
     return "";
   }
   return matrixPaletteColor(scheme, 0.55);
+}
+
+function coerceLedState(value) {
+  if (value === true || value === false) {
+    return { ok: true, value };
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value === 0) {
+      return { ok: true, value: false };
+    }
+    if (value === 1) {
+      return { ok: true, value: true };
+    }
+  }
+  if (typeof value === "string") {
+    const lower = value.trim().toLowerCase();
+    if (lower === "true") {
+      return { ok: true, value: true };
+    }
+    if (lower === "false") {
+      return { ok: true, value: false };
+    }
+  }
+  return { ok: false, value: false };
+}
+
+function renderLedWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
+  body.innerHTML = "";
+  const sourceNode = nodeMap.get(widget.source) || null;
+  const wrap = document.createElement("div");
+  wrap.className = "led-widget-wrap";
+  const sourceLine = document.createElement("div");
+  sourceLine.className = "led-widget-source";
+  sourceLine.textContent = widget.source || t("widget.noneOption");
+  wrap.appendChild(sourceLine);
+
+  const display = document.createElement("div");
+  display.className = "led-widget-display";
+  const lamp = document.createElement("div");
+  lamp.className = "led-widget-lamp";
+  const label = document.createElement("div");
+  label.className = "led-widget-label";
+
+  if (!sourceNode) {
+    lamp.classList.add("is-invalid");
+    label.textContent = t("widget.noneOption");
+  } else if (sourceNode.computedError) {
+    lamp.classList.add("is-invalid");
+    label.textContent = localizeExpressionErrorMessage(String(sourceNode.computedError || ""));
+  } else {
+    const coerced = coerceLedState(sourceNode.computedValue);
+    if (coerced.ok) {
+      lamp.classList.toggle("is-on", coerced.value);
+      lamp.classList.toggle("is-off", !coerced.value);
+      label.textContent = coerced.value ? t("widget.ledState.on") : t("widget.ledState.off");
+    } else {
+      lamp.classList.add("is-invalid");
+      label.textContent = t("widget.ledInvalid");
+    }
+  }
+
+  display.appendChild(lamp);
+  display.appendChild(label);
+  wrap.appendChild(display);
+  body.appendChild(wrap);
 }
 
 function renderMatrixWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
@@ -1365,6 +1521,34 @@ function refreshSliderWidgetRuntimeBody(root, widget) {
   }
 }
 
+function refreshButtonWidgetRuntimeBody(root, widget) {
+  sanitizeButtonWidgetOptions(widget);
+  const body = root.querySelector(".value-widget-body");
+  const toggleBtn = body?.querySelector(".button-widget-toggle");
+  const sourceLine = body?.querySelector(".button-widget-source");
+  if (!body || !toggleBtn || !sourceLine) {
+    renderWidgets();
+    return;
+  }
+  const sourceNode = getNodeByName(widget.source);
+  const lockedForRun = sourceNode?.shape === "diamond" && graph.execution.currentTime != null;
+  sourceLine.textContent = widget.source || t("text.unnamed");
+  toggleBtn.disabled = lockedForRun;
+  toggleBtn.classList.toggle("is-on", Boolean(widget.value));
+  toggleBtn.classList.toggle("is-off", !Boolean(widget.value));
+  toggleBtn.textContent = widget.value ? t("widget.buttonState.true") : t("widget.buttonState.false");
+}
+
+function refreshLedWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap()) {
+  sanitizeLedWidgetOptions(widget);
+  const body = root.querySelector(".value-widget-body");
+  if (!body) {
+    renderWidgets();
+    return;
+  }
+  renderLedWidgetBody(body, widget, nodeMap);
+}
+
 function refreshRuntimeWidgetContents() {
   const roots = [...widgetLayer.querySelectorAll(".value-widget[data-widget-id]")];
   if (roots.length !== graph.widgets.length) {
@@ -1387,6 +1571,10 @@ function refreshRuntimeWidgetContents() {
       refreshChartWidgetRuntimeBody(root, widget, nodeMap);
     } else if (widget.type === "slider") {
       refreshSliderWidgetRuntimeBody(root, widget);
+    } else if (widget.type === "button") {
+      refreshButtonWidgetRuntimeBody(root, widget);
+    } else if (widget.type === "led") {
+      refreshLedWidgetRuntimeBody(root, widget, nodeMap);
     } else {
       renderWidgets();
       return;
@@ -1418,7 +1606,7 @@ function renderWidgets() {
   const viewMinY = view?.y ?? 0;
 
   graph.widgets.forEach((widget) => {
-    if (widget.type !== "table" && widget.type !== "xychart" && widget.type !== "slider" && widget.type !== "matrix") {
+    if (widget.type !== "table" && widget.type !== "xychart" && widget.type !== "slider" && widget.type !== "matrix" && widget.type !== "button" && widget.type !== "led") {
       return;
     }
     if (widget.type === "table") {
@@ -1429,6 +1617,10 @@ function renderWidgets() {
     } else if (widget.type === "xychart") {
       sanitizeWidgetXYPairs(widget);
       sanitizeXYChartOptions(widget);
+    } else if (widget.type === "button") {
+      sanitizeButtonWidgetOptions(widget);
+    } else if (widget.type === "led") {
+      sanitizeLedWidgetOptions(widget);
     } else {
       sanitizeSliderWidgetOptions(widget);
     }
@@ -1541,6 +1733,8 @@ function renderWidgets() {
       renderTableWidgetBody(body, widget);
     } else if (widget.type === "matrix") {
       renderMatrixWidgetBody(body, widget);
+    } else if (widget.type === "led") {
+      renderLedWidgetBody(body, widget);
     } else if (widget.type === "xychart") {
       const canvasWrap = document.createElement("div");
       canvasWrap.className = "xy-chart-canvas-wrap";
@@ -1594,7 +1788,7 @@ function renderWidgets() {
       drawXYChart(canvas, seriesList, widget);
       canvasWrap.appendChild(canvas);
       body.appendChild(canvasWrap);
-    } else {
+    } else if (widget.type === "slider") {
       const sliderWrap = document.createElement("div");
       sliderWrap.className = "slider-widget-wrap";
 
@@ -1712,6 +1906,53 @@ function renderWidgets() {
       sliderWrap.appendChild(sourceLine);
       sliderWrap.appendChild(rangeLine);
       body.appendChild(sliderWrap);
+    } else {
+      const buttonWrap = document.createElement("div");
+      buttonWrap.className = "button-widget-wrap";
+
+      const sourceLine = document.createElement("div");
+      sourceLine.className = "button-widget-source";
+      sourceLine.textContent = widget.source || t("text.unnamed");
+      const sourceNode = getNodeByName(widget.source);
+      const lockedForRun = sourceNode?.shape === "diamond" && graph.execution.currentTime != null;
+
+      const toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.className = "button-widget-toggle";
+      toggleBtn.disabled = lockedForRun;
+      const syncButtonDisplay = (commit = false) => {
+        toggleBtn.classList.toggle("is-on", Boolean(widget.value));
+        toggleBtn.classList.toggle("is-off", !Boolean(widget.value));
+        toggleBtn.textContent = widget.value ? t("widget.buttonState.true") : t("widget.buttonState.false");
+        applyButtonWidgetValueToNode(widget);
+        if (commit) {
+          refreshSidebar();
+          scheduleFileStatusRefresh();
+        }
+      };
+      syncButtonDisplay();
+      toggleBtn.addEventListener("pointerdown", (evt) => {
+        if (lockedForRun) {
+          return;
+        }
+        evt.stopPropagation();
+        if (!(ui.selected?.type === "widget" && ui.selected.id === widget.id)) {
+          selectWidget(widget.id);
+        }
+      });
+      toggleBtn.addEventListener("click", (evt) => {
+        if (lockedForRun) {
+          return;
+        }
+        evt.stopPropagation();
+        widget.value = !widget.value;
+        syncButtonDisplay(true);
+        renderWidgets();
+      });
+
+      buttonWrap.appendChild(sourceLine);
+      buttonWrap.appendChild(toggleBtn);
+      body.appendChild(buttonWrap);
     }
 
     const resize = document.createElement("div");
@@ -1827,7 +2068,7 @@ function removeSelected() {
       const selectedIds = new Set(ui.selectedNodes);
       graph.nodes
         .filter((n) => selectedIds.has(n.id))
-        .forEach((n) => removeNodeFromSliderBindings(n.name));
+        .forEach((n) => removeNodeFromInputWidgetBindings(n.name));
       graph.nodes = graph.nodes.filter((n) => !selectedIds.has(n.id));
       graph.edges = graph.edges.filter((e) => !selectedIds.has(e.from) && !selectedIds.has(e.to));
       clearAllSelection();
@@ -1986,10 +2227,24 @@ function openBackgroundContextMenu(evt) {
       },
     },
     {
+      label: t("context.bg.newButtonWidget"),
+      action: () => {
+        runAction(() => addButtonWidget({ x: p.x, y: p.y }));
+        setStatusKey("status.widgetButtonCreated");
+      },
+    },
+    {
       label: t("context.bg.newMatrixWidget"),
       action: () => {
         runAction(() => addMatrixWidget({ x: p.x, y: p.y }));
         setStatusKey("status.widgetMatrixCreated");
+      },
+    },
+    {
+      label: t("context.bg.newLedWidget"),
+      action: () => {
+        runAction(() => addLedWidget({ x: p.x, y: p.y }));
+        setStatusKey("status.widgetLedCreated");
       },
     },
     {
@@ -2500,6 +2755,48 @@ function refreshWidgetConfigPanel(widget) {
     return;
   }
 
+  if (widget.type === "button") {
+    sanitizeButtonWidgetOptions(widget);
+    const buttonSection = createWidgetSection();
+    const sourceLabel = document.createElement("label");
+    sourceLabel.textContent = t("widget.buttonSourceLabel");
+    const sourceSelect = document.createElement("select");
+    const buttonChoices = ["", ...buttonBindableNodeNames()];
+    buttonChoices.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name || t("widget.noneOption");
+      sourceSelect.appendChild(opt);
+    });
+    sourceSelect.value = buttonChoices.includes(widget.source) ? widget.source : "";
+    sourceSelect.addEventListener("change", () => {
+      runAction(() => {
+        widget.source = sourceSelect.value;
+        sanitizeButtonWidgetOptions(widget);
+      });
+    });
+    buttonSection.appendChild(sourceLabel);
+    buttonSection.appendChild(sourceSelect);
+
+    const valueLabel = document.createElement("label");
+    valueLabel.className = "menu-check compact-bool";
+    const valueInput = document.createElement("input");
+    valueInput.type = "checkbox";
+    valueInput.checked = widget.value === true;
+    valueInput.addEventListener("change", () => {
+      runAction(() => {
+        widget.value = valueInput.checked;
+        sanitizeButtonWidgetOptions(widget);
+      });
+    });
+    const valueText = document.createElement("span");
+    valueText.textContent = t("widget.buttonValueLabel");
+    valueLabel.appendChild(valueInput);
+    valueLabel.appendChild(valueText);
+    buttonSection.appendChild(valueLabel);
+    return;
+  }
+
   if (widget.type === "matrix") {
     sanitizeMatrixWidgetOptions(widget);
     const matrixSection = createWidgetSection();
@@ -2607,6 +2904,31 @@ function refreshWidgetConfigPanel(widget) {
     matrixOptionsRow.appendChild(createCompactField("widget.matrixCellSize", cellSizeInput));
     matrixOptionsRow.appendChild(createCompactField("widget.matrixColorSchemeLabel", colorSelect));
     matrixSection.appendChild(matrixOptionsRow);
+    return;
+  }
+
+  if (widget.type === "led") {
+    sanitizeLedWidgetOptions(widget);
+    const ledSection = createWidgetSection();
+    const sourceLabel = document.createElement("label");
+    sourceLabel.textContent = t("widget.ledSourceLabel");
+    const sourceSelect = document.createElement("select");
+    const ledChoices = ["", ...outputNodeNames];
+    ledChoices.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name || t("widget.noneOption");
+      sourceSelect.appendChild(opt);
+    });
+    sourceSelect.value = ledChoices.includes(widget.source) ? widget.source : "";
+    sourceSelect.addEventListener("change", () => {
+      runAction(() => {
+        widget.source = sourceSelect.value;
+        sanitizeLedWidgetOptions(widget);
+      });
+    });
+    ledSection.appendChild(sourceLabel);
+    ledSection.appendChild(sourceSelect);
     return;
   }
 
@@ -3093,6 +3415,8 @@ function refreshWidgetConfigPanel(widget) {
 
 globalThis.Widgets = {
   addCanvasText,
+  addLedWidget,
+  addButtonWidget,
   addTableWidget,
   addMatrixWidget,
   addSliderWidget,
@@ -3130,9 +3454,11 @@ globalThis.Widgets = {
   sanitizeWidgetColumns,
   sanitizeTableWidgetOptions,
   sanitizeMatrixWidgetOptions,
+  sanitizeLedWidgetOptions,
   sanitizeWidgetXYPairs,
   sanitizeXYChartOptions,
   sanitizeSliderWidgetOptions,
+  sanitizeButtonWidgetOptions,
   drawXYChart,
   updateXYWidgetsFromComputedValues,
   updateTableWidgetsFromComputedValues,

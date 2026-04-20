@@ -57,8 +57,10 @@
             <button id="addSubmodelNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.submodel"><span data-i18n="menu.insert.submodel"></span><span class="menu-shortcut">Alt+4</span></button>
             <button id="addTextItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.text"><span data-i18n="menu.insert.text"></span></button>
             <hr class="menu-sep" />
+            <button id="addButtonWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.buttonWidget" data-title-i18n="tooltip.menu.insert.button"></button>
             <button id="addSliderWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.sliderWidget" data-title-i18n="tooltip.menu.insert.slider"></button>
             <hr class="menu-sep" />
+            <button id="addLedWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.ledWidget" data-title-i18n="tooltip.menu.insert.led"></button>
             <button id="addMatrixWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.matrixWidget" data-title-i18n="tooltip.menu.insert.matrix"></button>
             <button id="addTableWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.tableWidget" data-title-i18n="tooltip.menu.insert.table"></button>
             <button id="addXYChartWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.xyChartWidget" data-title-i18n="tooltip.menu.insert.chart"></button>
@@ -120,6 +122,7 @@
 
         <button id="exitSubmodelBtn" class="menu-nav-btn hidden" type="button" data-i18n="action.exitSubmodel"></button>
         <div class="menu-breadcrumb hidden" id="modelBreadcrumbText"></div>
+        <div class="menu-time" id="menuTimeText"></div>
         <div class="menu-file-status" id="fileStatusText"></div>
         <div class="menu-status" id="statusText" data-i18n="status.ready"></div>
       </header>
@@ -198,6 +201,7 @@
               <div id="modelPropsList" class="props-list"></div>
               <button id="addModelPropBtn" class="small-btn" data-i18n="action.addProperty"></button>
             </div>
+
           </div>
 
           <div id="nodePanel" class="panel hidden">
@@ -335,6 +339,14 @@
           <div id="widgetPanel" class="panel hidden">
             <h3 id="widgetPanelTitle" data-i18n="panel.widget"></h3>
             <div id="widgetConfig"></div>
+          </div>
+
+          <div id="sidebarZoomControls" class="sidebar-zoom-controls">
+            <label for="zoomRangeInput" data-i18n="label.zoom"></label>
+            <div class="zoom-control-row">
+              <input id="zoomRangeInput" type="range" min="25" max="300" step="5" />
+              <span id="zoomRangeValue" class="zoom-range-value">100%</span>
+            </div>
           </div>
         </aside>
       </main>

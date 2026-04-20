@@ -413,7 +413,13 @@
   }
 
   function shuffleVectorValues(values) {
-    const vector = ensureFlatVector(values, "shuffle").slice();
+    let vector = null;
+    const isMatrix = Array.isArray(values) && values.every((row) => Array.isArray(row) && row.every((item) => !Array.isArray(item)));
+    if (isMatrix) {
+      vector = values.map((row) => row.slice());
+    } else {
+      vector = ensureFlatVector(values, "shuffle").slice();
+    }
     for (let idx = vector.length - 1; idx > 0; idx -= 1) {
       const swapIdx = Math.floor(Math.random() * (idx + 1));
       [vector[idx], vector[swapIdx]] = [vector[swapIdx], vector[idx]];
@@ -1054,7 +1060,7 @@
       coords: { kind: "array", signature: "coords(matrix[, value])", descriptionKey: "expr.help.coords", insertText: "coords()", cursorOffset: 7 },
       neighbors: { kind: "array", signature: "neighbors(matrix, row, col[, diagonals[, toroidal]])", descriptionKey: "expr.help.neighbors", insertText: "neighbors()", cursorOffset: 10 },
       choice: { kind: "probability", signature: "choice(vector|matrix)", descriptionKey: "expr.help.choice", insertText: "choice()", cursorOffset: 7 },
-      shuffle: { kind: "array", signature: "shuffle(vector)", descriptionKey: "expr.help.shuffle", insertText: "shuffle()", cursorOffset: 8 },
+      shuffle: { kind: "array", signature: "shuffle(vector|matrix)", descriptionKey: "expr.help.shuffle", insertText: "shuffle()", cursorOffset: 8 },
       sort: { kind: "array", signature: "sort(vector)", descriptionKey: "expr.help.sort", insertText: "sort()", cursorOffset: 5 },
       size: { kind: "array", signature: "size(array[, axis])", descriptionKey: "expr.help.size", insertText: "size()", cursorOffset: 5 },
       average: { kind: "probability", signature: "average(array[, axis])", descriptionKey: "expr.help.average", insertText: "average()", cursorOffset: 8 },

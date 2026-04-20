@@ -1,6 +1,6 @@
 # STGraphX: readme
 
-_Luca Mari, versione 19 aprile 2026_
+_Luca Mari, versione 20 aprile 2026_
 
 ## Contesto
 
@@ -34,8 +34,8 @@ __Al momento implementati (senza librerie esterne!):__
 * generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione/slicing di vettori e matrici con la sintassi di NumPy, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari;
 * funzioni "special form" per operare su vettori e matrici: `array`, `reduce`, `map`, `filter`;
 * gestione di proprietà custom per il modello e i singoli nodi e funzioni `getModelProperty`/`getProperty` e `setModelProperty`/`setProperty`;
-* gestione di nodi di output e di widget di output: grafici, tabelle, matrici; pannello di configurazione aggiornato dinamicamente;
-* gestione di nodi di input e di widget di input, anche per parametri: slider; pannello di configurazione aggiornato dinamicamente;
+* gestione di nodi di output e di widget di output: grafici, tabelle, matrici, led; pannello di configurazione aggiornato dinamicamente;
+* gestione di nodi di input e di widget di input, anche per parametri: slider e pulsante; pannello di configurazione aggiornato dinamicamente;
 * gestione dei sottomodelli con file JSON separati, con caricamento dalla stessa cartella del modello, binding dei nodi di input e accesso ai nodi di output con notazione `nomeSottomodello.nomeOutput`; prima gestione in logica ABM dichiarativa / funzionale, mediante variabili di sistema `self` e `$i$`;
 * visualizzazione alternata per il grafo e i widget;
 * editor per testi;
