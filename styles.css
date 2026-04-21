@@ -1513,12 +1513,29 @@ button:disabled {
 
 .expression-preview-value {
   margin: 0;
-  min-height: 22px;
+  min-height: 48px;
+  max-height: 120px;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 0.86rem;
   line-height: 1.35;
   color: var(--text);
+  overflow: auto;
+}
+
+.expression-formula-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #d9e3ec;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.expression-formula-notes-input {
+  min-height: 96px;
+  resize: vertical;
 }
 
 .about-app-content {
@@ -1794,14 +1811,22 @@ button:disabled {
 
 .expression-editor-main {
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
+  gap: 10px;
+}
+
+.expression-main-docs {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 10px;
+  min-width: 0;
 }
 
 .expression-sidebar {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) 124px;
+  grid-template-rows: auto minmax(0, 1fr) 124px auto;
   gap: 8px;
   min-width: 0;
   min-height: 0;
@@ -1936,6 +1961,10 @@ button:disabled {
   }
 
   .expression-editor-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .expression-main-docs {
     grid-template-columns: 1fr;
   }
 

@@ -24,7 +24,12 @@
       "y": -60,
       "width": 120,
       "height": 70,
-      "properties": [],
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Tasso di crescita naturale delle prede"
+        }
+      ],
       "valueExpression": "1.0"
     },
     {
@@ -36,7 +41,12 @@
       "y": 60,
       "width": 120,
       "height": 70,
-      "properties": [],
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Tasso di predazione sulle prede"
+        }
+      ],
       "valueExpression": "-0.01"
     },
     {
@@ -48,7 +58,12 @@
       "y": 0,
       "width": 120,
       "height": 70,
-      "properties": [],
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Popolazione delle prede"
+        }
+      ],
       "stateTransition": "integral(a*this+b*this*y)",
       "initialState": "500"
     },
@@ -61,7 +76,12 @@
       "y": -60,
       "width": 120,
       "height": 70,
-      "properties": [],
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Tasso di mortalita naturale dei predatori"
+        }
+      ],
       "valueExpression": "-0.5"
     },
     {
@@ -73,7 +93,12 @@
       "y": 0,
       "width": 120,
       "height": 70,
-      "properties": [],
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Popolazione dei predatori"
+        }
+      ],
       "stateTransition": "integral(c*this+d*this*x)",
       "initialState": "100"
     },
@@ -86,7 +111,12 @@
       "y": 60,
       "width": 120,
       "height": 70,
-      "properties": [],
+      "properties": [
+        {
+          "key": "descrizione",
+          "value": "Efficienza con cui i predatori si riproducono grazie alle prede"
+        }
+      ],
       "valueExpression": "0.004"
     }
   ],

@@ -2,10 +2,10 @@
   "version": 1,
   "modelTitle": "",
   "modelProperties": [],
-  "nodeCounter": 12,
-  "edgeCounter": 14,
-  "widgetCounter": 7,
-  "textItemCounter": 3,
+  "nodeCounter": 15,
+  "edgeCounter": 17,
+  "widgetCounter": 10,
+  "textItemCounter": 6,
   "execution": {
     "t0": 0,
     "dt": 0.03125,
@@ -30,7 +30,7 @@
       "properties": [
         {
           "key": "descrizione",
-          "value": ""
+          "value": "Prima variabile di stato del sistema di Lorenz"
         }
       ],
       "stateTransition": "integral(s*(y-this))",
@@ -50,7 +50,7 @@
       "properties": [
         {
           "key": "descrizione",
-          "value": ""
+          "value": "Terza variabile di stato del sistema di Lorenz"
         }
       ],
       "stateTransition": "integral(-b*this+x*y)",
@@ -70,7 +70,7 @@
       "properties": [
         {
           "key": "descrizione",
-          "value": ""
+          "value": "Seconda variabile di stato del sistema di Lorenz"
         }
       ],
       "stateTransition": "integral(-x*z+r*x-this)",
@@ -90,7 +90,7 @@
       "properties": [
         {
           "key": "descrizione",
-          "value": ""
+          "value": "Parametro sigma del sistema di Lorenz"
         }
       ],
       "valueExpression": "5"
@@ -109,7 +109,7 @@
       "properties": [
         {
           "key": "descrizione",
-          "value": ""
+          "value": "Parametro beta del sistema di Lorenz"
         }
       ],
       "valueExpression": "1"
@@ -128,7 +128,7 @@
       "properties": [
         {
           "key": "descrizione",
-          "value": ""
+          "value": "Parametro rho del sistema di Lorenz"
         }
       ],
       "valueExpression": "15"
@@ -224,10 +224,10 @@
       "minimized": false,
       "outputOnly": false,
       "showHistory": false,
-      "xMin": 0,
-      "xMax": 0,
-      "yMin": 0,
-      "yMax": 0,
+      "xMin": "auto",
+      "xMax": "auto",
+      "yMin": "auto",
+      "yMax": "auto",
       "showGrid": true,
       "legendPosition": "top-left",
       "source": "",
@@ -235,6 +235,10 @@
       "showIndices": true,
       "autoFitCells": true,
       "cellSize": 28,
+      "valueMin": "auto",
+      "valueMax": "auto",
+      "displayRows": null,
+      "displayCols": null,
       "colorScheme": "blue",
       "min": 0,
       "max": 100,

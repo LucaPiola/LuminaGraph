@@ -60,6 +60,10 @@ function addMatrixWidget(at = null) {
     autoFitCells: true,
     cellSize: 28,
     colorScheme: "blue",
+    valueMin: null,
+    valueMax: null,
+    displayRows: null,
+    displayCols: null,
     rows: [],
     columns: [],
     xyPairs: [],
@@ -279,6 +283,29 @@ function sanitizeMatrixWidgetOptions(widget) {
   widget.cellSize = Number.isFinite(Number(widget.cellSize)) ? clamp(Number(widget.cellSize), 2, 96) : 28;
   const allowedPalettes = new Set(["blue", "heat", "grayscale", "diverging", "none"]);
   widget.colorScheme = allowedPalettes.has(String(widget.colorScheme ?? "")) ? String(widget.colorScheme) : "blue";
+  const parseNullableNumber = (value) => {
+    if (value === "" || value == null) {
+      return null;
+    }
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+  const parseNullablePositiveInt = (value) => {
+    if (value === "" || value == null) {
+      return null;
+    }
+    const n = Math.floor(Number(value));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  widget.valueMin = parseNullableNumber(widget.valueMin);
+  widget.valueMax = parseNullableNumber(widget.valueMax);
+  if (widget.valueMin != null && widget.valueMax != null && widget.valueMax < widget.valueMin) {
+    const tmp = widget.valueMin;
+    widget.valueMin = widget.valueMax;
+    widget.valueMax = tmp;
+  }
+  widget.displayRows = parseNullablePositiveInt(widget.displayRows);
+  widget.displayCols = parseNullablePositiveInt(widget.displayCols);
 }
 
 function sanitizeLedWidgetOptions(widget) {
@@ -336,6 +363,15 @@ function sanitizeWidgetXYPairs(widget) {
 
 function sanitizeXYChartOptions(widget) {
   const parseNumOrNull = (value) => {
+    if (value == null) {
+      return null;
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim().toLowerCase();
+      if (!trimmed || trimmed === "auto") {
+        return null;
+      }
+    }
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
   };
@@ -595,11 +631,25 @@ function drawXYChart(canvas, seriesList = [], options = null) {
     return;
   }
 
+  const parseAxisLimit = (value) => {
+    if (value == null) {
+      return null;
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim().toLowerCase();
+      if (!trimmed || trimmed === "auto") {
+        return null;
+      }
+    }
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  };
+
   const cfg = {
-    xMin: Number.isFinite(Number(options?.xMin)) ? Number(options.xMin) : null,
-    xMax: Number.isFinite(Number(options?.xMax)) ? Number(options.xMax) : null,
-    yMin: Number.isFinite(Number(options?.yMin)) ? Number(options.yMin) : null,
-    yMax: Number.isFinite(Number(options?.yMax)) ? Number(options.yMax) : null,
+    xMin: parseAxisLimit(options?.xMin),
+    xMax: parseAxisLimit(options?.xMax),
+    yMin: parseAxisLimit(options?.yMin),
+    yMax: parseAxisLimit(options?.yMax),
     showGrid: options?.showGrid !== false,
     legendPosition: ["top-right", "top-left", "bottom-right", "bottom-left"].includes(String(options?.legendPosition ?? ""))
       ? String(options.legendPosition)
@@ -1046,6 +1096,8 @@ function copyTextToClipboard(text) {
 function renderMatrixGrid(body, widget, matrix) {
   const rowCount = matrix.length;
   const colCount = rowCount > 0 ? matrix[0].length : 0;
+  const displayRows = widget.displayRows ?? rowCount;
+  const displayCols = widget.displayCols ?? colCount;
   const grid = document.createElement("div");
   grid.className = "matrix-widget-grid";
   const showIndices = widget.showIndices !== false;
@@ -1053,22 +1105,22 @@ function renderMatrixGrid(body, widget, matrix) {
   const availableWidth = Math.max(40, Math.floor(widget.width - 16));
   const availableHeight = Math.max(40, Math.floor(widget.height - 44));
   const fitSize = Math.floor(Math.min(
-    availableWidth / Math.max(1, colCount + headerOffset),
-    availableHeight / Math.max(1, rowCount + headerOffset),
+    availableWidth / Math.max(1, displayCols + headerOffset),
+    availableHeight / Math.max(1, displayRows + headerOffset),
   ));
   const cellSize = widget.autoFitCells
     ? clamp(fitSize || widget.cellSize, 2, 96)
     : clamp(Number(widget.cellSize) || 28, 2, 96);
   grid.style.setProperty("--matrix-cell-size", `${cellSize}px`);
   grid.style.setProperty("--matrix-font-size", `${Math.max(0, Math.floor(cellSize * 0.45))}px`);
-  grid.style.gridTemplateColumns = `repeat(${Math.max(1, colCount + headerOffset)}, ${cellSize}px)`;
-  grid.style.width = `${Math.max(1, colCount + headerOffset) * cellSize}px`;
+  grid.style.gridTemplateColumns = `repeat(${Math.max(1, displayCols + headerOffset)}, ${cellSize}px)`;
+  grid.style.width = `${Math.max(1, displayCols + headerOffset) * cellSize}px`;
   if (showIndices) {
     const corner = document.createElement("div");
     corner.className = "matrix-widget-cell matrix-widget-index";
     corner.textContent = "";
     grid.appendChild(corner);
-    for (let colIdx = 0; colIdx < colCount; colIdx += 1) {
+    for (let colIdx = 0; colIdx < displayCols; colIdx += 1) {
       const th = document.createElement("div");
       th.className = "matrix-widget-cell matrix-widget-index";
       th.textContent = String(colIdx);
@@ -1078,7 +1130,10 @@ function renderMatrixGrid(body, widget, matrix) {
 
   let minValue = 0;
   let maxValue = 0;
-  if (isFiniteMatrix(matrix) && rowCount > 0 && colCount > 0) {
+  if (widget.valueMin != null && widget.valueMax != null) {
+    minValue = widget.valueMin;
+    maxValue = widget.valueMax;
+  } else if (isFiniteMatrix(matrix) && rowCount > 0 && colCount > 0) {
     minValue = matrix[0][0];
     maxValue = matrix[0][0];
     matrix.forEach((row) => row.forEach((value) => {
@@ -1086,24 +1141,33 @@ function renderMatrixGrid(body, widget, matrix) {
       maxValue = Math.max(maxValue, value);
     }));
   }
-  matrix.forEach((row, rowIdx) => {
+  for (let rowIdx = 0; rowIdx < displayRows; rowIdx += 1) {
     if (showIndices) {
       const rowHeader = document.createElement("div");
       rowHeader.className = "matrix-widget-cell matrix-widget-index";
       rowHeader.textContent = String(rowIdx);
       grid.appendChild(rowHeader);
     }
-    row.forEach((value) => {
+    for (let colIdx = 0; colIdx < displayCols; colIdx += 1) {
+      const value = rowIdx < rowCount && colIdx < colCount ? matrix[rowIdx][colIdx] : null;
       const td = document.createElement("div");
       td.className = "matrix-widget-cell matrix-widget-value";
-      td.textContent = widget.showNumericValues ? formatComputedValue(value) : "";
-      const bg = matrixCellBackgroundColor(value, minValue, maxValue, widget.colorScheme);
+      td.textContent = widget.showNumericValues && value != null ? formatComputedValue(value) : "";
+      const bg = value != null
+        ? matrixCellBackgroundColor(
+          value,
+          minValue,
+          maxValue,
+          widget.colorScheme,
+          widget.valueMin != null && widget.valueMax != null,
+        )
+        : "";
       if (bg) {
         td.style.backgroundColor = bg;
       }
       grid.appendChild(td);
-    });
-  });
+    }
+  }
   body.appendChild(grid);
 }
 
@@ -1176,13 +1240,18 @@ function matrixPaletteColor(scheme, ratio) {
   return `hsl(204 76% ${94 - (38 * tValue)}%)`;
 }
 
-function matrixCellBackgroundColor(value, minValue, maxValue, scheme) {
+function matrixCellBackgroundColor(value, minValue, maxValue, scheme, fixedRange = false) {
   if (scheme === "none" || !isFiniteScalar(value)) {
     return "";
   }
   const range = maxValue - minValue;
   if (range > 0) {
-    return matrixPaletteColor(scheme, (value - minValue) / range);
+    const useDiscreteSteps = fixedRange
+      && Number.isInteger(value)
+      && Number.isInteger(minValue)
+      && Number.isInteger(maxValue);
+    const denominator = useDiscreteSteps ? (range + 1) : range;
+    return matrixPaletteColor(scheme, (value - minValue) / denominator);
   }
   if (value === 0) {
     return "";
@@ -2320,7 +2389,7 @@ function openNodeContextMenu(evt, node) {
           return;
         }
         runAction(() => {
-          removeNodeFromSliderBindings(node.name);
+          removeNodeFromInputWidgetBindings(node.name);
           graph.nodes = graph.nodes.filter((n) => n.id !== node.id);
           graph.edges = graph.edges.filter((e) => e.from !== node.id && e.to !== node.id);
           clearAllSelection();
@@ -2496,6 +2565,36 @@ function normalizeNodeDescriptionProperty(node) {
 
 function getNodeDescription(node) {
   return String(normalizeNodeDescriptionProperty(node)?.value ?? "").trim();
+}
+
+function normalizeNodeFormulaNotesProperty(node) {
+  if (!node) {
+    return null;
+  }
+  if (!Array.isArray(node.properties)) {
+    node.properties = [];
+  }
+  const canonicalKey = formulaNotesPropertyKey();
+  const acceptedKeys = formulaNotesPropertyKeys();
+  const matches = node.properties.filter((prop) => acceptedKeys.has(String(prop?.key ?? "").trim().toLowerCase()));
+  let target = matches[0] || null;
+  if (!target) {
+    target = { key: canonicalKey, value: "" };
+    node.properties.unshift(target);
+  } else {
+    target.key = canonicalKey;
+  }
+  for (let i = node.properties.length - 1; i >= 0; i -= 1) {
+    const prop = node.properties[i];
+    if (prop !== target && acceptedKeys.has(String(prop?.key ?? "").trim().toLowerCase())) {
+      node.properties.splice(i, 1);
+    }
+  }
+  return target;
+}
+
+function getNodeFormulaNotes(node) {
+  return String(normalizeNodeFormulaNotesProperty(node)?.value ?? "").trim();
 }
 
 function buildNodeTooltipText(node) {
@@ -2904,6 +3003,76 @@ function refreshWidgetConfigPanel(widget) {
     matrixOptionsRow.appendChild(createCompactField("widget.matrixCellSize", cellSizeInput));
     matrixOptionsRow.appendChild(createCompactField("widget.matrixColorSchemeLabel", colorSelect));
     matrixSection.appendChild(matrixOptionsRow);
+
+    const matrixRangeRow = document.createElement("div");
+    matrixRangeRow.className = "row2-exec";
+
+    const valueMinInput = document.createElement("input");
+    valueMinInput.type = "number";
+    valueMinInput.step = "any";
+    valueMinInput.placeholder = t("widget.autoOption");
+    valueMinInput.value = Number.isFinite(widget.valueMin) ? String(widget.valueMin) : "";
+    valueMinInput.addEventListener("change", () => {
+      runAction(() => {
+        widget.valueMin = valueMinInput.value.trim() === "" ? null : Number(valueMinInput.value);
+        sanitizeMatrixWidgetOptions(widget);
+      });
+      valueMinInput.value = Number.isFinite(widget.valueMin) ? String(widget.valueMin) : "";
+      valueMaxInput.value = Number.isFinite(widget.valueMax) ? String(widget.valueMax) : "";
+    });
+
+    const valueMaxInput = document.createElement("input");
+    valueMaxInput.type = "number";
+    valueMaxInput.step = "any";
+    valueMaxInput.placeholder = t("widget.autoOption");
+    valueMaxInput.value = Number.isFinite(widget.valueMax) ? String(widget.valueMax) : "";
+    valueMaxInput.addEventListener("change", () => {
+      runAction(() => {
+        widget.valueMax = valueMaxInput.value.trim() === "" ? null : Number(valueMaxInput.value);
+        sanitizeMatrixWidgetOptions(widget);
+      });
+      valueMinInput.value = Number.isFinite(widget.valueMin) ? String(widget.valueMin) : "";
+      valueMaxInput.value = Number.isFinite(widget.valueMax) ? String(widget.valueMax) : "";
+    });
+
+    matrixRangeRow.appendChild(createCompactField("widget.matrixValueMin", valueMinInput));
+    matrixRangeRow.appendChild(createCompactField("widget.matrixValueMax", valueMaxInput));
+    matrixSection.appendChild(matrixRangeRow);
+
+    const matrixDimsRow = document.createElement("div");
+    matrixDimsRow.className = "row2-exec";
+
+    const displayRowsInput = document.createElement("input");
+    displayRowsInput.type = "number";
+    displayRowsInput.min = "1";
+    displayRowsInput.step = "1";
+    displayRowsInput.placeholder = t("widget.autoOption");
+    displayRowsInput.value = Number.isInteger(widget.displayRows) ? String(widget.displayRows) : "";
+    displayRowsInput.addEventListener("change", () => {
+      runAction(() => {
+        widget.displayRows = displayRowsInput.value.trim() === "" ? null : Number(displayRowsInput.value);
+        sanitizeMatrixWidgetOptions(widget);
+      });
+      displayRowsInput.value = Number.isInteger(widget.displayRows) ? String(widget.displayRows) : "";
+    });
+
+    const displayColsInput = document.createElement("input");
+    displayColsInput.type = "number";
+    displayColsInput.min = "1";
+    displayColsInput.step = "1";
+    displayColsInput.placeholder = t("widget.autoOption");
+    displayColsInput.value = Number.isInteger(widget.displayCols) ? String(widget.displayCols) : "";
+    displayColsInput.addEventListener("change", () => {
+      runAction(() => {
+        widget.displayCols = displayColsInput.value.trim() === "" ? null : Number(displayColsInput.value);
+        sanitizeMatrixWidgetOptions(widget);
+      });
+      displayColsInput.value = Number.isInteger(widget.displayCols) ? String(widget.displayCols) : "";
+    });
+
+    matrixDimsRow.appendChild(createCompactField("widget.matrixDisplayRows", displayRowsInput));
+    matrixDimsRow.appendChild(createCompactField("widget.matrixDisplayCols", displayColsInput));
+    matrixSection.appendChild(matrixDimsRow);
     return;
   }
 
@@ -3334,7 +3503,7 @@ function refreshWidgetConfigPanel(widget) {
   const xMinInput = document.createElement("input");
   xMinInput.type = "number";
   xMinInput.step = "any";
-  xMinInput.placeholder = t("widget.axisXMin");
+  xMinInput.placeholder = t("widget.autoOption");
   xMinInput.value = widget.xMin == null ? "" : String(widget.xMin);
   xMinInput.addEventListener("change", () => {
     runAction(() => {
@@ -3344,7 +3513,7 @@ function refreshWidgetConfigPanel(widget) {
   const xMaxInput = document.createElement("input");
   xMaxInput.type = "number";
   xMaxInput.step = "any";
-  xMaxInput.placeholder = t("widget.axisXMax");
+  xMaxInput.placeholder = t("widget.autoOption");
   xMaxInput.value = widget.xMax == null ? "" : String(widget.xMax);
   xMaxInput.addEventListener("change", () => {
     runAction(() => {
@@ -3360,7 +3529,7 @@ function refreshWidgetConfigPanel(widget) {
   const yMinInput = document.createElement("input");
   yMinInput.type = "number";
   yMinInput.step = "any";
-  yMinInput.placeholder = t("widget.axisYMin");
+  yMinInput.placeholder = t("widget.autoOption");
   yMinInput.value = widget.yMin == null ? "" : String(widget.yMin);
   yMinInput.addEventListener("change", () => {
     runAction(() => {
@@ -3370,7 +3539,7 @@ function refreshWidgetConfigPanel(widget) {
   const yMaxInput = document.createElement("input");
   yMaxInput.type = "number";
   yMaxInput.step = "any";
-  yMaxInput.placeholder = t("widget.axisYMax");
+  yMaxInput.placeholder = t("widget.autoOption");
   yMaxInput.value = widget.yMax == null ? "" : String(widget.yMax);
   yMaxInput.addEventListener("change", () => {
     runAction(() => {
@@ -3446,6 +3615,8 @@ globalThis.Widgets = {
   nodesInRect,
   normalizeNodeDescriptionProperty,
   getNodeDescription,
+  normalizeNodeFormulaNotesProperty,
+  getNodeFormulaNotes,
   buildNodeTooltipText,
   canvasTextDisplayHtml,
   wrapTextSelection,

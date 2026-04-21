@@ -258,6 +258,7 @@
                 <button id="editNodeValueExprBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression"></button>
               </div>
               <div id="nodeValueExprStatus" class="expr-status hidden"></div>
+
             </div>
 
             <div class="panel-section compact-panel-section">
@@ -367,16 +368,26 @@
               <pre id="expressionEditorHighlight" class="expression-editor-highlight" aria-hidden="true"></pre>
               <textarea id="expressionEditorTextarea" class="expression-editor-textarea" spellcheck="false"></textarea>
             </div>
+            <div class="expression-main-docs">
+              <div id="expressionDescriptionBox" class="expression-formula-notes">
+                <label for="expressionDescriptionInput" class="expression-preview-label" data-i18n="label.description" data-title-i18n="tooltip.node.description"></label>
+                <textarea id="expressionDescriptionInput" class="panel-textarea expression-formula-notes-input" rows="2" data-title-i18n="tooltip.node.description"></textarea>
+              </div>
+              <div id="expressionFormulaNotesBox" class="expression-formula-notes">
+                <label for="expressionFormulaNotesInput" class="expression-preview-label" data-i18n="label.formulaNotes" data-title-i18n="tooltip.node.formulaNotes"></label>
+                <textarea id="expressionFormulaNotesInput" class="panel-textarea expression-formula-notes-input" rows="3" data-title-i18n="tooltip.node.formulaNotes"></textarea>
+              </div>
+            </div>
           </div>
           <aside id="expressionSidebar" class="expression-sidebar">
             <input id="expressionSymbolsFilter" class="expression-symbols-filter" type="text" data-i18n-placeholder="expr.filter.placeholder" />
             <div id="expressionLibrary" class="expression-library"></div>
             <div id="expressionHelp" class="expression-help" data-i18n="expr.help.empty"></div>
+            <div id="expressionPreviewBox" class="expression-preview">
+              <div id="expressionPreviewLabel" class="expression-preview-label" data-i18n="expr.preview.title"></div>
+              <pre id="expressionPreviewValue" class="expression-preview-value" data-i18n="expr.preview.empty"></pre>
+            </div>
           </aside>
-        </div>
-        <div id="expressionPreviewBox" class="expression-preview">
-          <div id="expressionPreviewLabel" class="expression-preview-label" data-i18n="expr.preview.title"></div>
-          <pre id="expressionPreviewValue" class="expression-preview-value" data-i18n="expr.preview.empty"></pre>
         </div>
         <div id="expressionEditorStatus" class="expr-status hidden"></div>
         <div class="modal-actions">

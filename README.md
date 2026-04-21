@@ -1,6 +1,6 @@
 # STGraphX: readme
 
-_Luca Mari, versione 20 aprile 2026_
+_Luca Mari, versione 21 aprile 2026_
 
 ## Contesto
 

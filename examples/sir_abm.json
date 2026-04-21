@@ -2,10 +2,10 @@
   "version": 1,
   "modelTitle": "Modello epidemiologico SIR agent-based",
   "modelProperties": [],
-  "nodeCounter": 22,
-  "edgeCounter": 43,
-  "widgetCounter": 6,
-  "textItemCounter": 4,
+  "nodeCounter": 28,
+  "edgeCounter": 49,
+  "widgetCounter": 12,
+  "textItemCounter": 10,
   "execution": {
     "t0": 0,
     "dt": 1,
@@ -29,6 +29,10 @@
       "strokeColor": "",
       "properties": [
         {
+          "key": "note formula",
+          "value": ""
+        },
+        {
           "key": "descrizione",
           "value": "Lato della griglia quadrata"
         }
@@ -40,7 +44,7 @@
       "name": "beta",
       "output": false,
       "type": "parameter",
-      "x": 120,
+      "x": 140,
       "y": 140,
       "width": 120,
       "height": 70,
@@ -48,24 +52,32 @@
       "strokeColor": "",
       "properties": [
         {
+          "key": "note formula",
+          "value": ""
+        },
+        {
           "key": "descrizione",
           "value": "Probabilita di contagio per vicino infetto"
         }
       ],
-      "valueExpression": "0.27"
+      "valueExpression": "0.3"
     },
     {
       "id": 3,
       "name": "gamma",
       "output": false,
       "type": "parameter",
-      "x": 120,
-      "y": 240,
+      "x": 140,
+      "y": 220,
       "width": 120,
       "height": 70,
       "fillColor": "",
       "strokeColor": "",
       "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
         {
           "key": "descrizione",
           "value": "Probabilita di guarigione per passo"
@@ -85,6 +97,10 @@
       "fillColor": "",
       "strokeColor": "",
       "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
         {
           "key": "descrizione",
           "value": "Coordinate [riga,colonna] di tutte le celle"
@@ -106,6 +122,10 @@
       "strokeColor": "",
       "properties": [
         {
+          "key": "note formula",
+          "value": ""
+        },
+        {
           "key": "descrizione",
           "value": "Righe degli agenti"
         }
@@ -125,6 +145,10 @@
       "fillColor": "",
       "strokeColor": "",
       "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
         {
           "key": "descrizione",
           "value": "Colonne degli agenti"
@@ -146,11 +170,15 @@
       "strokeColor": "",
       "properties": [
         {
+          "key": "note formula",
+          "value": ""
+        },
+        {
           "key": "descrizione",
           "value": "0=suscettibile, 1=infetto, 2=rimosso"
         }
       ],
-      "stateTransition": "if(self == 0 and rand() < beta * infNeighbors[$i] / 8, 1, if(self == 1 and rand() < gamma, 2, self))",
+      "stateTransition": "if(self == 0 and rand() < beta * infNeighbors[$i] / 8,\n  1,\n  if(self == 1 and rand() < gamma,\n    2,\n    self\n  )\n)",
       "initialState": "setAt(array(n*n, 0), randInt(n*n - 1), 1)"
     },
     {
@@ -166,12 +194,16 @@
       "strokeColor": "",
       "properties": [
         {
+          "key": "note formula",
+          "value": ""
+        },
+        {
           "key": "descrizione",
           "value": "Griglia: 1=S, 2=I, 3=R"
         }
       ],
       "input": false,
-      "valueExpression": "grid(rows, cols, \"first\", sir + 1)"
+      "valueExpression": "grid(rows, cols, \"first\", sir)"
     },
     {
       "id": 9,
@@ -186,12 +218,16 @@
       "strokeColor": "",
       "properties": [
         {
+          "key": "note formula",
+          "value": ""
+        },
+        {
           "key": "descrizione",
           "value": "Numero di vicini infetti per ogni agente"
         }
       ],
       "input": false,
-      "valueExpression": "array(size(sir), count($value == 2, neighbors(space, rows[$0], cols[$0], true, true)))"
+      "valueExpression": "array(size(sir),\n      count($value == 1,\n            neighbors(space, rows[$0], cols[$0], true, true)\n           )\n     )"
     },
     {
       "id": 10,
@@ -205,6 +241,10 @@
       "fillColor": "",
       "strokeColor": "",
       "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
         {
           "key": "descrizione",
           "value": "Numero di suscettibili"
@@ -226,6 +266,10 @@
       "strokeColor": "",
       "properties": [
         {
+          "key": "note formula",
+          "value": ""
+        },
+        {
           "key": "descrizione",
           "value": "Numero di infetti"
         }
@@ -245,6 +289,10 @@
       "fillColor": "",
       "strokeColor": "",
       "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
         {
           "key": "descrizione",
           "value": "Numero di rimossi"
@@ -427,6 +475,10 @@
       "showIndices": false,
       "autoFitCells": true,
       "cellSize": 12,
+      "valueMin": 0,
+      "valueMax": 2,
+      "displayRows": null,
+      "displayCols": null,
       "colorScheme": "blue",
       "min": 0,
       "max": 100,
@@ -457,6 +509,10 @@
       "showIndices": true,
       "autoFitCells": true,
       "cellSize": 28,
+      "valueMin": 0,
+      "valueMax": 0,
+      "displayRows": null,
+      "displayCols": null,
       "colorScheme": "blue",
       "min": 0,
       "max": 100,
@@ -524,6 +580,10 @@
       "showIndices": true,
       "autoFitCells": true,
       "cellSize": 28,
+      "valueMin": 0,
+      "valueMax": 0,
+      "displayRows": null,
+      "displayCols": null,
       "colorScheme": "blue",
       "min": 0,
       "max": 100,

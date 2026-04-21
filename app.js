@@ -132,6 +132,10 @@ const expressionSidebar = document.getElementById("expressionSidebar");
 const expressionHelp = document.getElementById("expressionHelp");
 const expressionPreviewBox = document.getElementById("expressionPreviewBox");
 const expressionPreviewValue = document.getElementById("expressionPreviewValue");
+const expressionDescriptionBox = document.getElementById("expressionDescriptionBox");
+const expressionDescriptionInput = document.getElementById("expressionDescriptionInput");
+const expressionFormulaNotesBox = document.getElementById("expressionFormulaNotesBox");
+const expressionFormulaNotesInput = document.getElementById("expressionFormulaNotesInput");
 const expressionLibrary = document.getElementById("expressionLibrary");
 const expressionEditorHint = document.getElementById("expressionEditorHint");
 const expressionEditorStatus = document.getElementById("expressionEditorStatus");
@@ -193,6 +197,8 @@ const {
   nodesInRect,
   normalizeNodeDescriptionProperty,
   getNodeDescription,
+  normalizeNodeFormulaNotesProperty,
+  getNodeFormulaNotes,
   buildNodeTooltipText,
   canvasTextDisplayHtml,
   wrapTextSelection,
@@ -274,6 +280,34 @@ function normalizeTableColumnName(column) {
   return String(column ?? "");
 }
 
+function parseAutoNullableNumber(value) {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim().toLowerCase();
+    if (!trimmed || trimmed === "auto") {
+      return null;
+    }
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function serializeAutoNullableNumber(value) {
+  if (value == null) {
+    return "auto";
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim().toLowerCase();
+    if (!trimmed || trimmed === "auto") {
+      return "auto";
+    }
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : "auto";
+}
+
 let nodeCounter = 1;
 let edgeCounter = 1;
 let widgetCounter = 1;
@@ -296,6 +330,14 @@ function descriptionPropertyKey() {
 
 function descriptionPropertyKeys() {
   return new Set(["descrizione", "description"]);
+}
+
+function formulaNotesPropertyKey() {
+  return currentLang === "en" ? "formula notes" : "note formula";
+}
+
+function formulaNotesPropertyKeys() {
+  return new Set(["note formula", "formula notes"]);
 }
 let dirtySinceLastSave = false;
 let fileStatusRefreshTimer = null;
@@ -1584,7 +1626,28 @@ function syncExpressionEditorToSelectedNode() {
   ui.expressionEditor.syntaxOk = true;
   expressionEditorTitle.textContent = meta.title;
   expressionEditorTextarea.value = meta.value;
+  if (expressionDescriptionInput) {
+    expressionDescriptionInput.value = getNodeDescription(selectedNode);
+  }
+  if (expressionFormulaNotesInput) {
+    expressionFormulaNotesInput.value = getNodeFormulaNotes(selectedNode);
+  }
   refreshExpressionEditorValidation();
+}
+
+function syncExpressionEditorFormulaNotes() {
+  const node = ui.expressionEditor?.nodeId ? getNodeById(ui.expressionEditor.nodeId) : null;
+  const visible = Boolean(node && ui.expressionEditor?.fieldKey !== "__custom__");
+  expressionDescriptionBox?.classList.toggle("hidden", !visible);
+  expressionFormulaNotesBox?.classList.toggle("hidden", !visible);
+  if (expressionDescriptionInput) {
+    expressionDescriptionInput.value = visible ? getNodeDescription(node) : "";
+    expressionDescriptionInput.disabled = !visible || isExecutionFrozen();
+  }
+  if (expressionFormulaNotesInput) {
+    expressionFormulaNotesInput.value = visible ? getNodeFormulaNotes(node) : "";
+    expressionFormulaNotesInput.disabled = !visible || isExecutionFrozen();
+  }
 }
 
 function expressionDocMap() {
@@ -2698,6 +2761,7 @@ function closeExpressionEditor() {
   hideExpressionStatus(expressionEditorStatus);
   clearExpressionPreviewTimer();
   setExpressionPreviewState(t("expr.preview.empty"));
+  syncExpressionEditorFormulaNotes();
   ui.modalResize = null;
   resetExpressionEditorCardPosition();
 }
@@ -2820,6 +2884,7 @@ function openExpressionEditor(fieldKey) {
   expressionEditorTextarea.value = meta.value;
   expressionEditorModal.classList.remove("hidden");
   resetExpressionEditorCardPosition();
+  syncExpressionEditorFormulaNotes();
   refreshExpressionEditorValidation();
   expressionEditorTextarea.focus();
   expressionEditorTextarea.select();
@@ -2861,6 +2926,7 @@ function openCustomExpressionEditor(title, initialValue, onApply) {
   expressionEditorTextarea.value = String(initialValue ?? "");
   expressionEditorModal.classList.remove("hidden");
   resetExpressionEditorCardPosition();
+  syncExpressionEditorFormulaNotes();
   refreshExpressionEditorValidation();
   expressionEditorTextarea.focus();
   expressionEditorTextarea.select();
@@ -4044,6 +4110,7 @@ function exportGraphData() {
     },
     nodes: graph.nodes.map((n) => {
       normalizeNodeDescriptionProperty(n);
+      normalizeNodeFormulaNotesProperty(n);
       const type = serializeNodeType(n.shape);
       const out = {
         id: n.id,
@@ -4113,10 +4180,10 @@ function exportGraphData() {
       minimized: Boolean(w.minimized),
       outputOnly: Boolean(w.outputOnly),
       showHistory: Boolean(w.showHistory),
-      xMin: Number.isFinite(Number(w.xMin)) ? Number(w.xMin) : null,
-      xMax: Number.isFinite(Number(w.xMax)) ? Number(w.xMax) : null,
-      yMin: Number.isFinite(Number(w.yMin)) ? Number(w.yMin) : null,
-      yMax: Number.isFinite(Number(w.yMax)) ? Number(w.yMax) : null,
+      xMin: serializeAutoNullableNumber(w.xMin),
+      xMax: serializeAutoNullableNumber(w.xMax),
+      yMin: serializeAutoNullableNumber(w.yMin),
+      yMax: serializeAutoNullableNumber(w.yMax),
       showGrid: w.showGrid !== false,
       legendPosition: ["top-right", "top-left", "bottom-right", "bottom-left"].includes(String(w.legendPosition ?? ""))
         ? String(w.legendPosition)
@@ -4126,6 +4193,10 @@ function exportGraphData() {
       showIndices: w.showIndices !== false,
       autoFitCells: w.autoFitCells !== false,
       cellSize: Number.isFinite(Number(w.cellSize)) ? clamp(Number(w.cellSize), 2, 96) : 28,
+      valueMin: serializeAutoNullableNumber(w.valueMin),
+      valueMax: serializeAutoNullableNumber(w.valueMax),
+      displayRows: Number.isInteger(Number(w.displayRows)) && Number(w.displayRows) > 0 ? Number(w.displayRows) : null,
+      displayCols: Number.isInteger(Number(w.displayCols)) && Number(w.displayCols) > 0 ? Number(w.displayCols) : null,
       colorScheme: ["blue", "heat", "grayscale", "diverging", "none"].includes(String(w.colorScheme ?? ""))
         ? String(w.colorScheme)
         : "blue",
@@ -4277,6 +4348,7 @@ function applyGraphData(data) {
       properties: n.properties.map((p) => ({ key: p.key, value: p.value })),
     };
     normalizeNodeDescriptionProperty(node);
+    normalizeNodeFormulaNotesProperty(node);
     sanitizeNodeVisualOptions(node);
     return node;
   });
@@ -4319,10 +4391,10 @@ function applyGraphData(data) {
         minimized: Boolean(w.minimized),
         outputOnly: Boolean(w.outputOnly),
         showHistory: Boolean(w.showHistory),
-        xMin: Number.isFinite(Number(w.xMin)) ? Number(w.xMin) : null,
-        xMax: Number.isFinite(Number(w.xMax)) ? Number(w.xMax) : null,
-        yMin: Number.isFinite(Number(w.yMin)) ? Number(w.yMin) : null,
-        yMax: Number.isFinite(Number(w.yMax)) ? Number(w.yMax) : null,
+        xMin: parseAutoNullableNumber(w.xMin),
+        xMax: parseAutoNullableNumber(w.xMax),
+        yMin: parseAutoNullableNumber(w.yMin),
+        yMax: parseAutoNullableNumber(w.yMax),
         showGrid: w.showGrid !== false,
         legendPosition: ["top-right", "top-left", "bottom-right", "bottom-left"].includes(String(w.legendPosition ?? ""))
           ? String(w.legendPosition)
@@ -4332,6 +4404,10 @@ function applyGraphData(data) {
         showIndices: w.showIndices !== false,
         autoFitCells: w.autoFitCells !== false,
         cellSize: Number.isFinite(Number(w.cellSize)) ? clamp(Number(w.cellSize), 2, 96) : 28,
+        valueMin: parseAutoNullableNumber(w.valueMin),
+        valueMax: parseAutoNullableNumber(w.valueMax),
+        displayRows: Number.isInteger(Number(w.displayRows)) && Number(w.displayRows) > 0 ? Number(w.displayRows) : null,
+        displayCols: Number.isInteger(Number(w.displayCols)) && Number(w.displayCols) > 0 ? Number(w.displayCols) : null,
         colorScheme: ["blue", "heat", "grayscale", "diverging", "none"].includes(String(w.colorScheme ?? ""))
           ? String(w.colorScheme)
           : "blue",
@@ -4567,6 +4643,12 @@ function updateEditingLockUi() {
   if (expressionEditorTextarea) {
     expressionEditorTextarea.disabled = frozen;
   }
+  if (expressionDescriptionInput) {
+    expressionDescriptionInput.disabled = frozen || !Boolean(ui.expressionEditor?.nodeId && ui.expressionEditor?.fieldKey !== "__custom__");
+  }
+  if (expressionFormulaNotesInput) {
+    expressionFormulaNotesInput.disabled = frozen || !Boolean(ui.expressionEditor?.nodeId && ui.expressionEditor?.fieldKey !== "__custom__");
+  }
   if (expressionSymbolsFilter) {
     expressionSymbolsFilter.disabled = frozen;
   }
@@ -4685,6 +4767,7 @@ function pasteFromClipboard() {
         properties: (n.properties || []).map((p) => ({ key: String(p.key), value: String(p.value) })),
       };
       normalizeNodeDescriptionProperty(node);
+      normalizeNodeFormulaNotesProperty(node);
       sanitizeNodeVisualOptions(node);
       graph.nodes.push(node);
       idMap.set(n.id, newId);
@@ -4898,6 +4981,7 @@ function addNode(shape, atPoint = null) {
     properties: [],
   };
   normalizeNodeDescriptionProperty(node);
+  normalizeNodeFormulaNotesProperty(node);
   sanitizeNodeVisualOptions(node);
   graph.nodes.push(node);
   selectSingleNode(node.id);
@@ -5241,15 +5325,28 @@ function refreshSidebar() {
     }
 
     normalizeNodeDescriptionProperty(node);
+    normalizeNodeFormulaNotesProperty(node);
+    const visibleProperties = node.properties
+      .map((prop, idx) => ({ prop, idx }))
+      .filter(({ prop }) => {
+        const key = String(prop?.key ?? "").trim().toLowerCase();
+        return !formulaNotesPropertyKeys().has(key) && !descriptionPropertyKeys().has(key);
+      });
     if (renderPropertiesEditor(
       propsList,
-      node.properties,
+      visibleProperties.map(({ prop }) => prop),
       `node:${node.id}`,
       (idx) => {
-        node.properties.splice(idx, 1);
+        const originalIndex = visibleProperties[idx]?.idx;
+        if (originalIndex != null) {
+          node.properties.splice(originalIndex, 1);
+        }
       },
       {
-        isLockedKey: (prop) => descriptionPropertyKeys().has(String(prop?.key ?? "").trim().toLowerCase()),
+        isLockedKey: (prop) => {
+          const key = String(prop?.key ?? "").trim().toLowerCase();
+          return descriptionPropertyKeys().has(key);
+        },
       },
     )) {
       ui.sidebarNodeId = node.id;
@@ -6006,6 +6103,7 @@ function importGraphData(data) {
           : [],
       };
       normalizeNodeDescriptionProperty(node);
+      normalizeNodeFormulaNotesProperty(node);
       sanitizeNodeVisualOptions(node);
       return node;
     });
@@ -6074,10 +6172,10 @@ function importGraphData(data) {
         minimized: Boolean(w.minimized),
         outputOnly: Boolean(w.outputOnly),
         showHistory: Boolean(w.showHistory),
-        xMin: Number.isFinite(Number(w.xMin)) ? Number(w.xMin) : null,
-        xMax: Number.isFinite(Number(w.xMax)) ? Number(w.xMax) : null,
-        yMin: Number.isFinite(Number(w.yMin)) ? Number(w.yMin) : null,
-        yMax: Number.isFinite(Number(w.yMax)) ? Number(w.yMax) : null,
+        xMin: parseAutoNullableNumber(w.xMin),
+        xMax: parseAutoNullableNumber(w.xMax),
+        yMin: parseAutoNullableNumber(w.yMin),
+        yMax: parseAutoNullableNumber(w.yMax),
         showGrid: w.showGrid !== false,
         legendPosition: ["top-right", "top-left", "bottom-right", "bottom-left"].includes(String(w.legendPosition ?? ""))
           ? String(w.legendPosition)
@@ -6087,6 +6185,10 @@ function importGraphData(data) {
         showIndices: w.showIndices !== false,
         autoFitCells: w.autoFitCells !== false,
         cellSize: Number.isFinite(Number(w.cellSize)) ? clamp(Number(w.cellSize), 2, 96) : 28,
+        valueMin: parseAutoNullableNumber(w.valueMin),
+        valueMax: parseAutoNullableNumber(w.valueMax),
+        displayRows: Number.isInteger(Number(w.displayRows)) && Number(w.displayRows) > 0 ? Number(w.displayRows) : null,
+        displayCols: Number.isInteger(Number(w.displayCols)) && Number(w.displayCols) > 0 ? Number(w.displayCols) : null,
         colorScheme: ["blue", "heat", "grayscale", "diverging", "none"].includes(String(w.colorScheme ?? ""))
           ? String(w.colorScheme)
           : "blue",
@@ -7548,6 +7650,7 @@ function buildRuntimeModelFromData(data) {
           : [],
       };
       normalizeNodeDescriptionProperty(node);
+      normalizeNodeFormulaNotesProperty(node);
       return node;
     });
   const nodesWithValidNames = semantics.sanitizeNodeNames(nodes, "n");
@@ -9859,6 +9962,30 @@ nodeInitialStateInput.addEventListener("input", () => {
   updateExpressionFieldState(nodeInitialStateInput, nodeInitialStateStatus, nodeInitialStateInput.value, false, "initial");
   scheduleFileStatusRefresh();
 });
+
+if (expressionDescriptionInput) {
+  expressionDescriptionInput.addEventListener("input", () => {
+    const node = ui.expressionEditor?.nodeId ? getNodeById(ui.expressionEditor.nodeId) : null;
+    if (!node) {
+      return;
+    }
+    const prop = normalizeNodeDescriptionProperty(node);
+    prop.value = expressionDescriptionInput.value;
+    scheduleFileStatusRefresh();
+  });
+}
+
+if (expressionFormulaNotesInput) {
+  expressionFormulaNotesInput.addEventListener("input", () => {
+    const node = ui.expressionEditor?.nodeId ? getNodeById(ui.expressionEditor.nodeId) : null;
+    if (!node) {
+      return;
+    }
+    const prop = normalizeNodeFormulaNotesProperty(node);
+    prop.value = expressionFormulaNotesInput.value;
+    scheduleFileStatusRefresh();
+  });
+}
 
 if (editNodeValueExprBtn) {
   editNodeValueExprBtn.addEventListener("click", () => {

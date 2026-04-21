@@ -27,7 +27,7 @@
       "properties": [
         {
           "key": "descrizione",
-          "value": ""
+          "value": "Lato della griglia quadrata del gioco della vita"
         }
       ],
       "valueExpression": "50"
@@ -44,7 +44,7 @@
       "properties": [
         {
           "key": "descrizione",
-          "value": ""
+          "value": "Stato della griglia: 1 = cella viva, 0 = cella morta"
         }
       ],
       "stateTransition": "(neig==3) or (this and (neig==2))",
@@ -62,7 +62,7 @@
       "properties": [
         {
           "key": "descrizione",
-          "value": ""
+          "value": "Numero di vicini vivi per ogni cella"
         }
       ],
       "input": false,
