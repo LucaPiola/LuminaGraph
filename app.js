@@ -101,7 +101,6 @@ const nodeSubmodelBindings = document.getElementById("nodeSubmodelBindings");
 const nodeInitialStateLabel = document.getElementById("nodeInitialStateLabel");
 const nodeInitialStateRow = document.getElementById("nodeInitialStateRow");
 const nodeInitialStateInput = document.getElementById("nodeInitialStateInput");
-const editNodeInitialStateBtn = document.getElementById("editNodeInitialStateBtn");
 const nodeInitialStateStatus = document.getElementById("nodeInitialStateStatus");
 const nodeValueOutput = document.getElementById("nodeValueOutput");
 const nodeFillColorInput = document.getElementById("nodeFillColorInput");
@@ -124,9 +123,18 @@ const canvasContent = document.getElementById("canvasContent");
 const widgetLayer = document.getElementById("widgetLayer");
 const expressionEditorModal = document.getElementById("expressionEditorModal");
 const expressionEditorTitle = document.getElementById("expressionEditorTitle");
+const expressionStateInitialBlock = document.getElementById("expressionStateInitialBlock");
+const expressionStateInitialHighlight = document.getElementById("expressionStateInitialHighlight");
+const expressionStateInitialInput = document.getElementById("expressionStateInitialInput");
+const expressionStateInitialStatus = document.getElementById("expressionStateInitialStatus");
+const expressionStateTransitionHead = document.getElementById("expressionStateTransitionHead");
+const expressionStateTransitionLabel = document.getElementById("expressionStateTransitionLabel");
+const expressionStateTransitionStatus = document.getElementById("expressionStateTransitionStatus");
 const expressionEditorTextarea = document.getElementById("expressionEditorTextarea");
 const expressionEditorHighlight = document.getElementById("expressionEditorHighlight");
 const expressionEditorSurface = document.querySelector(".expression-editor-surface");
+const expressionEditorCard = expressionEditorModal?.querySelector(".expression-editor-card");
+const expressionEditorMain = expressionEditorModal?.querySelector(".expression-editor-main");
 const expressionSymbolsFilter = document.getElementById("expressionSymbolsFilter");
 const expressionSidebar = document.getElementById("expressionSidebar");
 const expressionHelp = document.getElementById("expressionHelp");
@@ -217,6 +225,8 @@ const MAX_ZOOM = 3;
 const SUPPORTED_LANGS = new Set(["it", "en"]);
 const CHART_SERIES_PALETTE = ["#0e7ac4", "#e67e22", "#27ae60", "#8e44ad", "#c0392b", "#16a085"];
 const RECENT_MODELS_STORAGE_KEY = "stgraphx.recentModels.v1";
+const MODEL_CLIPBOARD_STORAGE_KEY = "stgraphx.modelClipboard.v1";
+const MODEL_CLIPBOARD_PREFIX = "STGraphX clipboard v1\n";
 const MAX_RECENT_MODELS = 8;
 const NODE_FILL_COLOR_PRESETS = [
   { key: "default", value: "" },
@@ -306,6 +316,80 @@ function serializeAutoNullableNumber(value) {
   }
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : "auto";
+}
+
+function serializeModelClipboardPayload(payload) {
+  return `${MODEL_CLIPBOARD_PREFIX}${JSON.stringify({
+    type: "stgraphx-model-clipboard",
+    version: 1,
+    payload,
+  })}`;
+}
+
+function parseModelClipboardPayload(raw) {
+  const text = String(raw ?? "");
+  if (!text.startsWith(MODEL_CLIPBOARD_PREFIX)) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(text.slice(MODEL_CLIPBOARD_PREFIX.length));
+    const payload = parsed?.payload;
+    if (
+      parsed?.type !== "stgraphx-model-clipboard"
+      || parsed?.version !== 1
+      || !payload
+      || !Array.isArray(payload.nodes)
+      || !Array.isArray(payload.edges)
+    ) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function persistSharedModelClipboard(raw) {
+  try {
+    window.localStorage.setItem(MODEL_CLIPBOARD_STORAGE_KEY, raw);
+  } catch {}
+  try {
+    globalThis.STGraphXPlatform?.writeClipboardText?.(raw);
+  } catch {}
+}
+
+function readSharedModelClipboardRaw() {
+  try {
+    const platformText = globalThis.STGraphXPlatform?.readClipboardText?.();
+    if (parseModelClipboardPayload(platformText)) {
+      return String(platformText);
+    }
+  } catch {}
+  try {
+    const stored = window.localStorage.getItem(MODEL_CLIPBOARD_STORAGE_KEY);
+    if (parseModelClipboardPayload(stored)) {
+      return String(stored);
+    }
+  } catch {}
+  return "";
+}
+
+function syncClipboardFromSharedSource() {
+  const raw = readSharedModelClipboardRaw();
+  if (!raw) {
+    return false;
+  }
+  if (raw === clipboard.signature && clipboard.data) {
+    return true;
+  }
+  const payload = parseModelClipboardPayload(raw);
+  if (!payload || !Array.isArray(payload.nodes) || payload.nodes.length === 0) {
+    return false;
+  }
+  clipboard.data = deepClone(payload);
+  clipboard.pasteCount = 0;
+  clipboard.signature = raw;
+  return true;
 }
 
 let nodeCounter = 1;
@@ -412,6 +496,7 @@ const history = {
 const clipboard = {
   data: null,
   pasteCount: 0,
+  signature: "",
 };
 
 const defs = document.createElementNS(SVG_NS, "defs");
@@ -1339,11 +1424,12 @@ function localizeExpressionErrorMessage(message) {
 
 function validateExpressionDraft(value, fieldKey = null) {
   const text = String(value ?? "");
+  const modalNode = ui.expressionEditor?.nodeId ? getNodeById(ui.expressionEditor.nodeId) : null;
+  const node = modalNode || selectedNodeForSidebar();
   const modalMeta = ui.expressionEditor ? expressionEditorMeta() : null;
-  const meta = modalMeta || (fieldKey ? expressionFieldMeta(fieldKey) : null);
-  const node = modalMeta
-    ? getNodeById(ui.expressionEditor.nodeId)
-    : selectedNodeForSidebar();
+  const meta = fieldKey
+    ? expressionFieldMeta(fieldKey, node)
+    : (modalMeta || null);
   if (!text.trim()) {
     if (graph.execution.strictDefinitions && meta && node) {
       if (meta.key === "initial" && isStateNode(node)) {
@@ -1584,7 +1670,34 @@ function expressionEditorMeta() {
     return null;
   }
   const node = getNodeById(ui.expressionEditor.nodeId);
-  return expressionFieldMeta(ui.expressionEditor.fieldKey, node);
+  return expressionFieldMeta(currentExpressionEditorFieldKey(), node);
+}
+
+function currentExpressionEditorFieldKey() {
+  if (!ui.expressionEditor) {
+    return "value";
+  }
+  if (ui.expressionEditor.activeEditor === "initial" && !expressionStateInitialBlock?.classList.contains("hidden")) {
+    return "initial";
+  }
+  return ui.expressionEditor.fieldKey;
+}
+
+function activeExpressionEditorInput() {
+  return currentExpressionEditorFieldKey() === "initial" ? expressionStateInitialInput : expressionEditorTextarea;
+}
+
+function activeExpressionEditorHighlight() {
+  return currentExpressionEditorFieldKey() === "initial" ? expressionStateInitialHighlight : expressionEditorHighlight;
+}
+
+function setActiveExpressionEditor(editorKey) {
+  if (!ui.expressionEditor) {
+    return;
+  }
+  ui.expressionEditor.activeEditor = editorKey === "initial" ? "initial" : "main";
+  renderExpressionHighlight();
+  renderExpressionAutocomplete();
 }
 
 function effectiveExpressionEditorFieldForNode(node, preferredFieldKey) {
@@ -1621,23 +1734,42 @@ function syncExpressionEditorToSelectedNode() {
   }
   ui.expressionEditor.nodeId = selectedNode.id;
   ui.expressionEditor.fieldKey = meta.key;
-  ui.expressionEditor.baseTitle = meta.title;
+  ui.expressionEditor.baseTitle = isStateNode(selectedNode) ? t("label.state") : meta.title;
   ui.expressionEditor.initialValue = meta.value;
+  ui.expressionEditor.secondaryInitialValue = isStateNode(selectedNode)
+    ? String(selectedNode.initialStateExpression ?? "")
+    : "";
   ui.expressionEditor.syntaxOk = true;
-  expressionEditorTitle.textContent = meta.title;
+  expressionEditorTitle.textContent = ui.expressionEditor.baseTitle;
   expressionEditorTextarea.value = meta.value;
+  if (expressionStateInitialInput) {
+    expressionStateInitialInput.value = isStateNode(selectedNode) ? String(selectedNode.initialStateExpression ?? "") : "";
+  }
   if (expressionDescriptionInput) {
     expressionDescriptionInput.value = getNodeDescription(selectedNode);
   }
   if (expressionFormulaNotesInput) {
     expressionFormulaNotesInput.value = getNodeFormulaNotes(selectedNode);
   }
+  syncExpressionEditorFormulaNotes();
   refreshExpressionEditorValidation();
 }
 
 function syncExpressionEditorFormulaNotes() {
   const node = ui.expressionEditor?.nodeId ? getNodeById(ui.expressionEditor.nodeId) : null;
   const visible = Boolean(node && ui.expressionEditor?.fieldKey !== "__custom__");
+  const stateVisible = Boolean(visible && node && isStateNode(node));
+  if (!stateVisible && ui.expressionEditor) {
+    ui.expressionEditor.activeEditor = "main";
+  }
+  expressionStateInitialBlock?.classList.toggle("hidden", !stateVisible);
+  expressionStateTransitionHead?.classList.toggle("hidden", !stateVisible);
+  if (expressionStateInitialInput) {
+    expressionStateInitialInput.value = stateVisible ? String(node.initialStateExpression ?? "") : "";
+    expressionStateInitialInput.disabled = !stateVisible || isExecutionFrozen();
+  }
+  hideExpressionStatus(expressionStateInitialStatus);
+  hideExpressionStatus(expressionStateTransitionStatus);
   expressionDescriptionBox?.classList.toggle("hidden", !visible);
   expressionFormulaNotesBox?.classList.toggle("hidden", !visible);
   if (expressionDescriptionInput) {
@@ -1648,6 +1780,8 @@ function syncExpressionEditorFormulaNotes() {
     expressionFormulaNotesInput.value = visible ? getNodeFormulaNotes(node) : "";
     expressionFormulaNotesInput.disabled = !visible || isExecutionFrozen();
   }
+  expressionEditorCard?.classList.toggle("state-node-editor", stateVisible);
+  expressionEditorMain?.classList.toggle("state-node-editor", stateVisible);
 }
 
 function expressionDocMap() {
@@ -1941,8 +2075,14 @@ function expressionEditorHasUnsavedChanges() {
   return Boolean(
     ui.expressionEditor
     && ui.expressionEditor.fieldKey !== "__custom__"
-    && expressionEditorTextarea
-    && expressionEditorTextarea.value !== String(ui.expressionEditor.initialValue ?? ""),
+    && (
+      (expressionEditorTextarea && expressionEditorTextarea.value !== String(ui.expressionEditor.initialValue ?? ""))
+      || (
+        expressionStateInitialInput
+        && !expressionStateInitialBlock?.classList.contains("hidden")
+        && expressionStateInitialInput.value !== String(ui.expressionEditor.secondaryInitialValue ?? "")
+      )
+    ),
   );
 }
 
@@ -2213,12 +2353,12 @@ function expressionBracketStateMap(text, caret) {
   return { active, unmatched };
 }
 
-function renderExpressionHighlight() {
-  if (!expressionEditorHighlight || !expressionEditorTextarea) {
+function renderExpressionHighlightFor(inputEl, highlightEl) {
+  if (!highlightEl || !inputEl) {
     return;
   }
-  const text = expressionEditorTextarea.value || "";
-  const caret = expressionEditorTextarea.selectionStart ?? 0;
+  const text = inputEl.value || "";
+  const caret = inputEl.selectionStart ?? 0;
   const bracketState = expressionBracketStateMap(text, caret);
   const catalogMap = new Map(expressionCatalogForEditor().map((entry) => [entry.name, entry]));
   let out = "";
@@ -2301,10 +2441,14 @@ function renderExpressionHighlight() {
     i += 1;
   }
 
-  expressionEditorHighlight.innerHTML = `${out || " "}\n`;
-  expressionEditorHighlight.classList.toggle("invalid", expressionEditorTextarea.classList.contains("invalid"));
-  expressionEditorHighlight.scrollTop = expressionEditorTextarea.scrollTop;
-  expressionEditorHighlight.scrollLeft = expressionEditorTextarea.scrollLeft;
+  highlightEl.innerHTML = `${out || " "}\n`;
+  highlightEl.classList.toggle("invalid", inputEl.classList.contains("invalid"));
+  highlightEl.scrollTop = inputEl.scrollTop;
+  highlightEl.scrollLeft = inputEl.scrollLeft;
+}
+
+function renderExpressionHighlight() {
+  renderExpressionHighlightFor(activeExpressionEditorInput(), activeExpressionEditorHighlight());
 }
 
 function setExpressionHelp(entry = null) {
@@ -2348,22 +2492,22 @@ function expressionValuePreviewForEntry(entry) {
 
   if (entry.kind === "variable") {
     if (entry.name === "this" && node && isStateNode(node)) {
-      const selfValue = node.computedValue;
-      if (selfValue == null) {
-        return { text: t("expr.preview.unavailableState"), error: true };
+      const currentValueResult = resolveStatePreviewCurrentValue(node, previewState);
+      if (!currentValueResult.ok) {
+        return { text: currentValueResult.message || t("expr.preview.unavailableState"), error: true };
       }
       return {
-        text: summarizeExpressionPreviewValue(selfValue),
-        typeLabel: describeExpressionPreviewShape(selfValue),
+        text: summarizeExpressionPreviewValue(currentValueResult.value),
+        typeLabel: describeExpressionPreviewShape(currentValueResult.value),
         error: false,
       };
     }
     if (entry.name === "self" && node) {
       let selfValue = node.computedValue;
       if (selfValue == null && isStateNode(node)) {
-        const initialPreview = evaluateInitialStatePreviewValue(node, previewState.globals, previewState.model);
-        if (initialPreview.ok) {
-          selfValue = initialPreview.value;
+        const currentValueResult = resolveStatePreviewCurrentValue(node, previewState);
+        if (currentValueResult.ok) {
+          selfValue = currentValueResult.value;
         }
       }
       if (selfValue == null) {
@@ -2395,7 +2539,8 @@ function expressionValuePreviewForEntry(entry) {
 }
 
 function renderExpressionAutocomplete() {
-  if (!expressionEditorTextarea) {
+  const inputEl = activeExpressionEditorInput();
+  if (!inputEl) {
     return;
   }
   if (!ui.expressionEditor) {
@@ -2403,9 +2548,9 @@ function renderExpressionAutocomplete() {
     return;
   }
 
-  const caret = expressionEditorTextarea.selectionStart ?? 0;
-  const tokenInfo = identifierPrefixAtCaret(expressionEditorTextarea.value, caret);
-  const exactToken = identifierAtCaret(expressionEditorTextarea.value, caret);
+  const caret = inputEl.selectionStart ?? 0;
+  const tokenInfo = identifierPrefixAtCaret(inputEl.value, caret);
+  const exactToken = identifierAtCaret(inputEl.value, caret);
   const allEntries = expressionCatalogForEditor();
   ui.expressionEditor.catalog = allEntries;
   ui.expressionEditor.autoFilter = tokenInfo?.prefix || exactToken || "";
@@ -2455,7 +2600,8 @@ function renderExpressionAutocomplete() {
 }
 
 function insertSelectedLibraryEntry() {
-  if (!ui.expressionEditor || !expressionEditorTextarea) {
+  const inputEl = activeExpressionEditorInput();
+  if (!ui.expressionEditor || !inputEl) {
     return false;
   }
   const selectedName = String(ui.expressionEditor.librarySelectedName || "").trim();
@@ -2467,17 +2613,17 @@ function insertSelectedLibraryEntry() {
     return false;
   }
   const replacement = entry.insertText || entry.name;
-  const caret = expressionEditorTextarea.selectionStart ?? 0;
-  const tokenInfo = identifierPrefixAtCaret(expressionEditorTextarea.value, caret);
-  const tokenAtCaret = identifierAtCaret(expressionEditorTextarea.value, caret);
+  const caret = inputEl.selectionStart ?? 0;
+  const tokenInfo = identifierPrefixAtCaret(inputEl.value, caret);
+  const tokenAtCaret = identifierAtCaret(inputEl.value, caret);
   if (tokenInfo && (tokenInfo.prefix || tokenAtCaret)) {
     const tokenEnd = tokenInfo.end + Math.max(0, tokenAtCaret.length - tokenInfo.prefix.length);
-    const before = expressionEditorTextarea.value.slice(0, tokenInfo.start);
-    const after = expressionEditorTextarea.value.slice(tokenEnd);
-    expressionEditorTextarea.value = `${before}${replacement}${after}`;
+    const before = inputEl.value.slice(0, tokenInfo.start);
+    const after = inputEl.value.slice(tokenEnd);
+    inputEl.value = `${before}${replacement}${after}`;
     const nextCaret = tokenInfo.start + (entry.cursorOffset ?? replacement.length);
-    expressionEditorTextarea.focus();
-    expressionEditorTextarea.setSelectionRange(nextCaret, nextCaret);
+    inputEl.focus();
+    inputEl.setSelectionRange(nextCaret, nextCaret);
   } else {
     insertExpressionSnippet(replacement, entry.cursorOffset ?? replacement.length);
   }
@@ -2486,17 +2632,18 @@ function insertSelectedLibraryEntry() {
 }
 
 function insertExpressionSnippet(snippet, cursorOffset = null) {
-  if (!expressionEditorTextarea) {
+  const inputEl = activeExpressionEditorInput();
+  if (!inputEl) {
     return false;
   }
-  const value = expressionEditorTextarea.value;
-  const start = expressionEditorTextarea.selectionStart ?? 0;
-  const end = expressionEditorTextarea.selectionEnd ?? start;
+  const value = inputEl.value;
+  const start = inputEl.selectionStart ?? 0;
+  const end = inputEl.selectionEnd ?? start;
   const text = String(snippet ?? "");
-  expressionEditorTextarea.value = `${value.slice(0, start)}${text}${value.slice(end)}`;
+  inputEl.value = `${value.slice(0, start)}${text}${value.slice(end)}`;
   const caret = start + (cursorOffset == null ? text.length : cursorOffset);
-  expressionEditorTextarea.focus();
-  expressionEditorTextarea.setSelectionRange(caret, caret);
+  inputEl.focus();
+  inputEl.setSelectionRange(caret, caret);
   refreshExpressionEditorValidation();
   return true;
 }
@@ -2648,7 +2795,29 @@ function evaluateInitialStatePreviewValue(node, globals, model = graph) {
         context[depNode.name] = depNode.computedValue;
       }
     });
-  return semantics.evaluateValueExpression(String(node.initialStateExpression ?? ""), context);
+  const source = (
+    ui.expressionEditor
+    && ui.expressionEditor.nodeId === node.id
+    && !expressionStateInitialBlock?.classList.contains("hidden")
+    && expressionStateInitialInput
+  )
+    ? String(expressionStateInitialInput.value ?? "")
+    : String(node.initialStateExpression ?? "");
+  return semantics.evaluateValueExpression(source, context);
+}
+
+function resolveStatePreviewCurrentValue(node, previewState) {
+  if (!node || !isStateNode(node)) {
+    return { ok: false };
+  }
+  const initialPreview = evaluateInitialStatePreviewValue(node, previewState.globals, previewState.model);
+  if (initialPreview.ok) {
+    return initialPreview;
+  }
+  if (node.computedValue != null) {
+    return { ok: true, value: node.computedValue };
+  }
+  return { ok: false, message: initialPreview.message || t("expr.preview.unavailableState") };
 }
 
 function buildExpressionPreviewEvaluation() {
@@ -2659,43 +2828,57 @@ function buildExpressionPreviewEvaluation() {
   if (!source.trim()) {
     return { ok: true, empty: true, value: null };
   }
-  const meta = expressionEditorMeta();
+  const editorNode = ui.expressionEditor.nodeId ? getNodeById(ui.expressionEditor.nodeId) : null;
+  const meta = (editorNode && isStateNode(editorNode))
+    ? expressionFieldMeta("value", editorNode)
+    : expressionEditorMeta();
   const previewState = getExpressionPreviewInitializationState();
   const { context, node } = buildExpressionPreviewBaseContext(previewState, meta);
 
   const isStateTransition = Boolean(meta?.key === "value" && node && isStateNode(node));
   if (isStateTransition) {
-    let selfValue = node.computedValue;
-    if (selfValue == null) {
-      const initialPreview = evaluateInitialStatePreviewValue(node, previewState.globals, previewState.model);
-      if (initialPreview.ok) {
-        selfValue = initialPreview.value;
-      }
+    const currentValueResult = resolveStatePreviewCurrentValue(node, previewState);
+    if (!currentValueResult.ok) {
+      return { ok: false, reason: "runtime", message: currentValueResult.message || t("expr.preview.unavailableState") };
     }
-    if (selfValue == null) {
-      return { ok: false, reason: "runtime", message: t("expr.preview.unavailableState") };
-    }
+    const selfValue = currentValueResult.value;
     context.__self = selfValue;
     if (String(source).includes("integral(")) {
       const derivativeList = semantics.evaluateIntegralDerivativeList(source, context, {
         allowThisAlias: true,
       });
       if (!derivativeList.ok) {
-        return derivativeList;
+        return {
+          ...derivativeList,
+          stateTransition: true,
+          currentValue: selfValue,
+        };
       }
       const dt = Number(graph.execution.dt);
       const integralValues = (derivativeList.value || []).map((derivativeValue) => addTensorValues(selfValue, scaleTensorValue(derivativeValue, dt)));
-      return semantics.evaluateStateTransitionExpressionWithIntegralValues(
+      const nextValueResult = semantics.evaluateStateTransitionExpressionWithIntegralValues(
         source,
         context,
         integralValues,
         { allowThisAlias: true },
       );
+      return {
+        ...nextValueResult,
+        stateTransition: true,
+        currentValue: selfValue,
+        nextValue: nextValueResult.ok ? nextValueResult.value : null,
+      };
     }
-    return semantics.evaluateValueExpression(source, context, {
+    const nextValueResult = semantics.evaluateValueExpression(source, context, {
       allowThisAlias: true,
       allowIntegral: true,
     });
+    return {
+      ...nextValueResult,
+      stateTransition: true,
+      currentValue: selfValue,
+      nextValue: nextValueResult.ok ? nextValueResult.value : null,
+    };
   }
   return semantics.evaluateValueExpression(source, context);
 }
@@ -2708,6 +2891,43 @@ function refreshExpressionPreviewNow() {
   const result = buildExpressionPreviewEvaluation();
   if (!result || result.empty) {
     setExpressionPreviewState(t("expr.preview.empty"));
+    return;
+  }
+  if (result.stateTransition) {
+    const formatStatePreviewBlock = (label, value) => {
+      const shape = describeExpressionPreviewShape(value);
+      const summary = summarizeExpressionPreviewValue(value);
+      const lines = [`${label} (${shape}):`];
+      let redundantSummary = summary === shape;
+      if (Array.isArray(value) && !redundantSummary) {
+        const isMatrix =
+          value.length > 0 &&
+          value.every((row) => Array.isArray(row)) &&
+          value.every((row) => row.length === value[0].length);
+        if (isMatrix) {
+          redundantSummary = summary === t("text.matrixSummary", { rows: value.length, cols: value[0]?.length ?? 0 });
+        } else if (value.every((item) => !Array.isArray(item))) {
+          redundantSummary = summary === t("text.vectorSummary", { size: value.length });
+        }
+      }
+      if (!redundantSummary) {
+        lines.push(summary);
+      }
+      return lines;
+    };
+    const formatStateErrorBlock = (label, message) => [
+      `${label}:`,
+      t("expr.preview.error", { message }),
+    ];
+    const currentBlock = formatStatePreviewBlock(t("expr.preview.currentValue"), result.currentValue);
+    if (!result.ok) {
+      const msg = result.message ? localizeExpressionErrorMessage(result.message) : t(`error.evalReason.${result.reason || "runtime"}`);
+      const nextBlock = formatStateErrorBlock(t("expr.preview.nextValue"), msg);
+      setExpressionPreviewState(`${currentBlock.join("\n")}\n\n${nextBlock.join("\n")}`, "error");
+      return;
+    }
+    const nextBlock = formatStatePreviewBlock(t("expr.preview.nextValue"), result.nextValue);
+    setExpressionPreviewState(`${currentBlock.join("\n")}\n\n${nextBlock.join("\n")}`);
     return;
   }
   if (!result.ok) {
@@ -2744,11 +2964,16 @@ function closeExpressionEditor() {
     expressionEditorTextarea.value = "";
     expressionEditorTextarea.classList.remove("invalid");
   }
+  if (expressionStateInitialInput) {
+    expressionStateInitialInput.value = "";
+    expressionStateInitialInput.classList.remove("invalid");
+  }
   if (expressionEditorHighlight) {
     expressionEditorHighlight.innerHTML = "";
     expressionEditorHighlight.classList.remove("invalid");
   }
   expressionEditorSurface?.classList.remove("invalid");
+  hideExpressionStatus(expressionStateTransitionStatus);
   if (expressionLibrary) {
     expressionLibrary.innerHTML = "";
     expressionLibrary.classList.add("hidden");
@@ -2759,6 +2984,7 @@ function closeExpressionEditor() {
   expressionSidebar?.classList.remove("hidden");
   setExpressionHelp(null);
   hideExpressionStatus(expressionEditorStatus);
+  hideExpressionStatus(expressionStateInitialStatus);
   clearExpressionPreviewTimer();
   setExpressionPreviewState(t("expr.preview.empty"));
   syncExpressionEditorFormulaNotes();
@@ -2771,25 +2997,49 @@ function refreshExpressionEditorValidation() {
     return { ok: true, empty: true };
   }
   if (expressionEditorTitle) {
-    const dirty = expressionEditorTextarea.value !== String(ui.expressionEditor.initialValue ?? "");
+    const dirtyMain = expressionEditorTextarea.value !== String(ui.expressionEditor.initialValue ?? "");
+    const dirtyInitial = Boolean(
+      expressionStateInitialInput
+      && !expressionStateInitialBlock?.classList.contains("hidden")
+      && expressionStateInitialInput.value !== String(ui.expressionEditor.secondaryInitialValue ?? ""),
+    );
+    const dirty = dirtyMain || dirtyInitial;
     expressionEditorTitle.textContent = `${ui.expressionEditor.baseTitle}${dirty ? " *" : ""}`;
   }
-  const syntaxResult = updateExpressionFieldState(
-    expressionEditorTextarea,
-    expressionEditorStatus,
-    expressionEditorTextarea.value,
-    true,
-    null,
-  );
+  const mainFieldKey = ui.expressionEditor.fieldKey === "__custom__" ? null : "value";
+  const syntaxResult = validateExpressionDraft(expressionEditorTextarea.value, mainFieldKey);
+  expressionEditorTextarea.classList.toggle("invalid", !syntaxResult.ok);
+  showExpressionStatus(expressionEditorStatus, syntaxResult, false);
   expressionEditorSurface?.classList.toggle("invalid", !syntaxResult.ok);
-  expressionEditorApplyBtn.disabled = !syntaxResult.ok;
-  if (expressionEditorSwitchApplyBtn && expressionEditorSwitchModal && !expressionEditorSwitchModal.classList.contains("hidden")) {
-    expressionEditorSwitchApplyBtn.disabled = !syntaxResult.ok;
+  let initialSyntaxOk = true;
+  if (expressionStateInitialInput && !expressionStateInitialBlock?.classList.contains("hidden")) {
+    const initialResult = updateExpressionFieldState(
+      expressionStateInitialInput,
+      expressionStateInitialStatus,
+      expressionStateInitialInput.value,
+      true,
+      "initial",
+    );
+    initialSyntaxOk = initialResult.ok;
+  } else {
+    hideExpressionStatus(expressionStateInitialStatus);
   }
-  ui.expressionEditor.syntaxOk = syntaxResult.ok;
+  expressionEditorApplyBtn.disabled = !syntaxResult.ok || !initialSyntaxOk;
+  if (expressionEditorSwitchApplyBtn && expressionEditorSwitchModal && !expressionEditorSwitchModal.classList.contains("hidden")) {
+    expressionEditorSwitchApplyBtn.disabled = !syntaxResult.ok || !initialSyntaxOk;
+  }
+  ui.expressionEditor.syntaxOk = syntaxResult.ok && initialSyntaxOk;
   renderExpressionHighlight();
+  if (expressionStateInitialInput && expressionStateInitialHighlight && !expressionStateInitialBlock?.classList.contains("hidden")) {
+    renderExpressionHighlightFor(expressionStateInitialInput, expressionStateInitialHighlight);
+  }
   renderExpressionAutocomplete();
   scheduleExpressionPreviewRefresh(syntaxResult.ok ? 180 : 0);
+  showExpressionStatus(
+    expressionStateTransitionStatus,
+    syntaxResult,
+    true,
+  );
   return syntaxResult;
 }
 
@@ -2874,20 +3124,33 @@ function openExpressionEditor(fieldKey) {
   }
   ui.expressionEditor = {
     nodeId: node.id,
-    fieldKey: meta.key,
+    fieldKey: isStateNode(node) ? "value" : meta.key,
     syntaxOk: true,
-    baseTitle: meta.title,
-    initialValue: meta.value,
+    baseTitle: isStateNode(node) ? t("label.state") : meta.title,
+    initialValue: isStateNode(node) ? String(node.valueExpression ?? "") : meta.value,
+    secondaryInitialValue: isStateNode(node) ? String(node.initialStateExpression ?? "") : "",
     librarySelectedName: "",
+    preferredFocus: fieldKey === "initial" ? "initial" : "main",
+    activeEditor: fieldKey === "initial" ? "initial" : "main",
   };
-  expressionEditorTitle.textContent = meta.title;
-  expressionEditorTextarea.value = meta.value;
+  if (!isStateNode(node)) {
+    expressionStateInitialBlock?.classList.add("hidden");
+    expressionStateTransitionHead?.classList.add("hidden");
+  }
+  expressionEditorTitle.textContent = ui.expressionEditor.baseTitle;
+  expressionEditorTextarea.value = String(ui.expressionEditor.initialValue ?? "");
   expressionEditorModal.classList.remove("hidden");
   resetExpressionEditorCardPosition();
   syncExpressionEditorFormulaNotes();
+  setActiveExpressionEditor(isStateNode(node) && fieldKey === "initial" ? "initial" : "main");
   refreshExpressionEditorValidation();
-  expressionEditorTextarea.focus();
-  expressionEditorTextarea.select();
+  if (isStateNode(node) && fieldKey === "initial" && expressionStateInitialInput) {
+    expressionStateInitialInput.focus();
+    expressionStateInitialInput.select();
+  } else {
+    expressionEditorTextarea.focus();
+    expressionEditorTextarea.select();
+  }
 }
 
 function openNodePrimaryEditor(node) {
@@ -2922,6 +3185,8 @@ function openCustomExpressionEditor(title, initialValue, onApply) {
     onApplyCustom: typeof onApply === "function" ? onApply : null,
     librarySelectedName: "",
   };
+  expressionStateInitialBlock?.classList.add("hidden");
+  expressionStateTransitionHead?.classList.add("hidden");
   expressionEditorTitle.textContent = String(title ?? "");
   expressionEditorTextarea.value = String(initialValue ?? "");
   expressionEditorModal.classList.remove("hidden");
@@ -2958,17 +3223,32 @@ function commitExpressionEditorValue(closeAfter = true) {
     return false;
   }
   const nextValue = expressionEditorTextarea.value;
+  const nextInitialValue = expressionStateInitialInput && !expressionStateInitialBlock?.classList.contains("hidden")
+    ? expressionStateInitialInput.value
+    : null;
   runAction(() => {
     meta.setValue(nextValue);
+    if (nextInitialValue != null && isStateNode(node)) {
+      node.initialStateExpression = String(nextInitialValue ?? "");
+    }
   });
   if (meta.inputEl && document.activeElement !== meta.inputEl) {
     meta.inputEl.value = nextValue;
   }
   updateExpressionFieldState(meta.inputEl, meta.statusEl, nextValue, false, meta.key);
+  if (nextInitialValue != null) {
+    if (nodeInitialStateInput && document.activeElement !== nodeInitialStateInput) {
+      nodeInitialStateInput.value = nextInitialValue;
+    }
+    updateExpressionFieldState(nodeInitialStateInput, nodeInitialStateStatus, nextInitialValue, false, "initial");
+  }
   if (closeAfter) {
     closeExpressionEditor();
   } else {
     ui.expressionEditor.initialValue = nextValue;
+    if (nextInitialValue != null) {
+      ui.expressionEditor.secondaryInitialValue = nextInitialValue;
+    }
     ui.expressionEditor.baseTitle = meta.title;
     refreshExpressionEditorValidation();
   }
@@ -3078,6 +3358,19 @@ function setStatusKey(key, vars = null) {
 function displayFileName() {
   return currentFileName || t("file.unnamed");
 }
+
+window.__stgraphxGetClosePromptData = function __stgraphxGetClosePromptData() {
+  return {
+    hasUnsaved: hasUnsavedChanges(),
+    message: t("confirm.closeApp.save"),
+    detail: t("confirm.closeApp.detail", { name: displayFileName() }),
+    buttons: [t("action.save"), t("action.discard"), t("action.cancel")],
+  };
+};
+
+window.__stgraphxSaveBeforeClose = async function __stgraphxSaveBeforeClose() {
+  return saveGraphJson(false);
+};
 
 function updateFileStatusLabel(dirty = dirtySinceLastSave) {
   if (!fileStatusText) {
@@ -4530,9 +4823,10 @@ function runAction(mutator) {
 
 function updateHistoryButtons() {
   const frozen = isExecutionFrozen();
+  const hasPasteData = Boolean(clipboard.data || syncClipboardFromSharedSource());
   undoBtn.disabled = frozen || history.undo.length === 0;
   redoBtn.disabled = frozen || history.redo.length === 0;
-  pasteBtn.disabled = frozen || !clipboard.data;
+  pasteBtn.disabled = frozen || !hasPasteData;
 }
 
 function hasClipboardSelection() {
@@ -4708,8 +5002,11 @@ function copySelectionToClipboard() {
     setStatusKey("status.clipboardNothingToCopy");
     return false;
   }
+  const raw = serializeModelClipboardPayload(payload);
   clipboard.data = deepClone(payload);
   clipboard.pasteCount = 0;
+  clipboard.signature = raw;
+  persistSharedModelClipboard(raw);
   updateHistoryButtons();
   setStatusKey("status.clipboardCopied", { count: payload.nodes.length });
   return true;
@@ -4725,6 +5022,7 @@ function cutSelectionToClipboard() {
 }
 
 function pasteFromClipboard() {
+  syncClipboardFromSharedSource();
   if (!clipboard.data || !Array.isArray(clipboard.data.nodes) || clipboard.data.nodes.length === 0) {
     setStatusKey("status.clipboardEmpty");
     return;
@@ -5294,9 +5592,6 @@ function refreshSidebar() {
     if (nodeInitialStateInput) {
       nodeInitialStateRow?.classList.toggle("hidden", !stateNode || submodelNode);
       nodeInitialStateInput.classList.toggle("hidden", !stateNode || submodelNode);
-      if (editNodeInitialStateBtn) {
-        editNodeInitialStateBtn.classList.toggle("hidden", !stateNode || submodelNode);
-      }
       if (nodeInitialStateStatus) {
         nodeInitialStateStatus.classList.toggle("hidden", !stateNode || submodelNode);
       }
@@ -9993,13 +10288,10 @@ if (editNodeValueExprBtn) {
   });
 }
 
-if (editNodeInitialStateBtn) {
-  editNodeInitialStateBtn.addEventListener("click", () => {
-    openExpressionEditor("initial");
-  });
-}
-
 if (expressionEditorTextarea) {
+  expressionEditorTextarea.addEventListener("focus", () => {
+    setActiveExpressionEditor("main");
+  });
   expressionEditorTextarea.addEventListener("input", () => {
     refreshExpressionEditorValidation();
   });
@@ -10036,6 +10328,52 @@ if (expressionEditorTextarea) {
   });
   ["click", "keyup", "mouseup"].forEach((eventName) => {
     expressionEditorTextarea.addEventListener(eventName, () => {
+      renderExpressionHighlight();
+      renderExpressionAutocomplete();
+    });
+  });
+}
+
+if (expressionStateInitialInput) {
+  expressionStateInitialInput.addEventListener("focus", () => {
+    setActiveExpressionEditor("initial");
+  });
+  expressionStateInitialInput.addEventListener("input", () => {
+    refreshExpressionEditorValidation();
+  });
+  expressionStateInitialInput.addEventListener("scroll", () => {
+    renderExpressionHighlight();
+  });
+  expressionStateInitialInput.addEventListener("keydown", (evt) => {
+    if (evt.key === "ArrowDown" && evt.shiftKey) {
+      evt.preventDefault();
+      moveLibrarySelection(1);
+      return;
+    }
+    if (evt.key === "ArrowUp" && evt.shiftKey) {
+      evt.preventDefault();
+      moveLibrarySelection(-1);
+      return;
+    }
+    if (evt.key === "Enter" && evt.shiftKey && !evt.ctrlKey && !evt.metaKey) {
+      evt.preventDefault();
+      insertSelectedLibraryEntry();
+      return;
+    }
+    if (evt.key === "Tab") {
+      evt.preventDefault();
+      insertExpressionSnippet("\t");
+      refreshExpressionEditorValidation();
+      return;
+    }
+    if (evt.key === "Enter" && !evt.ctrlKey && !evt.metaKey) {
+      evt.preventDefault();
+      insertExpressionSnippet("\n");
+      refreshExpressionEditorValidation();
+    }
+  });
+  ["click", "keyup", "mouseup"].forEach((eventName) => {
+    expressionStateInitialInput.addEventListener(eventName, () => {
       renderExpressionHighlight();
       renderExpressionAutocomplete();
     });

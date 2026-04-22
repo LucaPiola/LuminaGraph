@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "modelTitle": "",
+  "modelProperties": [],
+  "nodeCounter": 18,
+  "edgeCounter": 16,
+  "widgetCounter": 13,
+  "textItemCounter": 5,
+  "execution": {
+    "t0": 0,
+    "dt": 1,
+    "t1": 200,
+    "delayMs": 1,
+    "decimals": 3,
+    "integrator": "euler",
+    "strictDefinitions": false
+  },
+  "nodes": [
+    {
+      "id": 3,
+      "name": "n",
+      "output": false,
+      "type": "parameter",
+      "x": 120,
+      "y": 80,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": "Lato della griglia quadrata del gioco della vita"
+        }
+      ],
+      "valueExpression": "30"
+    },
+    {
+      "id": 4,
+      "name": "x",
+      "output": true,
+      "type": "state",
+      "x": 300,
+      "y": 160,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": "Ambiente"
+        }
+      ],
+      "stateTransition": "if(this == 0 and array([n,n],rand()) < beta * neig / 8,\n  1,\n  if(this == 1 and array([n,n],rand()) < gamma,\n    2,\n    this\n  )\n)",
+      "initialState": "setAt(array([n,n],0),[randInt(n-1),randInt(n-1)],1)"
+    },
+    {
+      "id": 6,
+      "name": "neig",
+      "output": true,
+      "type": "algebraic",
+      "x": 300,
+      "y": 320,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": "Numero di vicini infetti per ogni agente"
+        }
+      ],
+      "input": false,
+      "valueExpression": "array(size(x),sum(neighbors(x==1,$0,$1,1,1)))"
+    },
+    {
+      "id": 13,
+      "name": "beta",
+      "output": false,
+      "type": "parameter",
+      "x": 120,
+      "y": 160,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": "Probabilita di contagio per vicino infetto"
+        }
+      ],
+      "valueExpression": "0.3"
+    },
+    {
+      "id": 14,
+      "name": "gamma",
+      "output": false,
+      "type": "parameter",
+      "x": 120,
+      "y": 240,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": "Probabilita di guarigione per passo"
+        }
+      ],
+      "valueExpression": "0.02"
+    }
+  ],
+  "edges": [
+    {
+      "id": 1,
+      "from": 3,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 3,
+      "from": 4,
+      "to": 6,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 4,
+      "from": 6,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 11,
+      "from": 13,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 12,
+      "from": 14,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    }
+  ],
+  "textItems": [],
+  "widgets": [
+    {
+      "id": 1,
+      "type": "matrix",
+      "customTitle": "",
+      "x": 720.744571225531,
+      "y": -121.6674584588003,
+      "width": 722.1565648121531,
+      "height": 755.5961676856126,
+      "minimized": false,
+      "outputOnly": true,
+      "showHistory": false,
+      "xMin": 0,
+      "xMax": 0,
+      "yMin": 0,
+      "yMax": 0,
+      "showGrid": true,
+      "legendPosition": "top-right",
+      "source": "x",
+      "showNumericValues": false,
+      "showIndices": false,
+      "autoFitCells": true,
+      "cellSize": 9,
+      "valueMin": 0,
+      "valueMax": 2,
+      "displayRows": null,
+      "displayCols": null,
+      "colorScheme": "heat",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "columns": [],
+      "xyPairs": []
+    }
+  ]
+}

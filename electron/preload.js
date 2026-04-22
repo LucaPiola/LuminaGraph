@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, clipboard } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
 
@@ -78,6 +78,12 @@ contextBridge.exposeInMainWorld('STGraphXPlatform', {
   },
   createDirectoryHandleFromDirectoryPath(directoryPath) {
     return createDirectoryHandle(String(directoryPath || ''));
+  },
+  readClipboardText() {
+    return clipboard.readText();
+  },
+  writeClipboardText(text) {
+    clipboard.writeText(typeof text === 'string' ? text : String(text ?? ''));
   },
   async showOpenFilePicker(options = {}) {
     const result = await ipcRenderer.invoke('stgraphx:show-open-dialog', {

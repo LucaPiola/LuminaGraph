@@ -1066,6 +1066,12 @@ button:disabled {
   min-width: 0;
 }
 
+.expr-inline-row textarea {
+  min-width: 0;
+  min-height: 52px;
+  resize: vertical;
+}
+
 .expr-edit-btn {
   margin-top: 0;
   white-space: nowrap;
@@ -1437,9 +1443,9 @@ button:disabled {
 
 .expression-editor-card {
   width: min(1120px, calc(100vw - 40px));
-  height: min(78vh, 760px);
+  height: min(84vh, 860px);
   min-width: 780px;
-  min-height: 420px;
+  min-height: 560px;
   max-width: calc(100vw - 20px);
   max-height: calc(100vh - 20px);
   position: absolute;
@@ -1811,10 +1817,64 @@ button:disabled {
 
 .expression-editor-main {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(220px, 1fr) auto;
   min-width: 0;
   min-height: 0;
   gap: 10px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.expression-editor-card.state-node-editor {
+  height: min(84vh, 860px);
+  min-height: 560px;
+}
+
+.expression-editor-main.state-node-editor {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.expression-editor-main > .expression-editor-surface:not(.expression-editor-surface-compact) {
+  min-height: 220px;
+}
+
+.expression-editor-main.state-node-editor > .expression-editor-surface:not(.expression-editor-surface-compact) {
+  min-height: 0;
+}
+
+.expression-state-initial {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.expression-state-initial.hidden,
+.expression-field-head.hidden {
+  display: none;
+}
+
+.expression-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.expr-status.inline {
+  margin: 0;
+  padding: 2px 8px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.expression-editor-surface-compact {
+  height: auto;
+}
+
+.expression-state-initial-input {
+  min-height: 42px;
+  resize: vertical;
 }
 
 .expression-main-docs {
@@ -1830,7 +1890,8 @@ button:disabled {
   gap: 8px;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .expression-symbols-filter {

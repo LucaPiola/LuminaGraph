@@ -1,6 +1,6 @@
 # STGraphX: readme
 
-_Luca Mari, versione 21 aprile 2026_
+_Luca Mari, versione 22 aprile 2026_
 
 ## Contesto
 
@@ -21,7 +21,7 @@ Applicazione JavaScript con doppia shell e logica condivisa:
 
 __Al momento implementati (senza librerie esterne!):__
 
-* editor per grafi orientati, con nodi di forme e colori diversi e tooltip, frecce spline, testi, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard, undo e redo, ...;
+* editor per grafi orientati, con nodi di forme e colori diversi e tooltip, frecce spline, testi, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard (anche condivisa tra instanze diverse), undo e redo, ...;
 * menu, menu contestuale e pannello di configurazione aggiornato dinamicamente, con tooltip;
 * gestione dei testi dell'interfaccia utente in italiano e inglese, con scelta via query string nella shell web (`?lang=it|en`) e via parametro `--lang=it|en` nella shell Electron;
 * gestione dei nodi algebrici, di stato, parametri e sottomodelli, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale); controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo sullo stato iniziale: solo espressioni locali o riferimenti a parametri; controllo del numero di cifre decimali visualizzate;

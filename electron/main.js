@@ -44,6 +44,60 @@ function createWindow() {
   win.once('ready-to-show', () => {
     win.show();
   });
+
+  let allowClose = false;
+  win.on('close', async (event) => {
+    if (allowClose) {
+      return;
+    }
+    event.preventDefault();
+    let closeData = { hasUnsaved: false };
+    try {
+      closeData = await win.webContents.executeJavaScript(
+        'window.__stgraphxGetClosePromptData ? window.__stgraphxGetClosePromptData() : ({ hasUnsaved: false })',
+        true,
+      );
+    } catch (_err) {
+      closeData = { hasUnsaved: false };
+    }
+    if (!closeData?.hasUnsaved) {
+      allowClose = true;
+      win.close();
+      return;
+    }
+    const choice = await dialog.showMessageBox(win, {
+      type: 'question',
+      buttons: Array.isArray(closeData.buttons) && closeData.buttons.length >= 3
+        ? closeData.buttons.slice(0, 3)
+        : ['Save', 'Discard', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+      message: closeData.message || 'There are unsaved changes. Save before closing?',
+      detail: closeData.detail || '',
+    });
+    if (choice.response === 0) {
+      let saved = false;
+      try {
+        saved = await win.webContents.executeJavaScript(
+          'window.__stgraphxSaveBeforeClose ? window.__stgraphxSaveBeforeClose() : false',
+          true,
+        );
+      } catch (_err) {
+        saved = false;
+      }
+      if (!saved) {
+        return;
+      }
+      allowClose = true;
+      win.close();
+      return;
+    }
+    if (choice.response === 1) {
+      allowClose = true;
+      win.close();
+    }
+  });
 }
 
 app.whenReady().then(() => {

@@ -248,13 +248,12 @@
               <label id="nodeInitialStateLabel" for="nodeInitialStateInput" data-i18n="label.initialState" data-title-i18n="tooltip.node.initialState"></label>
               <div id="nodeInitialStateRow" class="expr-inline-row">
                 <input id="nodeInitialStateInput" type="text" data-title-i18n="tooltip.node.initialState" />
-                <button id="editNodeInitialStateBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression"></button>
               </div>
               <div id="nodeInitialStateStatus" class="expr-status hidden"></div>
 
               <label id="nodeValueExprLabel" for="nodeValueExprInput" data-i18n="label.behaviorFunction" data-title-i18n="tooltip.node.expressionBehavior"></label>
               <div id="nodeValueExprRow" class="expr-inline-row">
-                <input id="nodeValueExprInput" type="text" data-title-i18n="tooltip.node.expressionBehavior" />
+                <textarea id="nodeValueExprInput" rows="2" data-title-i18n="tooltip.node.expressionBehavior"></textarea>
                 <button id="editNodeValueExprBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression"></button>
               </div>
               <div id="nodeValueExprStatus" class="expr-status hidden"></div>
@@ -364,6 +363,20 @@
         </div>
         <div class="expression-editor-layout">
           <div class="expression-editor-main">
+            <div id="expressionStateInitialBlock" class="expression-state-initial hidden">
+              <div class="expression-field-head">
+                <label for="expressionStateInitialInput" class="expression-preview-label" data-i18n="label.initialState" data-title-i18n="tooltip.node.initialState"></label>
+                <span id="expressionStateInitialStatus" class="expr-status inline hidden"></span>
+              </div>
+              <div class="expression-editor-surface expression-editor-surface-compact">
+                <pre id="expressionStateInitialHighlight" class="expression-editor-highlight" aria-hidden="true"></pre>
+                <textarea id="expressionStateInitialInput" class="expression-editor-textarea expression-state-initial-input" spellcheck="false" rows="1" data-title-i18n="tooltip.node.initialState"></textarea>
+              </div>
+            </div>
+            <div id="expressionStateTransitionHead" class="expression-field-head hidden">
+              <label id="expressionStateTransitionLabel" class="expression-preview-label" for="expressionEditorTextarea" data-i18n="label.stateTransition"></label>
+              <span id="expressionStateTransitionStatus" class="expr-status inline hidden"></span>
+            </div>
             <div class="expression-editor-surface">
               <pre id="expressionEditorHighlight" class="expression-editor-highlight" aria-hidden="true"></pre>
               <textarea id="expressionEditorTextarea" class="expression-editor-textarea" spellcheck="false"></textarea>
