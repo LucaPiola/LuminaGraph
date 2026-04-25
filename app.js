@@ -511,6 +511,7 @@ const ui = {
   expressionPreviewTimer: null,
   expressionEditorPendingSelectionAction: null,
   expressionPreviewInitCache: null,
+  analysisFocus: null,
 };
 
 const history = {
@@ -1634,7 +1635,7 @@ function nodeDefinitionIssueText(issue) {
 function collectExpressionIdentifierReferences(expression) {
   const src = String(expression ?? "");
   const refs = new Set();
-  const skipped = new Set(["true", "false", "null", "this", "self", "__self", "$i", "$value", "time", "t0", "t1", "dt"]);
+  const skipped = new Set(["true", "false", "null", "this", "self", "__self", "$i", "$j", "$value", "time", "t0", "t1", "dt"]);
   let i = 0;
   let mode = "code";
   while (i < src.length) {
@@ -1703,6 +1704,14 @@ function pureTimeConfigIssue(execution = graph.execution) {
   return "";
 }
 
+function pureTimedDelayIssue(execution = graph.execution) {
+  const delay = Number(execution?.delayMs);
+  if (!Number.isFinite(delay) || delay <= 0) {
+    return t("error.timeDelayInvalid");
+  }
+  return "";
+}
+
 function expressionReferencesForAnalysis(node, fieldKey = "value") {
   if (!node || isSubmodelNode(node)) {
     return new Set();
@@ -1711,6 +1720,68 @@ function expressionReferencesForAnalysis(node, fieldKey = "value") {
     ? String(node.initialStateExpression ?? "")
     : String(node.valueExpression ?? "");
   return collectExpressionIdentifierReferences(expr);
+}
+
+function submodelBindingReferences(node) {
+  const refs = new Map();
+  Object.entries(node?.inputBindings || {}).forEach(([inputName, expr]) => {
+    refs.set(String(inputName || "").trim(), collectExpressionIdentifierReferences(String(expr ?? "")));
+  });
+  return refs;
+}
+
+function detectNonStateCycles() {
+  const nodeById = new Map();
+  const adjacency = new Map();
+  graph.nodes
+    .filter((node) => isAlgebraicNode(node) || isSubmodelNode(node))
+    .forEach((node) => {
+      nodeById.set(node.id, node);
+      adjacency.set(node.id, []);
+    });
+  graph.edges.forEach((edge) => {
+    if (adjacency.has(edge.from) && adjacency.has(edge.to)) {
+      adjacency.get(edge.from).push(edge.to);
+    }
+  });
+
+  const visited = new Set();
+  const stack = [];
+  const inStack = new Set();
+  const found = new Map();
+
+  const visit = (nodeId) => {
+    visited.add(nodeId);
+    stack.push(nodeId);
+    inStack.add(nodeId);
+    (adjacency.get(nodeId) || []).forEach((nextId) => {
+      if (!visited.has(nextId)) {
+        visit(nextId);
+        return;
+      }
+      if (inStack.has(nextId)) {
+        const start = stack.indexOf(nextId);
+        const cycleIds = start >= 0 ? stack.slice(start) : [nextId];
+        const key = cycleIds.slice().sort((a, b) => a - b).join(",");
+        if (!found.has(key)) {
+          found.set(key, cycleIds);
+        }
+      }
+    });
+    stack.pop();
+    inStack.delete(nodeId);
+  };
+
+  [...adjacency.keys()].forEach((nodeId) => {
+    if (!visited.has(nodeId)) {
+      visit(nodeId);
+    }
+  });
+
+  return [...found.values()].map((cycleIds) => ({
+    ids: cycleIds,
+    names: cycleIds.map((id) => nodeById.get(id)?.name || String(id)),
+  }));
 }
 
 function stateTransitionPreviewForAnalysis(node, previewState) {
@@ -1817,14 +1888,117 @@ function pushAnalysisIssue(issues, severity, key, vars, target = null) {
   });
 }
 
+function isAnalysisFocusActive(targetType, targetId) {
+  const focus = ui.analysisFocus;
+  if (!focus || focus.type !== targetType || focus.id !== targetId) {
+    return false;
+  }
+  if (focus.expiresAt <= Date.now()) {
+    ui.analysisFocus = null;
+    return false;
+  }
+  return true;
+}
+
+function setAnalysisFocus(target) {
+  if (!target?.type || target.id == null) {
+    ui.analysisFocus = null;
+    return;
+  }
+  ui.analysisFocus = {
+    type: target.type,
+    id: target.id,
+    expiresAt: Date.now() + 1800,
+  };
+  window.setTimeout(() => {
+    if (!ui.analysisFocus) {
+      return;
+    }
+    if (ui.analysisFocus.type === target.type && ui.analysisFocus.id === target.id && ui.analysisFocus.expiresAt <= Date.now()) {
+      ui.analysisFocus = null;
+      render();
+    }
+  }, 1850);
+}
+
 function analyzeModelStaticIssues() {
   const issues = [];
   const timeIssue = pureTimeConfigIssue(graph.execution);
   if (timeIssue) {
     pushAnalysisIssue(issues, "error", "analysis.issue.invalidTimeConfig", { reason: timeIssue }, { type: "model" });
   }
+  const delayIssue = pureTimedDelayIssue(graph.execution);
+  if (delayIssue) {
+    pushAnalysisIssue(issues, "warning", "analysis.issue.invalidDelay", { reason: delayIssue }, { type: "model" });
+  }
 
   const nodeMap = buildNodeNameMap();
+  graph.edges.forEach((edge) => {
+    const fromNode = getNodeById(edge.from);
+    const toNode = getNodeById(edge.to);
+    if (fromNode && toNode) {
+      return;
+    }
+    pushAnalysisIssue(
+      issues,
+      "error",
+      "analysis.issue.danglingEdge",
+      { name: `${fromNode?.name || edge.from} -> ${toNode?.name || edge.to}` },
+      { type: "edge", id: edge.id, name: `${fromNode?.name || edge.from} -> ${toNode?.name || edge.to}` },
+    );
+  });
+  const edgeGroups = new Map();
+  graph.edges.forEach((edge) => {
+    const fromNode = getNodeById(edge.from);
+    const toNode = getNodeById(edge.to);
+    const signature = [
+      edge.from,
+      edge.to,
+      String(edge.sourcePort ?? "").trim(),
+      String(edge.targetPort ?? "").trim(),
+    ].join("|");
+    if (!edgeGroups.has(signature)) {
+      edgeGroups.set(signature, []);
+    }
+    edgeGroups.get(signature).push({ edge, fromNode, toNode });
+  });
+  edgeGroups.forEach((entries) => {
+    if (entries.length < 2) {
+      return;
+    }
+    entries.forEach(({ edge, fromNode, toNode }) => {
+      pushAnalysisIssue(
+        issues,
+        "warning",
+        "analysis.issue.duplicateEdge",
+        { name: `${fromNode?.name || edge.from} -> ${toNode?.name || edge.to}` },
+        { type: "edge", id: edge.id, name: `${fromNode?.name || edge.from} -> ${toNode?.name || edge.to}` },
+      );
+    });
+  });
+  graph.edges.forEach((edge) => {
+    if (edge.from !== edge.to) {
+      return;
+    }
+    const node = getNodeById(edge.from);
+    pushAnalysisIssue(
+      issues,
+      "warning",
+      "analysis.issue.selfLoop",
+      { name: `${node?.name || edge.from} -> ${node?.name || edge.from}` },
+      { type: "edge", id: edge.id, name: `${node?.name || edge.from} -> ${node?.name || edge.from}` },
+    );
+  });
+  detectNonStateCycles().forEach((cycle) => {
+    pushAnalysisIssue(
+      issues,
+      "error",
+      "analysis.issue.algebraicCycle",
+      { path: [...cycle.names, cycle.names[0]].join(" -> ") },
+      { type: "node", id: cycle.ids[0], name: cycle.names[0] },
+    );
+  });
+
   graph.nodes.forEach((node) => {
     const definitionIssue = validateNodeDefinition(node);
     if (!definitionIssue.ok) {
@@ -1838,6 +2012,101 @@ function analyzeModelStaticIssues() {
 
   graph.nodes.forEach((node) => {
     if (isSubmodelNode(node)) {
+      const incomingEdges = incomingEdgesForNode(node.id);
+      const incomingNameToEdges = new Map();
+      incomingEdges.forEach((edge) => {
+        const fromNode = getNodeById(edge.from);
+        if (!fromNode) {
+          return;
+        }
+        const list = incomingNameToEdges.get(fromNode.name) || [];
+        list.push(edge);
+        incomingNameToEdges.set(fromNode.name, list);
+      });
+      const availableInputs = new Set(getSubmodelEdgePortChoices(node, "target"));
+      const bindingRefs = submodelBindingReferences(node);
+      Object.entries(node.inputBindings || {}).forEach(([inputName, expr]) => {
+        const normalizedInput = String(inputName || "").trim();
+        const source = String(expr ?? "");
+        if (!source.trim()) {
+          return;
+        }
+        if (availableInputs.size > 0 && normalizedInput && !availableInputs.has(normalizedInput)) {
+          pushAnalysisIssue(
+            issues,
+            "warning",
+            "analysis.issue.unknownSubmodelBinding",
+            { name: node.name, input: normalizedInput },
+            { type: "node", id: node.id, name: node.name },
+          );
+        }
+        const extraNames = [...incomingNameToEdges.keys()];
+        const validation = semantics.validateExpressionSyntax(source, extraNames);
+        if (!validation.ok) {
+          pushAnalysisIssue(
+            issues,
+            "error",
+            "analysis.issue.invalidSubmodelBinding",
+            { name: node.name, input: normalizedInput, reason: localizeExpressionErrorMessage(validation.message || "") },
+            { type: "node", id: node.id, name: node.name },
+          );
+        }
+      });
+      bindingRefs.forEach((refs) => {
+        refs.forEach((name) => {
+          const depNode = nodeMap.get(name);
+          if (!depNode || depNode.id === node.id) {
+            return;
+          }
+          if (!incomingNameToEdges.has(name)) {
+            pushAnalysisIssue(
+              issues,
+              "warning",
+              "analysis.issue.missingIncomingEdge",
+              { target: node.name, source: name },
+              { type: "node", id: node.id, name: node.name },
+            );
+          }
+        });
+      });
+      const portCounts = new Map();
+      incomingEdges.forEach((edge) => {
+        const targetPort = String(edge.targetPort ?? "").trim();
+        if (targetPort) {
+          portCounts.set(targetPort, (portCounts.get(targetPort) || 0) + 1);
+        } else if (availableInputs.size > 1) {
+          const fromNode = getNodeById(edge.from);
+          pushAnalysisIssue(
+            issues,
+            "warning",
+            "analysis.issue.ambiguousSubmodelTargetPort",
+            { name: `${fromNode?.name || edge.from} -> ${node.name}` },
+            { type: "edge", id: edge.id, name: `${fromNode?.name || edge.from} -> ${node.name}` },
+          );
+        }
+        const fromNode = getNodeById(edge.from);
+        const sourceChoices = getSubmodelEdgePortChoices(fromNode, "source");
+        if (isSubmodelNode(fromNode) && sourceChoices.length > 1 && !String(edge.sourcePort ?? "").trim()) {
+          pushAnalysisIssue(
+            issues,
+            "warning",
+            "analysis.issue.ambiguousSubmodelSourcePort",
+            { name: `${fromNode?.name || edge.from} -> ${node.name}` },
+            { type: "edge", id: edge.id, name: `${fromNode?.name || edge.from} -> ${node.name}` },
+          );
+        }
+      });
+      portCounts.forEach((count, portName) => {
+        if (count > 1) {
+          pushAnalysisIssue(
+            issues,
+            "error",
+            "analysis.issue.duplicateSubmodelInputPort",
+            { name: node.name, input: portName },
+            { type: "node", id: node.id, name: node.name },
+          );
+        }
+      });
       return;
     }
     const incomingEdges = incomingEdgesForNode(node.id);
@@ -1992,6 +2261,9 @@ function analyzeModelStaticIssues() {
       widget.xyPairs.forEach((pair) => {
         [pair?.xSource, pair?.ySource].forEach((sourceName) => {
           if (!sourceName) {
+            return;
+          }
+          if (sourceName === "time") {
             return;
           }
           const sourceNode = nodeMap.get(sourceName);
@@ -2548,17 +2820,20 @@ function focusAnalysisIssueTarget(issue) {
   if (!target) {
     return;
   }
-  closeModelAnalysis();
+  setAnalysisFocus(target);
   if (target.type === "node" && target.id != null) {
     selectSingleNode(target.id);
+    render();
     return;
   }
   if (target.type === "edge" && target.id != null) {
     selectEdge(target.id);
+    render();
     return;
   }
   if (target.type === "widget" && target.id != null) {
     selectWidget(target.id);
+    render();
   }
 }
 
@@ -2753,6 +3028,13 @@ function expressionCatalogForEditor() {
       description: t("expr.help.self"),
       insertText: "self",
       cursorOffset: 4,
+    });
+    pushEntry("$j", {
+      kind: "variable",
+      signature: "$j",
+      description: t("expr.help.agentColumnIndex"),
+      insertText: "$j",
+      cursorOffset: 2,
     });
   }
 
@@ -3069,6 +3351,13 @@ function expressionValuePreviewForEntry(entry) {
   const { context: baseContext, node } = buildExpressionPreviewBaseContext(previewState);
 
   if (entry.kind === "variable") {
+    if (entry.name === "$i" || entry.name === "$j") {
+      return {
+        text: "0",
+        typeLabel: t("expr.preview.type.scalar"),
+        error: false,
+      };
+    }
     if (entry.name === "this" && node && isStateNode(node)) {
       const currentValueResult = resolveStatePreviewCurrentValue(node, previewState);
       if (!currentValueResult.ok) {
@@ -3092,9 +3381,10 @@ function expressionValuePreviewForEntry(entry) {
         return { text: t("expr.preview.unavailableState"), error: true };
       }
       if (Array.isArray(selfValue)) {
+        const localSelfValue = Array.isArray(selfValue[0]) ? selfValue[0][0] : selfValue[0];
         return {
-          text: summarizeExpressionPreviewValue(selfValue[0]),
-          typeLabel: describeExpressionPreviewShape(selfValue[0]),
+          text: summarizeExpressionPreviewValue(localSelfValue),
+          typeLabel: describeExpressionPreviewShape(localSelfValue),
           error: false,
         };
       }
@@ -3697,7 +3987,7 @@ function openExpressionEditor(fieldKey) {
   if (!node || !meta || !expressionEditorModal || !expressionEditorTextarea || !expressionEditorTitle) {
     return;
   }
-  if (isExecutionFrozen()) {
+  if (isEditingUiLocked()) {
     return;
   }
   ui.expressionEditor = {
@@ -3732,7 +4022,7 @@ function openExpressionEditor(fieldKey) {
 }
 
 function openNodePrimaryEditor(node) {
-  if (!node || isExecutionFrozen()) {
+  if (!node || isEditingUiLocked()) {
     return;
   }
   if (isSubmodelNode(node)) {
@@ -3751,7 +4041,7 @@ function openCustomExpressionEditor(title, initialValue, onApply) {
   if (!expressionEditorModal || !expressionEditorTextarea || !expressionEditorTitle) {
     return;
   }
-  if (isExecutionFrozen()) {
+  if (isEditingUiLocked()) {
     return;
   }
   ui.expressionEditor = {
@@ -3776,7 +4066,7 @@ function openCustomExpressionEditor(title, initialValue, onApply) {
 }
 
 function commitExpressionEditorValue(closeAfter = true) {
-  if (!ui.expressionEditor || !ui.expressionEditor.syntaxOk || isExecutionFrozen()) {
+  if (!ui.expressionEditor || !ui.expressionEditor.syntaxOk || isEditingUiLocked()) {
     return false;
   }
   if (ui.expressionEditor.fieldKey === "__custom__") {
@@ -4009,6 +4299,17 @@ function formatNumberValue(value) {
     return "0";
   }
   return text;
+}
+
+function formatExecutionDuration(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value < 0) {
+    return "-";
+  }
+  if (value < 1000) {
+    return `${Math.round(value)} ms`;
+  }
+  return `${formatNumberValue(value / 1000)} s`;
 }
 
 function formatComputedValue(value) {
@@ -4774,6 +5075,7 @@ function applyZoom(nextZoom, anchorClientX = null, anchorClientY = null) {
 
   updateZoomButtons();
   refreshSidebar();
+  scheduleFileStatusRefresh();
   setStatusKey("status.zoom", { value: Math.round(ui.zoom * 100) });
 }
 
@@ -4794,6 +5096,7 @@ function fitToContent() {
   graphViewport.scrollTop = Math.max(0, (svg.clientHeight - rect.height) / 2);
 
   updateZoomButtons();
+  scheduleFileStatusRefresh();
   setStatusKey("status.fit", { value: Math.round(ui.zoom * 100) });
 }
 
@@ -4818,6 +5121,13 @@ function showContextMenu(clientX, clientY, items) {
   closeTopMenus();
   contextMenu.innerHTML = "";
   items.forEach((item) => {
+    if (item?.title) {
+      const title = document.createElement("div");
+      title.className = "context-menu-title";
+      title.textContent = item.label;
+      contextMenu.appendChild(title);
+      return;
+    }
     if (item?.separator) {
       const sep = document.createElement("hr");
       sep.className = "context-menu-sep";
@@ -5024,6 +5334,13 @@ function exportGraphData() {
   return {
     version: 1,
     modelTitle: String(graph.modelTitle ?? ""),
+    view: {
+      zoom: clampZoom(Number(ui.zoom) || 1),
+      showGrid: ui.showGrid !== false,
+      gridSize: clamp(Number(ui.gridSize) || 20, 5, 100),
+      scrollLeft: Math.max(0, Number(graphViewport?.scrollLeft) || 0),
+      scrollTop: Math.max(0, Number(graphViewport?.scrollTop) || 0),
+    },
     modelProperties: graph.properties.map((p) => ({ key: String(p.key), value: String(p.value) })),
     nodeCounter,
     edgeCounter,
@@ -5237,6 +5554,7 @@ function applyGraphData(data) {
   clearRuntimeSubmodelState();
   ui.submodelsPrepared = false;
   const execCfg = normalizeExecutionConfig(data.execution);
+  const savedView = data?.view && typeof data.view === "object" ? data.view : null;
   graph.modelTitle = String(data?.modelTitle ?? "");
   graph.properties = Array.isArray(data?.modelProperties)
     ? data.modelProperties.map((p) => ({ key: String(p?.key ?? ""), value: String(p?.value ?? "") }))
@@ -5417,6 +5735,9 @@ function applyGraphData(data) {
   edgeCounter = Number(data.edgeCounter) || 1;
   widgetCounter = Number(data.widgetCounter) || 1;
   textItemCounter = Number(data.textItemCounter) || 1;
+  ui.zoom = clampZoom(Number(savedView?.zoom) || 1);
+  ui.showGrid = savedView?.showGrid !== false;
+  ui.gridSize = clamp(Number(savedView?.gridSize) || ui.gridSize || 20, 5, 100);
   normalizeInputNodeFlags();
   initializeStateNodes(graph.execution.t0);
 
@@ -5433,6 +5754,10 @@ function applyGraphData(data) {
   ui.textResize = null;
   invalidateExecutionPlan();
   clearAllSelection();
+  window.requestAnimationFrame(() => {
+    graphViewport.scrollLeft = Math.max(0, Number(savedView?.scrollLeft) || 0);
+    graphViewport.scrollTop = Math.max(0, Number(savedView?.scrollTop) || 0);
+  });
 }
 
 function pushUndoState(state) {
@@ -5487,7 +5812,7 @@ function runAction(mutator) {
 }
 
 function updateHistoryButtons() {
-  const frozen = isExecutionFrozen();
+  const frozen = isEditingUiLocked();
   const hasPasteData = Boolean(clipboard.data || syncClipboardFromSharedSource());
   undoBtn.disabled = frozen || history.undo.length === 0;
   redoBtn.disabled = frozen || history.redo.length === 0;
@@ -5509,7 +5834,7 @@ function hasAnySelection() {
 }
 
 function updateEditActionButtons() {
-  const frozen = isExecutionFrozen();
+  const frozen = isEditingUiLocked();
   if (selectAllBtn) {
     selectAllBtn.disabled = graph.nodes.length === 0;
   }
@@ -5570,6 +5895,16 @@ function setControlsDisabled(root, disabled, allowedControls = []) {
   });
 }
 
+function setExplicitControlDisabled(control, disabled) {
+  if (!control) {
+    return;
+  }
+  control.disabled = Boolean(disabled);
+  if (!disabled && control.dataset.executionDisabled === "1") {
+    delete control.dataset.executionDisabled;
+  }
+}
+
 function updateEditingLockUi() {
   const frozen = isEditingUiLocked();
   sidebar?.classList.toggle("execution-frozen", frozen);
@@ -5603,17 +5938,48 @@ function updateEditingLockUi() {
   setControlsDisabled(widgetPanel, frozen);
   setControlsDisabled(textEditorModal, frozen, [textEditorCloseBtn, textEditorDismissBtn]);
 
+  [
+    modelTitleInput,
+    timeStartInput,
+    timeStepInput,
+    timeEndInput,
+    timeDelayInput,
+    decimalDigitsInput,
+    nodeNameInput,
+    nodeValueExprInput,
+    nodeInitialStateInput,
+    nodeModelPathInput,
+    textWidthInput,
+    textHeightInput,
+    textHtmlInput,
+    textEditorInput,
+  ].forEach((control) => {
+    setExplicitControlDisabled(control, frozen);
+  });
+
   if (expressionEditorTextarea) {
-    expressionEditorTextarea.disabled = frozen;
+    setExplicitControlDisabled(expressionEditorTextarea, frozen);
+  }
+  if (expressionStateInitialInput) {
+    setExplicitControlDisabled(
+      expressionStateInitialInput,
+      frozen || expressionStateInitialBlock?.classList.contains("hidden"),
+    );
   }
   if (expressionDescriptionInput) {
-    expressionDescriptionInput.disabled = frozen || !Boolean(ui.expressionEditor?.nodeId && ui.expressionEditor?.fieldKey !== "__custom__");
+    setExplicitControlDisabled(
+      expressionDescriptionInput,
+      frozen || !Boolean(ui.expressionEditor?.nodeId && ui.expressionEditor?.fieldKey !== "__custom__"),
+    );
   }
   if (expressionFormulaNotesInput) {
-    expressionFormulaNotesInput.disabled = frozen || !Boolean(ui.expressionEditor?.nodeId && ui.expressionEditor?.fieldKey !== "__custom__");
+    setExplicitControlDisabled(
+      expressionFormulaNotesInput,
+      frozen || !Boolean(ui.expressionEditor?.nodeId && ui.expressionEditor?.fieldKey !== "__custom__"),
+    );
   }
   if (expressionSymbolsFilter) {
-    expressionSymbolsFilter.disabled = frozen;
+    setExplicitControlDisabled(expressionSymbolsFilter, frozen);
   }
   if (expressionEditorApplyBtn) {
     expressionEditorApplyBtn.disabled = frozen || Boolean(ui.expressionEditor && !ui.expressionEditor.syntaxOk);
@@ -6565,6 +6931,9 @@ function render() {
     if (isSelected) {
       g.classList.add("selected");
     }
+    if (isAnalysisFocusActive("edge", edge.id)) {
+      g.classList.add("analysis-focus");
+    }
 
     const path = document.createElementNS(SVG_NS, "path");
     path.classList.add("edge-line");
@@ -6578,7 +6947,7 @@ function render() {
     const onEdgeContextMenu = (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         return;
       }
       selectEdge(edge.id);
@@ -6598,7 +6967,7 @@ function render() {
         render();
         return;
       }
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         return;
       }
 
@@ -6634,7 +7003,7 @@ function render() {
         cpCircle.addEventListener("pointerdown", (evt) => {
           evt.stopPropagation();
           selectEdge(edge.id);
-          if (isExecutionFrozen()) {
+          if (isEditingUiLocked()) {
             render();
             return;
           }
@@ -6719,13 +7088,16 @@ function render() {
     g.addEventListener("contextmenu", (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         return;
       }
       openNodeContextMenu(evt, node);
     });
     if (ui.selectedNodes.has(node.id)) {
       g.classList.add("selected");
+    }
+    if (isAnalysisFocusActive("node", node.id)) {
+      g.classList.add("analysis-focus");
     }
     if (graph.execution.strictDefinitions && !validateNodeDefinition(node).ok) {
       g.classList.add("invalid-definition");
@@ -6780,7 +7152,7 @@ function render() {
     }
 
     const startEdgeCreate = (evt) => {
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         return;
       }
       evt.stopPropagation();
@@ -6789,7 +7161,7 @@ function render() {
     };
 
     const startEdgeCreateMouse = (evt) => {
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         return;
       }
       evt.stopPropagation();
@@ -6811,7 +7183,7 @@ function render() {
       if (!ui.selectedNodes.has(node.id)) {
         selectSingleNode(node.id);
       }
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         render();
         return;
       }
@@ -6967,7 +7339,7 @@ function render() {
       if (!ui.selectedNodes.has(node.id)) {
         selectSingleNode(node.id);
       }
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         render();
         return;
       }
@@ -7063,7 +7435,7 @@ function render() {
       if (!(ui.selected?.type === "text" && ui.selected.id === item.id)) {
         selectTextItem(item.id);
       }
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         render();
         return;
       }
@@ -7098,7 +7470,7 @@ function render() {
       if (!(ui.selected?.type === "text" && ui.selected.id === item.id)) {
         selectTextItem(item.id);
       }
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         render();
         return;
       }
@@ -7340,6 +7712,15 @@ function importGraphData(data) {
   applyGraphData({
     version: 1,
     modelTitle: String(data.modelTitle ?? ""),
+    view: data?.view && typeof data.view === "object"
+      ? {
+        zoom: clampZoom(Number(data.view.zoom) || 1),
+        showGrid: data.view.showGrid !== false,
+        gridSize: clamp(Number(data.view.gridSize) || 20, 5, 100),
+        scrollLeft: Math.max(0, Number(data.view.scrollLeft) || 0),
+        scrollTop: Math.max(0, Number(data.view.scrollTop) || 0),
+      }
+      : null,
     modelProperties: Array.isArray(data.modelProperties)
       ? data.modelProperties.map((p) => ({ key: String(p?.key ?? ""), value: String(p?.value ?? "") }))
       : [],
@@ -7653,7 +8034,6 @@ function loadGraphFromJsonText(jsonText, sourceName = "", fileHandle = null, dir
     history.undo = [];
     history.redo = [];
     updateHistoryButtons();
-    markSavedSnapshot();
     ui.submodelsPrepared = false;
     updateModelBreadcrumb();
     if (effectiveDirectoryHandle) {
@@ -7667,7 +8047,12 @@ function loadGraphFromJsonText(jsonText, sourceName = "", fileHandle = null, dir
       setStatusKey("status.loaded");
     }
     window.requestAnimationFrame(() => {
-      fitToContent();
+      if (!data?.view || typeof data.view !== "object") {
+        fitToContent();
+      }
+      window.requestAnimationFrame(() => {
+        markSavedSnapshot();
+      });
     });
   } catch (err) {
     cancelTransaction();
@@ -8571,9 +8956,13 @@ async function createNewGraph() {
   submodelFileHandleCache.clear();
   submodelSourceCache.clear();
   ui.submodelsPrepared = false;
-  markSavedSnapshot();
   setStatusKey("status.newGraph");
   render();
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      markSavedSnapshot();
+    });
+  });
 }
 
 function stopTimedExecution(updateStatus = true) {
@@ -8581,6 +8970,7 @@ function stopTimedExecution(updateStatus = true) {
     window.clearInterval(ui.timedRunHandle);
     ui.timedRunHandle = null;
     ui.timedStepRunning = false;
+    updateEditingLockUi();
     if (updateStatus) {
       setStatusKey("status.timedStopped");
     }
@@ -9841,6 +10231,8 @@ async function executeNodeExpressions() {
     refreshRuntimeView();
   }
 
+  const execStartedAt = performance.now();
+
   const maxSteps = 100000;
   const epsilon = Math.max(1e-12, Math.abs(cfg.dt) * 1e-9);
   const timeValues = [];
@@ -9899,6 +10291,7 @@ async function executeNodeExpressions() {
       count: successCount,
       steps: timeValues.length,
       time: formatNumberValue(Number(lastTime)),
+      duration: formatExecutionDuration(performance.now() - execStartedAt),
     });
   }
 }
@@ -9960,18 +10353,27 @@ async function toggleTimedExecution() {
   }
 
   ui.timedStepRunning = false;
+  updateEditingLockUi();
   ui.timedRunHandle = window.setInterval(async () => {
     if (ui.timedStepRunning) {
       return;
     }
     ui.timedStepRunning = true;
-    const ok = await executeOneStep(false);
-    ui.timedStepRunning = false;
-    if (!ok) {
-      stopTimedExecution(false);
-      if (!(graph.execution.strictDefinitions && invalidDefinedNodes().length > 0)) {
-        setStatusKey("status.timedStopped");
+    updateEditingLockUi();
+    try {
+      const ok = await executeOneStep(false);
+      if (!ok) {
+        stopTimedExecution(false);
+        if (!(graph.execution.strictDefinitions && invalidDefinedNodes().length > 0)) {
+          setStatusKey("status.timedStopped");
+        }
       }
+    } catch (err) {
+      stopTimedExecution(false);
+      setStatus(err?.message || t("error.evalReason.runtime"), true);
+    } finally {
+      ui.timedStepRunning = false;
+      updateEditingLockUi();
     }
   }, delayMs);
   setStatusKey("status.timedStarted", { delay: delayMs });
@@ -10600,6 +11002,7 @@ if (showGridInput) {
   showGridInput.addEventListener("change", () => {
     ui.showGrid = showGridInput.checked;
     updateCanvasGridAppearance();
+    scheduleFileStatusRefresh();
     setStatusKey(ui.showGrid ? "status.gridOn" : "status.gridOff");
   });
 }
@@ -10608,8 +11011,15 @@ gridSizeInput.addEventListener("change", () => {
   ui.gridSize = clamp(Number(gridSizeInput.value) || 20, 5, 100);
   gridSizeInput.value = String(ui.gridSize);
   updateCanvasGridAppearance();
+  scheduleFileStatusRefresh();
   setStatusKey("status.gridStep", { value: ui.gridSize });
 });
+
+if (graphViewport) {
+  graphViewport.addEventListener("scroll", () => {
+    scheduleFileStatusRefresh();
+  }, { passive: true });
+}
 
 function commitExecutionInput(inputEl, key) {
   const parsed = Number(inputEl.value);
@@ -11505,13 +11915,6 @@ if (aboutAppModal) {
     }
   });
 }
-if (modelAnalysisModal) {
-  modelAnalysisModal.addEventListener("pointerdown", (evt) => {
-    if (evt.target === modelAnalysisModal) {
-      closeModelAnalysis();
-    }
-  });
-}
 if (expressionEditorSwitchModal) {
   expressionEditorSwitchModal.addEventListener("pointerdown", (evt) => {
     if (evt.target === expressionEditorSwitchModal) {
@@ -11691,7 +12094,7 @@ document.addEventListener("keydown", (evt) => {
   }
 
   if (evt.altKey && !evt.ctrlKey && !evt.metaKey && !evt.shiftKey && !isTypingTarget(evt.target)) {
-    if (isExecutionFrozen() && ["1", "2", "3", "4"].includes(evt.key)) {
+    if (isEditingUiLocked() && ["1", "2", "3", "4"].includes(evt.key)) {
       evt.preventDefault();
       return;
     }
@@ -11738,7 +12141,7 @@ document.addEventListener("keydown", (evt) => {
       return;
     }
     if (key === "x" && !typingTarget) {
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         evt.preventDefault();
         return;
       }
@@ -11752,7 +12155,7 @@ document.addEventListener("keydown", (evt) => {
       return;
     }
     if (key === "v" && !typingTarget) {
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         evt.preventDefault();
         return;
       }
@@ -11797,7 +12200,7 @@ document.addEventListener("keydown", (evt) => {
   }
 
   if ((evt.ctrlKey || evt.metaKey) && !evt.shiftKey && evt.key.toLowerCase() === "z") {
-    if (isExecutionFrozen()) {
+    if (isEditingUiLocked()) {
       evt.preventDefault();
       return;
     }
@@ -11810,7 +12213,7 @@ document.addEventListener("keydown", (evt) => {
     (evt.ctrlKey || evt.metaKey) &&
     (evt.key.toLowerCase() === "y" || (evt.shiftKey && evt.key.toLowerCase() === "z"))
   ) {
-    if (isExecutionFrozen()) {
+    if (isEditingUiLocked()) {
       evt.preventDefault();
       return;
     }
@@ -11820,7 +12223,7 @@ document.addEventListener("keydown", (evt) => {
   }
 
   if (evt.key === "Delete") {
-    if (isExecutionFrozen()) {
+    if (isEditingUiLocked()) {
       evt.preventDefault();
       return;
     }

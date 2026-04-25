@@ -2,10 +2,10 @@
   "version": 1,
   "modelTitle": "",
   "modelProperties": [],
-  "nodeCounter": 29,
-  "edgeCounter": 28,
-  "widgetCounter": 21,
-  "textItemCounter": 13,
+  "nodeCounter": 35,
+  "edgeCounter": 34,
+  "widgetCounter": 27,
+  "textItemCounter": 19,
   "execution": {
     "t0": 0,
     "dt": 1,
@@ -60,7 +60,7 @@
           "value": "Ambiente"
         }
       ],
-      "stateTransition": "if(this == 0 and r < beta * neig / 8,\n  1,\n  if(this == 1 and r < gamma,\n    2,\n    this\n  )\n)",
+      "stateTransition": "if(self == 0 and rand() < beta * neig[$i,$j] / 8,\n  1,\n  if(self == 1 and rand() < gamma,\n    2,\n    self\n  )\n)",
       "initialState": "setAt(array([n,n],0),[randInt(n-1),randInt(n-1)],1)"
     },
     {
@@ -85,7 +85,7 @@
         }
       ],
       "input": false,
-      "valueExpression": "array(size(x),sum(neighbors(x==1,$0,$1,1,1)))"
+      "valueExpression": "array(size(x),\n  count($value==1,\n    neighbors(x, $0, $1, true, true)\n  )\n)"
     },
     {
       "id": 13,
@@ -204,30 +204,6 @@
       ],
       "input": false,
       "valueExpression": "count($value==2,x)"
-    },
-    {
-      "id": 28,
-      "name": "r",
-      "output": false,
-      "type": "algebraic",
-      "x": 360,
-      "y": -140,
-      "width": 120,
-      "height": 70,
-      "fillColor": "",
-      "strokeColor": "",
-      "properties": [
-        {
-          "key": "note formula",
-          "value": ""
-        },
-        {
-          "key": "descrizione",
-          "value": ""
-        }
-      ],
-      "input": false,
-      "valueExpression": "array([n,n],rand())"
     }
   ],
   "edges": [
@@ -291,22 +267,6 @@
       "id": 19,
       "from": 4,
       "to": 21,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 26,
-      "from": 28,
-      "to": 4,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 27,
-      "from": 3,
-      "to": 28,
       "sourcePort": "",
       "targetPort": "",
       "controlPoints": []

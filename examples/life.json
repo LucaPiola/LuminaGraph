@@ -1,10 +1,18 @@
 {
   "version": 1,
   "modelTitle": "",
+  "view": {
+    "zoom": 0.9,
+    "showGrid": true,
+    "gridSize": 20,
+    "scrollLeft": 111,
+    "scrollTop": 68
+  },
   "modelProperties": [],
-  "nodeCounter": 11,
-  "edgeCounter": 9,
-  "widgetCounter": 7,
+  "nodeCounter": 13,
+  "edgeCounter": 11,
+  "widgetCounter": 9,
+  "textItemCounter": 4,
   "execution": {
     "t0": 0,
     "dt": 1,
@@ -24,7 +32,13 @@
       "y": 160,
       "width": 120,
       "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
       "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
         {
           "key": "descrizione",
           "value": "Lato della griglia quadrata del gioco della vita"
@@ -41,7 +55,13 @@
       "y": 160,
       "width": 120,
       "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
       "properties": [
+        {
+          "key": "note formula",
+          "value": "Questa versione si basa sul polimorfismo delle funzioni sulle matrici.\nUna versione più esplicita, ma lievemente meno performante è:\n(neig[$i,$j]==3) or (self and (neig[$i,$j]==2))"
+        },
         {
           "key": "descrizione",
           "value": "Stato della griglia: 1 = cella viva, 0 = cella morta"
@@ -53,13 +73,19 @@
     {
       "id": 6,
       "name": "neig",
-      "output": true,
+      "output": false,
       "type": "algebraic",
       "x": 300,
       "y": 320,
       "width": 120,
       "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
       "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
         {
           "key": "descrizione",
           "value": "Numero di vicini vivi per ogni cella"
@@ -95,13 +121,25 @@
       "controlPoints": []
     }
   ],
+  "textItems": [
+    {
+      "id": 3,
+      "x": -20,
+      "y": 0,
+      "width": 480,
+      "height": 80,
+      "fillColor": "",
+      "strokeColor": "",
+      "html": "<h1>Life: un automa cellulare 2D</h1>"
+    }
+  ],
   "widgets": [
     {
       "id": 1,
       "type": "matrix",
       "customTitle": "",
-      "x": 424.71767074072596,
-      "y": -74.23400776029631,
+      "x": 460,
+      "y": -20,
       "width": 781.5783909187727,
       "height": 811.8518777354467,
       "minimized": false,
@@ -112,16 +150,23 @@
       "yMin": 0,
       "yMax": 0,
       "showGrid": true,
+      "legendPosition": "top-right",
       "source": "x",
       "showNumericValues": false,
       "showIndices": false,
       "autoFitCells": true,
       "cellSize": 9,
+      "valueMin": "auto",
+      "valueMax": "auto",
+      "displayRows": null,
+      "displayCols": null,
       "colorScheme": "heat",
       "min": 0,
       "max": 100,
       "step": 1,
       "value": 0,
+      "options": [],
+      "mappings": [],
       "columns": [],
       "xyPairs": []
     }

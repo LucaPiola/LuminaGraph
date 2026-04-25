@@ -1548,6 +1548,10 @@ button:disabled {
   overflow: hidden;
 }
 
+#modelAnalysisModal.modal-modeless {
+  z-index: 1490;
+}
+
 .text-editor-card {
   width: min(760px, calc(100vw - 40px));
   height: min(70vh, 520px);
@@ -2489,6 +2493,11 @@ button:disabled {
   stroke-width: 3;
 }
 
+.node.analysis-focus .node-shape {
+  filter: drop-shadow(0 0 8px rgba(14, 122, 196, 0.32));
+  stroke-width: 4;
+}
+
 .node.has-custom-stroke .node-shape {
   stroke-width: 4;
 }
@@ -2506,6 +2515,16 @@ button:disabled {
 .edge.selected .edge-line {
   stroke: var(--accent);
   stroke-width: 3;
+}
+
+.edge.analysis-focus .edge-line {
+  filter: drop-shadow(0 0 7px rgba(14, 122, 196, 0.28));
+  stroke-width: 4;
+}
+
+.value-widget.analysis-focus {
+  box-shadow: 0 0 0 3px rgba(14, 122, 196, 0.22), 0 10px 24px rgba(18, 33, 47, 0.18);
+  border-color: #2f7bbd;
 }
 
 .resize-handle {
@@ -2566,6 +2585,16 @@ button:disabled {
   border: 0;
   border-top: 1px solid #d9e2ea;
   margin: 4px 2px;
+}
+
+.context-menu-title {
+  padding: 6px 9px 5px;
+  color: #5c7384;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  user-select: none;
 }
 
 .context-menu button {

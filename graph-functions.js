@@ -1027,6 +1027,7 @@
       this: { kind: "variable", signature: "this", descriptionKey: "expr.help.this" },
       self: { kind: "variable", signature: "self", descriptionKey: "expr.help.self" },
       $i: { kind: "variable", signature: "$i", descriptionKey: "expr.help.agentIndex" },
+      $j: { kind: "variable", signature: "$j", descriptionKey: "expr.help.agentColumnIndex" },
       time: { kind: "variable", signature: "time", descriptionKey: "expr.help.time" },
       t0: { kind: "variable", signature: "t0", descriptionKey: "expr.help.t0" },
       t1: { kind: "variable", signature: "t1", descriptionKey: "expr.help.t1" },

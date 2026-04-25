@@ -454,6 +454,7 @@
       hasThisAlias: containsThisAlias(key),
       hasSelfAlias: containsIdentifierToken(key, "self"),
       hasAgentIndex: containsIdentifierToken(key, "$i"),
+      hasAgentColumnIndex: containsIdentifierToken(key, "$j"),
       hasIntegral: containsIdentifierToken(key, "integral"),
       ast: null,
       syntaxErrorMessage: null,
@@ -488,6 +489,7 @@
       name === "__self" ||
       name === "self" ||
       name === "$i" ||
+      name === "$j" ||
       name === "$value" ||
       name === "time" ||
       name === "t0" ||
@@ -574,9 +576,39 @@
 
   function evaluateAstWithLocalSelf(compiled, baseScope, hooks = null) {
     const selfVector = baseScope?.__self;
-    const needsLocalIteration = Boolean(compiled?.hasSelfAlias || compiled?.hasAgentIndex);
+    const needsLocalIteration = Boolean(
+      compiled?.hasSelfAlias
+      || compiled?.hasAgentIndex
+      || compiled?.hasAgentColumnIndex,
+    );
     if (!needsLocalIteration) {
       return evaluateAstNode(compiled.ast, baseScope, hooks);
+    }
+    if (compiled?.hasAgentColumnIndex && Array.isArray(selfVector)) {
+      return selfVector.map((row, rowIndex) => {
+        if (!Array.isArray(row)) {
+          return evaluateAstNode(
+            compiled.ast,
+            {
+              ...baseScope,
+              self: row,
+              $i: rowIndex,
+              $j: Object.prototype.hasOwnProperty.call(baseScope || {}, "$j") ? baseScope.$j : 0,
+            },
+            hooks,
+          );
+        }
+        return row.map((item, colIndex) => evaluateAstNode(
+          compiled.ast,
+          {
+            ...baseScope,
+            self: item,
+            $i: rowIndex,
+            $j: colIndex,
+          },
+          hooks,
+        ));
+      });
     }
     if (Array.isArray(selfVector)) {
       return selfVector.map((item, index) => evaluateAstNode(
@@ -595,6 +627,9 @@
         ...baseScope,
         self: Object.prototype.hasOwnProperty.call(baseScope || {}, "__self") ? baseScope.__self : undefined,
         $i: Object.prototype.hasOwnProperty.call(baseScope || {}, "$i") ? baseScope.$i : 0,
+        ...(Object.prototype.hasOwnProperty.call(baseScope || {}, "$j")
+          ? { $j: baseScope.$j }
+          : {}),
       },
       hooks,
     );
@@ -1798,6 +1833,7 @@
       "__self",
       "self",
       "$i",
+      "$j",
       "$value",
       "time",
       "t0",

@@ -1907,6 +1907,9 @@ function renderWidgets() {
     if (ui.selected?.type === "widget" && ui.selected.id === widget.id) {
       root.classList.add("selected");
     }
+    if (typeof isAnalysisFocusActive === "function" && isAnalysisFocusActive("widget", widget.id)) {
+      root.classList.add("analysis-focus");
+    }
     if (widget.minimized) {
       root.classList.add("minimized");
     }
@@ -1928,7 +1931,7 @@ function renderWidgets() {
     root.addEventListener("contextmenu", (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         return;
       }
       if (!(ui.selected?.type === "widget" && ui.selected.id === widget.id)) {
@@ -1952,7 +1955,7 @@ function renderWidgets() {
       evt.stopPropagation();
     });
     minBtn.addEventListener("click", (evt) => {
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         return;
       }
       evt.stopPropagation();
@@ -1969,7 +1972,7 @@ function renderWidgets() {
       evt.stopPropagation();
     });
     delBtn.addEventListener("click", (evt) => {
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         return;
       }
       evt.stopPropagation();
@@ -1990,7 +1993,7 @@ function renderWidgets() {
       if (!(ui.selected?.type === "widget" && ui.selected.id === widget.id)) {
         selectWidget(widget.id);
       }
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         render();
         return;
       }
@@ -2284,7 +2287,7 @@ function renderWidgets() {
     resize.className = "value-widget-resize";
     resize.addEventListener("pointerdown", (evt) => {
       evt.stopPropagation();
-      if (isExecutionFrozen()) {
+      if (isEditingUiLocked()) {
         return;
       }
       ui.widgetResize = {
@@ -2503,11 +2506,15 @@ function nodeIdAtGraphPoint(p) {
 }
 
 function openBackgroundContextMenu(evt) {
-  if (isExecutionFrozen()) {
+  if (isEditingUiLocked()) {
     return;
   }
   const p = svgPointFromClient(evt.clientX, evt.clientY);
   showContextMenu(evt.clientX, evt.clientY, [
+    {
+      title: true,
+      label: t("context.bg.insertTitle"),
+    },
     {
       label: t("context.bg.newRect"),
       action: () => {
@@ -2565,6 +2572,7 @@ function openBackgroundContextMenu(evt) {
         setStatusKey("status.widgetSelectCreated");
       },
     },
+    { separator: true },
     {
       label: t("context.bg.newMatrixWidget"),
       action: () => {
@@ -2604,7 +2612,7 @@ function openBackgroundContextMenu(evt) {
 }
 
 function openNodeContextMenu(evt, node) {
-  if (isExecutionFrozen()) {
+  if (isEditingUiLocked()) {
     return;
   }
   const useSelectionDelete = ui.selectedNodes.has(node.id) && ui.selectedNodes.size > 0;
@@ -2671,7 +2679,7 @@ function openNodeContextMenu(evt, node) {
 }
 
 function openWidgetContextMenu(evt, widget) {
-  if (isExecutionFrozen()) {
+  if (isEditingUiLocked()) {
     return;
   }
   const wasMinimized = Boolean(widget.minimized);
@@ -2711,7 +2719,7 @@ function openWidgetContextMenu(evt, widget) {
 }
 
 function openTextContextMenu(evt, item) {
-  if (isExecutionFrozen()) {
+  if (isEditingUiLocked()) {
     return;
   }
   showContextMenu(evt.clientX, evt.clientY, [

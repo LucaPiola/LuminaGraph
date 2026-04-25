@@ -44,6 +44,7 @@ __Al momento implementati (senza librerie esterne):__
 * editor per espressioni con controllo sintattico interattivo, visualizzazione dei valori attuali, help;
 * menu di help;
 * nel menu File, gestione dei modelli aperti di recente;
+* una prima gestione di controllo di correttezza del modello;
 * ...
 
 __Al momento non implementati (rispetto a STGraph):__

@@ -2,10 +2,10 @@
   "version": 1,
   "modelTitle": "Modello epidemiologico SIR agent-based",
   "modelProperties": [],
-  "nodeCounter": 28,
-  "edgeCounter": 49,
-  "widgetCounter": 12,
-  "textItemCounter": 10,
+  "nodeCounter": 29,
+  "edgeCounter": 50,
+  "widgetCounter": 13,
+  "textItemCounter": 11,
   "execution": {
     "t0": 0,
     "dt": 1,
@@ -114,7 +114,7 @@
       "name": "rows",
       "output": false,
       "type": "algebraic",
-      "x": 360,
+      "x": 260,
       "y": 460,
       "width": 150,
       "height": 76,
@@ -138,8 +138,8 @@
       "name": "cols",
       "output": false,
       "type": "algebraic",
-      "x": 360,
-      "y": 560,
+      "x": 400,
+      "y": 540,
       "width": 150,
       "height": 76,
       "fillColor": "",
@@ -159,7 +159,7 @@
     },
     {
       "id": 7,
-      "name": "sir",
+      "name": "agenti",
       "output": true,
       "type": "state",
       "x": 380,
@@ -178,12 +178,12 @@
           "value": "0=suscettibile, 1=infetto, 2=rimosso"
         }
       ],
-      "stateTransition": "if(self == 0 and rand() < beta * infNeighbors[$i] / 8,\n  1,\n  if(self == 1 and rand() < gamma,\n    2,\n    self\n  )\n)",
+      "stateTransition": "if(self == 0 and rand() < beta * num_vicini[$i] / 8,\n  1,\n  if(self == 1 and rand() < gamma,\n    2,\n    self\n  )\n)",
       "initialState": "setAt(array(n*n, 0), randInt(n*n - 1), 1)"
     },
     {
       "id": 8,
-      "name": "space",
+      "name": "ambiente",
       "output": true,
       "type": "algebraic",
       "x": 700,
@@ -203,17 +203,17 @@
         }
       ],
       "input": false,
-      "valueExpression": "grid(rows, cols, \"first\", sir)"
+      "valueExpression": "grid(rows, cols, \"first\", agenti)"
     },
     {
       "id": 9,
-      "name": "infNeighbors",
+      "name": "num_vicini",
       "output": false,
       "type": "algebraic",
       "x": 700,
-      "y": 520,
-      "width": 190,
-      "height": 86,
+      "y": 460,
+      "width": 160,
+      "height": 80,
       "fillColor": "",
       "strokeColor": "",
       "properties": [
@@ -227,7 +227,7 @@
         }
       ],
       "input": false,
-      "valueExpression": "array(size(sir),\n      count($value == 1,\n            neighbors(space, rows[$0], cols[$0], true, true)\n           )\n     )"
+      "valueExpression": "array(size(agenti),\n      count($value == 1,\n            neighbors(ambiente, rows[$0], cols[$0], true, true)\n           )\n     )"
     },
     {
       "id": 10,
@@ -251,7 +251,7 @@
         }
       ],
       "input": false,
-      "valueExpression": "count($value == 0, sir)"
+      "valueExpression": "count($value == 0, agenti)"
     },
     {
       "id": 11,
@@ -275,7 +275,7 @@
         }
       ],
       "input": false,
-      "valueExpression": "count($value == 1, sir)"
+      "valueExpression": "count($value == 1, agenti)"
     },
     {
       "id": 12,
@@ -299,7 +299,7 @@
         }
       ],
       "input": false,
-      "valueExpression": "count($value == 2, sir)"
+      "valueExpression": "count($value == 2, agenti)"
     }
   ],
   "edges": [
@@ -470,7 +470,7 @@
       "yMax": 0,
       "showGrid": true,
       "legendPosition": "top-right",
-      "source": "space",
+      "source": "ambiente",
       "showNumericValues": false,
       "showIndices": false,
       "autoFitCells": true,
@@ -484,6 +484,8 @@
       "max": 100,
       "step": 1,
       "value": 0,
+      "options": [],
+      "mappings": [],
       "columns": [],
       "xyPairs": []
     },
@@ -518,6 +520,8 @@
       "max": 100,
       "step": 1,
       "value": 0,
+      "options": [],
+      "mappings": [],
       "columns": [],
       "xyPairs": [
         {
@@ -589,6 +593,8 @@
       "max": 100,
       "step": 1,
       "value": 0,
+      "options": [],
+      "mappings": [],
       "columns": [
         "time",
         "S",
