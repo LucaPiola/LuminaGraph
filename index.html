@@ -58,9 +58,11 @@
             <button id="addTextItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.text"><span data-i18n="menu.insert.text"></span></button>
             <hr class="menu-sep" />
             <button id="addButtonWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.buttonWidget" data-title-i18n="tooltip.menu.insert.button"></button>
+            <button id="addSelectWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.selectWidget" data-title-i18n="tooltip.menu.insert.select"></button>
             <button id="addSliderWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.sliderWidget" data-title-i18n="tooltip.menu.insert.slider"></button>
             <hr class="menu-sep" />
             <button id="addLedWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.ledWidget" data-title-i18n="tooltip.menu.insert.led"></button>
+            <button id="addTextWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.textWidget" data-title-i18n="tooltip.menu.insert.textWidget"></button>
             <button id="addMatrixWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.matrixWidget" data-title-i18n="tooltip.menu.insert.matrix"></button>
             <button id="addTableWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.tableWidget" data-title-i18n="tooltip.menu.insert.table"></button>
             <button id="addXYChartWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.xyChartWidget" data-title-i18n="tooltip.menu.insert.chart"></button>
@@ -83,6 +85,10 @@
               <input id="snapToGridInput" type="checkbox" checked />
               <span data-i18n="menu.view.snap"></span>
             </label>
+            <label class="menu-check" for="showGridInput" data-title-i18n="tooltip.menu.view.showGrid">
+              <input id="showGridInput" type="checkbox" checked />
+              <span data-i18n="menu.view.showGrid"></span>
+            </label>
             <label class="menu-field" for="gridSizeInput" data-i18n="menu.view.gridStep" data-title-i18n="tooltip.menu.view.gridStep"></label>
             <input id="gridSizeInput" type="number" min="5" max="100" step="1" value="20" data-title-i18n="tooltip.menu.view.gridStep" />
             <label class="menu-field" for="decimalDigitsInput" data-i18n="label.decimals" data-title-i18n="tooltip.model.decimals"></label>
@@ -98,6 +104,7 @@
             <button id="runTimedToggleBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.timed"><span data-i18n="menu.run.timedToggle"></span><span class="menu-shortcut">F9</span></button>
             <button id="runResetBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.reset"><span data-i18n="menu.run.reset"></span><span class="menu-shortcut">F10</span></button>
             <hr class="menu-sep" />
+            <button id="analyzeModelBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.analyze"><span data-i18n="menu.run.analyze"></span></button>
             <label class="menu-check" for="runStrictDefinitionsInput" data-title-i18n="tooltip.model.strictDefinitions">
               <input id="runStrictDefinitionsInput" type="checkbox" />
               <span data-i18n="menu.run.strictDefinitions"></span>
@@ -323,15 +330,6 @@
               </div>
               <div class="hint" data-i18n="hint.textFormatting"></div>
               <label for="textHtmlInput" data-i18n="label.textHtml"></label>
-              <div id="textToolbar" class="text-toolbar">
-                <button type="button" class="small-btn text-tool-btn" data-text-tool="h1">H1</button>
-                <button type="button" class="small-btn text-tool-btn" data-text-tool="h2">H2</button>
-                <button type="button" class="small-btn text-tool-btn" data-text-tool="p">P</button>
-                <button type="button" class="small-btn text-tool-btn" data-text-tool="b"><strong>B</strong></button>
-                <button type="button" class="small-btn text-tool-btn" data-text-tool="i"><em>I</em></button>
-                <button type="button" class="small-btn text-tool-btn" data-text-tool="u"><u>U</u></button>
-                <button type="button" class="small-btn text-tool-btn" data-text-tool="br">BR</button>
-              </div>
               <textarea id="textHtmlInput" class="panel-textarea"></textarea>
             </div>
           </div>
@@ -451,6 +449,47 @@
         </div>
         <div class="modal-actions">
           <button id="aboutAppDismissBtn" type="button" data-i18n="action.close"></button>
+        </div>
+      </div>
+    </div>
+    <div id="modelAnalysisModal" class="modal-backdrop hidden">
+      <div class="modal-card model-analysis-card" role="dialog" aria-modal="true" aria-labelledby="modelAnalysisTitle">
+        <div class="modal-head">
+          <h3 id="modelAnalysisTitle" data-i18n="analysis.title"></h3>
+          <button id="modelAnalysisCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
+        </div>
+        <div id="modelAnalysisSummary" class="model-analysis-summary"></div>
+        <div id="modelAnalysisContent" class="model-analysis-content"></div>
+        <div class="modal-actions">
+          <button id="modelAnalysisDismissBtn" type="button" data-i18n="action.close"></button>
+        </div>
+      </div>
+    </div>
+    <div id="textEditorModal" class="modal-backdrop modal-modeless hidden">
+      <div class="modal-card text-editor-card" role="dialog" aria-modal="false" aria-labelledby="textEditorTitle">
+        <div class="modal-head">
+          <h3 id="textEditorTitle" data-i18n="panel.text"></h3>
+          <button id="textEditorCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
+        </div>
+        <div class="text-editor-body">
+          <div id="textEditorToolbar" class="text-toolbar">
+            <button type="button" class="small-btn text-tool-btn" data-text-tool="h1">H1</button>
+            <button type="button" class="small-btn text-tool-btn" data-text-tool="h2">H2</button>
+            <button type="button" class="small-btn text-tool-btn" data-text-tool="h3">H3</button>
+            <button type="button" class="small-btn text-tool-btn" data-text-tool="p">P</button>
+            <button type="button" class="small-btn text-tool-btn" data-text-tool="b"><strong>B</strong></button>
+            <button type="button" class="small-btn text-tool-btn" data-text-tool="i"><em>I</em></button>
+            <button type="button" class="small-btn text-tool-btn" data-text-tool="u"><u>U</u></button>
+            <button type="button" class="small-btn text-tool-btn" data-text-tool="ul">UL</button>
+            <button type="button" class="small-btn text-tool-btn" data-text-tool="ol">OL</button>
+            <button type="button" class="small-btn text-tool-btn" data-text-tool="li">LI</button>
+            <button type="button" class="small-btn text-tool-btn" data-text-tool="br">BR</button>
+            <button type="button" class="small-btn text-tool-btn" data-text-tool="hr">HR</button>
+          </div>
+          <textarea id="textEditorInput" class="text-editor-textarea"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button id="textEditorDismissBtn" type="button" data-i18n="action.close"></button>
         </div>
       </div>
     </div>

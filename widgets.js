@@ -144,6 +144,58 @@ function addButtonWidget(at = null) {
   });
 }
 
+function addSelectWidget(at = null) {
+  const id = widgetCounter++;
+  const z = Math.max(0.0001, ui.zoom || 1);
+  const x = at?.x ?? (graphViewport.scrollLeft + 80) / z;
+  const y = at?.y ?? (graphViewport.scrollTop + 80) / z;
+  const bindableNames = selectBindableNodeNames();
+  graph.widgets.push({
+    id,
+    type: "select",
+    customTitle: "",
+    x,
+    y,
+    width: 320,
+    height: 116,
+    minimized: false,
+    outputOnly: false,
+    source: bindableNames[0] || "",
+    value: 0,
+    options: [
+      { label: t("widget.selectOption.1"), value: 0 },
+      { label: t("widget.selectOption.2"), value: 1 },
+    ],
+    rows: [],
+    columns: [],
+    xyPairs: [],
+  });
+}
+
+function addTextWidget(at = null) {
+  const id = widgetCounter++;
+  const z = Math.max(0.0001, ui.zoom || 1);
+  const x = at?.x ?? (graphViewport.scrollLeft + 60) / z;
+  const y = at?.y ?? (graphViewport.scrollTop + 60) / z;
+  const outputNames = graph.nodes.filter((n) => n.output).map((n) => n.name);
+  graph.widgets.push({
+    id,
+    type: "text",
+    customTitle: "",
+    x,
+    y,
+    width: 300,
+    height: 120,
+    minimized: false,
+    outputOnly: true,
+    source: outputNames[0] || "",
+    mappings: [],
+    rows: [],
+    columns: [],
+    xyPairs: [],
+  });
+}
+
 function addXYChartWidget(at = null) {
   const id = widgetCounter++;
   const z = Math.max(0.0001, ui.zoom || 1);
@@ -481,6 +533,48 @@ function sanitizeButtonWidgetOptions(widget) {
   widget.value = widget.value === true || widget.value === "true" || widget.value === 1 || widget.value === "1";
 }
 
+function normalizeSelectWidgetOptions(options) {
+  const normalized = Array.isArray(options)
+    ? options.map((option, idx) => ({
+      label: String(option?.label ?? "").trim() || t("widget.selectOption.n", { index: idx + 1 }),
+      value: Number.isFinite(Number(option?.value)) ? Number(option.value) : idx,
+    }))
+    : [];
+  if (normalized.length === 0) {
+    normalized.push(
+      { label: t("widget.selectOption.1"), value: 0 },
+      { label: t("widget.selectOption.2"), value: 1 },
+    );
+  }
+  return normalized;
+}
+
+function sanitizeSelectWidgetOptions(widget) {
+  const allowedNames = new Set(selectBindableNodeNames());
+  widget.source = String(widget.source ?? "");
+  if (widget.source && !allowedNames.has(widget.source)) {
+    widget.source = "";
+  }
+  widget.options = normalizeSelectWidgetOptions(widget.options);
+  const allowedValues = new Set(widget.options.map((option) => option.value));
+  const numericValue = Number(widget.value);
+  widget.value = allowedValues.has(numericValue) ? numericValue : widget.options[0].value;
+}
+
+function sanitizeTextWidgetOptions(widget) {
+  const allowedNames = new Set(graph.nodes.filter((n) => n.output).map((n) => n.name));
+  widget.source = String(widget.source ?? "");
+  if (widget.source && !allowedNames.has(widget.source)) {
+    widget.source = "";
+  }
+  widget.mappings = Array.isArray(widget.mappings)
+    ? widget.mappings.map((mapping) => ({
+      value: Number.isFinite(Number(mapping?.value)) ? Number(mapping.value) : 0,
+      label: String(mapping?.label ?? ""),
+    }))
+    : [];
+}
+
 function isFiniteMatrix(value) {
   return Array.isArray(value)
     && value.length >= 0
@@ -518,6 +612,8 @@ function applyWidgetDrivenNodeValues() {
       applySliderWidgetValueToNode(widget);
     } else if (widget.type === "button") {
       applyButtonWidgetValueToNode(widget);
+    } else if (widget.type === "select") {
+      applySelectWidgetValueToNode(widget);
     }
   });
 }
@@ -554,6 +650,25 @@ function applyButtonWidgetValueToNode(widget) {
     return;
   }
   const value = widget.value ? 1 : 0;
+  node.externalValueEnabled = true;
+  node.externalValue = value;
+  node.computedValue = value;
+  node.computedError = "";
+}
+
+function applySelectWidgetValueToNode(widget) {
+  if (!widget || widget.type !== "select") {
+    return;
+  }
+  sanitizeSelectWidgetOptions(widget);
+  if (!widget.source) {
+    return;
+  }
+  const node = getNodeByName(widget.source);
+  if (!canBindSliderToNode(node)) {
+    return;
+  }
+  const value = Number(widget.value);
   node.externalValueEnabled = true;
   node.externalValue = value;
   node.computedValue = value;
@@ -1181,8 +1296,14 @@ function widgetDefaultTitle(widget) {
   if (widget.type === "slider") {
     return t("widget.sliderTitle", { id: widget.id });
   }
+  if (widget.type === "select") {
+    return t("widget.selectTitle", { id: widget.id });
+  }
   if (widget.type === "button") {
     return t("widget.buttonTitle", { id: widget.id });
+  }
+  if (widget.type === "text") {
+    return t("widget.textTitle", { id: widget.id });
   }
   if (widget.type === "led") {
     return t("widget.ledTitle", { id: widget.id });
@@ -1324,6 +1445,40 @@ function renderLedWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
   body.appendChild(wrap);
 }
 
+function textWidgetMappedLabel(widget, rawValue) {
+  const value = Number(rawValue);
+  if (!Number.isFinite(value) || !Array.isArray(widget?.mappings)) {
+    return "";
+  }
+  const hit = widget.mappings.find((mapping) => Number(mapping?.value) === value && String(mapping?.label ?? "").trim());
+  return hit ? String(hit.label) : "";
+}
+
+function renderTextWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
+  body.innerHTML = "";
+  sanitizeTextWidgetOptions(widget);
+  const sourceNode = nodeMap.get(widget.source) || null;
+  const wrap = document.createElement("div");
+  wrap.className = "text-widget-wrap";
+  const sourceLine = document.createElement("div");
+  sourceLine.className = "text-widget-source";
+  sourceLine.textContent = widget.source || t("widget.noneOption");
+  wrap.appendChild(sourceLine);
+
+  const display = document.createElement("div");
+  display.className = "text-widget-display";
+  if (!sourceNode) {
+    display.textContent = t("widget.noneOption");
+  } else if (sourceNode.computedError) {
+    display.textContent = localizeExpressionErrorMessage(String(sourceNode.computedError || ""));
+  } else {
+    const mapped = textWidgetMappedLabel(widget, sourceNode.computedValue);
+    display.textContent = mapped || formatComputedValue(sourceNode.computedValue);
+  }
+  wrap.appendChild(display);
+  body.appendChild(wrap);
+}
+
 function renderMatrixWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
   body.innerHTML = "";
   sanitizeMatrixWidgetOptions(widget);
@@ -1378,9 +1533,18 @@ function renderMatrixWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
 function renderTableWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
   body.innerHTML = "";
   const table = document.createElement("table");
+  const displayedCols = widgetDisplayedTableColumns(widget, nodeMap);
+  const colgroup = document.createElement("colgroup");
+  const columnWidth = displayedCols.length > 0 ? `${100 / displayedCols.length}%` : "100%";
+  displayedCols.forEach(() => {
+    const col = document.createElement("col");
+    col.style.width = columnWidth;
+    colgroup.appendChild(col);
+  });
+  table.appendChild(colgroup);
+
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  const displayedCols = widgetDisplayedTableColumns(widget, nodeMap);
   displayedCols.forEach((colName) => {
     const th = document.createElement("th");
     th.textContent = colName || t("widget.columnEmpty");
@@ -1608,6 +1772,33 @@ function refreshButtonWidgetRuntimeBody(root, widget) {
   toggleBtn.textContent = widget.value ? t("widget.buttonState.true") : t("widget.buttonState.false");
 }
 
+function refreshSelectWidgetRuntimeBody(root, widget) {
+  sanitizeSelectWidgetOptions(widget);
+  const body = root.querySelector(".value-widget-body");
+  const selectInput = body?.querySelector(".select-widget-input");
+  const sourceLine = body?.querySelector(".select-widget-source");
+  if (!body || !selectInput || !sourceLine) {
+    renderWidgets();
+    return;
+  }
+  const sourceNode = getNodeByName(widget.source);
+  const lockedForRun = sourceNode?.shape === "diamond" && graph.execution.currentTime != null;
+  sourceLine.textContent = widget.source || t("text.unnamed");
+  const optionsKey = JSON.stringify(widget.options);
+  if (selectInput.dataset.options !== optionsKey) {
+    selectInput.innerHTML = "";
+    widget.options.forEach((option) => {
+      const opt = document.createElement("option");
+      opt.value = String(option.value);
+      opt.textContent = option.label;
+      selectInput.appendChild(opt);
+    });
+    selectInput.dataset.options = optionsKey;
+  }
+  selectInput.value = String(widget.value);
+  selectInput.disabled = lockedForRun;
+}
+
 function refreshLedWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap()) {
   sanitizeLedWidgetOptions(widget);
   const body = root.querySelector(".value-widget-body");
@@ -1616,6 +1807,16 @@ function refreshLedWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap())
     return;
   }
   renderLedWidgetBody(body, widget, nodeMap);
+}
+
+function refreshTextWidgetRuntimeBody(root, widget, nodeMap = buildNodeNameMap()) {
+  sanitizeTextWidgetOptions(widget);
+  const body = root.querySelector(".value-widget-body");
+  if (!body) {
+    renderWidgets();
+    return;
+  }
+  renderTextWidgetBody(body, widget, nodeMap);
 }
 
 function refreshRuntimeWidgetContents() {
@@ -1640,8 +1841,12 @@ function refreshRuntimeWidgetContents() {
       refreshChartWidgetRuntimeBody(root, widget, nodeMap);
     } else if (widget.type === "slider") {
       refreshSliderWidgetRuntimeBody(root, widget);
+    } else if (widget.type === "select") {
+      refreshSelectWidgetRuntimeBody(root, widget);
     } else if (widget.type === "button") {
       refreshButtonWidgetRuntimeBody(root, widget);
+    } else if (widget.type === "text") {
+      refreshTextWidgetRuntimeBody(root, widget, nodeMap);
     } else if (widget.type === "led") {
       refreshLedWidgetRuntimeBody(root, widget, nodeMap);
     } else {
@@ -1675,7 +1880,7 @@ function renderWidgets() {
   const viewMinY = view?.y ?? 0;
 
   graph.widgets.forEach((widget) => {
-    if (widget.type !== "table" && widget.type !== "xychart" && widget.type !== "slider" && widget.type !== "matrix" && widget.type !== "button" && widget.type !== "led") {
+    if (widget.type !== "table" && widget.type !== "xychart" && widget.type !== "slider" && widget.type !== "matrix" && widget.type !== "button" && widget.type !== "led" && widget.type !== "select" && widget.type !== "text") {
       return;
     }
     if (widget.type === "table") {
@@ -1688,6 +1893,10 @@ function renderWidgets() {
       sanitizeXYChartOptions(widget);
     } else if (widget.type === "button") {
       sanitizeButtonWidgetOptions(widget);
+    } else if (widget.type === "select") {
+      sanitizeSelectWidgetOptions(widget);
+    } else if (widget.type === "text") {
+      sanitizeTextWidgetOptions(widget);
     } else if (widget.type === "led") {
       sanitizeLedWidgetOptions(widget);
     } else {
@@ -1975,7 +2184,52 @@ function renderWidgets() {
       sliderWrap.appendChild(sourceLine);
       sliderWrap.appendChild(rangeLine);
       body.appendChild(sliderWrap);
-    } else {
+    } else if (widget.type === "select") {
+      const selectWrap = document.createElement("div");
+      selectWrap.className = "select-widget-wrap";
+
+      const sourceLine = document.createElement("div");
+      sourceLine.className = "select-widget-source";
+      sourceLine.textContent = widget.source || t("text.unnamed");
+      const sourceNode = getNodeByName(widget.source);
+      const lockedForRun = sourceNode?.shape === "diamond" && graph.execution.currentTime != null;
+
+      const selectInput = document.createElement("select");
+      selectInput.className = "select-widget-input";
+      widget.options.forEach((option) => {
+        const opt = document.createElement("option");
+        opt.value = String(option.value);
+        opt.textContent = option.label;
+        selectInput.appendChild(opt);
+      });
+      selectInput.dataset.options = JSON.stringify(widget.options);
+      selectInput.value = String(widget.value);
+      selectInput.disabled = lockedForRun;
+      selectInput.addEventListener("pointerdown", (evt) => {
+        if (lockedForRun) {
+          return;
+        }
+        evt.stopPropagation();
+        if (!(ui.selected?.type === "widget" && ui.selected.id === widget.id)) {
+          selectWidget(widget.id);
+        }
+      });
+      selectInput.addEventListener("mousedown", (evt) => {
+        evt.stopPropagation();
+      });
+      selectInput.addEventListener("change", (evt) => {
+        evt.stopPropagation();
+        widget.value = Number(selectInput.value);
+        applySelectWidgetValueToNode(widget);
+        refreshSidebar();
+        scheduleFileStatusRefresh();
+        renderWidgets();
+      });
+
+      selectWrap.appendChild(sourceLine);
+      selectWrap.appendChild(selectInput);
+      body.appendChild(selectWrap);
+    } else if (widget.type === "button") {
       const buttonWrap = document.createElement("div");
       buttonWrap.className = "button-widget-wrap";
 
@@ -2022,6 +2276,8 @@ function renderWidgets() {
       buttonWrap.appendChild(sourceLine);
       buttonWrap.appendChild(toggleBtn);
       body.appendChild(buttonWrap);
+    } else if (widget.type === "text") {
+      renderTextWidgetBody(body, widget);
     }
 
     const resize = document.createElement("div");
@@ -2303,6 +2559,13 @@ function openBackgroundContextMenu(evt) {
       },
     },
     {
+      label: t("context.bg.newSelectWidget"),
+      action: () => {
+        runAction(() => addSelectWidget({ x: p.x, y: p.y }));
+        setStatusKey("status.widgetSelectCreated");
+      },
+    },
+    {
       label: t("context.bg.newMatrixWidget"),
       action: () => {
         runAction(() => addMatrixWidget({ x: p.x, y: p.y }));
@@ -2314,6 +2577,13 @@ function openBackgroundContextMenu(evt) {
       action: () => {
         runAction(() => addLedWidget({ x: p.x, y: p.y }));
         setStatusKey("status.widgetLedCreated");
+      },
+    },
+    {
+      label: t("context.bg.newTextWidget"),
+      action: () => {
+        runAction(() => addTextWidget({ x: p.x, y: p.y }));
+        setStatusKey("status.widgetTextCreated");
       },
     },
     {
@@ -2451,8 +2721,16 @@ function openTextContextMenu(evt, item) {
         selectTextItem(item.id);
         render();
         window.requestAnimationFrame(() => {
-          textHtmlInput?.focus();
-          textHtmlInput?.select();
+          const editorModal = document.getElementById("textEditorModal");
+          const editorInput = document.getElementById("textEditorInput");
+          if (editorModal) {
+            editorModal.classList.remove("hidden");
+          }
+          if (editorInput) {
+            editorInput.value = String(item.html ?? "");
+            editorInput.focus();
+            editorInput.select();
+          }
         });
       },
     },
@@ -2620,10 +2898,17 @@ function canvasTextDisplayHtml(item) {
 
 function updateSelectedTextHtml(nextValue) {
   const item = ui.selected?.type === "text" ? getTextItemById(ui.selected.id) : null;
-  if (!item || !textHtmlInput) {
+  const panelInput = document.getElementById("textHtmlInput");
+  const editorInput = document.getElementById("textEditorInput");
+  if (!item || (!panelInput && !editorInput)) {
     return false;
   }
-  textHtmlInput.value = nextValue;
+  if (panelInput && document.activeElement !== panelInput) {
+    panelInput.value = nextValue;
+  }
+  if (editorInput && document.activeElement !== editorInput) {
+    editorInput.value = nextValue;
+  }
   item.html = String(nextValue ?? "");
   sanitizeTextItem(item);
   dirtySinceLastSave = true;
@@ -2632,13 +2917,24 @@ function updateSelectedTextHtml(nextValue) {
   return true;
 }
 
+function activeTextHtmlInput() {
+  const panelInput = document.getElementById("textHtmlInput");
+  const editorInput = document.getElementById("textEditorInput");
+  const editorModal = document.getElementById("textEditorModal");
+  if (document.activeElement === editorInput || (editorModal && editorModal.contains(document.activeElement))) {
+    return editorInput;
+  }
+  return panelInput || editorInput;
+}
+
 function wrapTextSelection(startTag, endTag, placeholder = "testo") {
-  if (!textHtmlInput) {
+  const input = activeTextHtmlInput();
+  if (!input) {
     return;
   }
-  const start = textHtmlInput.selectionStart ?? 0;
-  const end = textHtmlInput.selectionEnd ?? 0;
-  const current = textHtmlInput.value || "";
+  const start = input.selectionStart ?? 0;
+  const end = input.selectionEnd ?? 0;
+  const current = input.value || "";
   const selected = start === end ? placeholder : current.slice(start, end);
   const nextValue = `${current.slice(0, start)}${startTag}${selected}${endTag}${current.slice(end)}`;
   if (!updateSelectedTextHtml(nextValue)) {
@@ -2646,24 +2942,27 @@ function wrapTextSelection(startTag, endTag, placeholder = "testo") {
   }
   const nextStart = start + startTag.length;
   const nextEnd = nextStart + selected.length;
-  textHtmlInput.focus();
-  textHtmlInput.setSelectionRange(nextStart, nextEnd);
+  input.focus();
+  input.value = nextValue;
+  input.setSelectionRange(nextStart, nextEnd);
 }
 
 function insertTextHtmlSnippet(snippet) {
-  if (!textHtmlInput) {
+  const input = activeTextHtmlInput();
+  if (!input) {
     return;
   }
-  const start = textHtmlInput.selectionStart ?? 0;
-  const end = textHtmlInput.selectionEnd ?? 0;
-  const current = textHtmlInput.value || "";
+  const start = input.selectionStart ?? 0;
+  const end = input.selectionEnd ?? 0;
+  const current = input.value || "";
   const nextValue = `${current.slice(0, start)}${snippet}${current.slice(end)}`;
   if (!updateSelectedTextHtml(nextValue)) {
     return;
   }
   const caret = start + snippet.length;
-  textHtmlInput.focus();
-  textHtmlInput.setSelectionRange(caret, caret);
+  input.focus();
+  input.value = nextValue;
+  input.setSelectionRange(caret, caret);
 }
 
 function renderPropertiesEditor(container, items, ownerKey, deleteHandler, options = {}) {
@@ -2896,6 +3195,92 @@ function refreshWidgetConfigPanel(widget) {
     return;
   }
 
+  if (widget.type === "select") {
+    sanitizeSelectWidgetOptions(widget);
+    const selectSection = createWidgetSection();
+    const sourceLabel = document.createElement("label");
+    sourceLabel.textContent = t("widget.selectSourceLabel");
+    const sourceSelect = document.createElement("select");
+    const selectChoices = ["", ...selectBindableNodeNames()];
+    selectChoices.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name || t("widget.noneOption");
+      sourceSelect.appendChild(opt);
+    });
+    sourceSelect.value = selectChoices.includes(widget.source) ? widget.source : "";
+    sourceSelect.addEventListener("change", () => {
+      runAction(() => {
+        widget.source = sourceSelect.value;
+        sanitizeSelectWidgetOptions(widget);
+      });
+    });
+    selectSection.appendChild(sourceLabel);
+    selectSection.appendChild(sourceSelect);
+
+    appendWidgetSectionTitle(selectSection, "widget.selectOptions");
+    const list = document.createElement("div");
+    list.className = "props-list";
+    widget.options.forEach((option, idx) => {
+      const row = document.createElement("div");
+      row.className = "prop-row";
+      row.style.gridTemplateColumns = "1fr 120px auto";
+
+      const labelInput = document.createElement("input");
+      labelInput.type = "text";
+      labelInput.value = option.label;
+      labelInput.addEventListener("change", () => {
+        runAction(() => {
+          widget.options[idx].label = labelInput.value;
+          sanitizeSelectWidgetOptions(widget);
+        });
+      });
+
+      const valueInput = document.createElement("input");
+      valueInput.type = "number";
+      valueInput.step = "any";
+      valueInput.value = String(option.value);
+      valueInput.addEventListener("change", () => {
+        runAction(() => {
+          widget.options[idx].value = Number(valueInput.value);
+          sanitizeSelectWidgetOptions(widget);
+        });
+      });
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.textContent = "×";
+      del.addEventListener("click", () => {
+        runAction(() => {
+          widget.options.splice(idx, 1);
+          sanitizeSelectWidgetOptions(widget);
+        });
+      });
+
+      row.appendChild(labelInput);
+      row.appendChild(valueInput);
+      row.appendChild(del);
+      list.appendChild(row);
+    });
+    selectSection.appendChild(list);
+
+    const add = document.createElement("button");
+    add.type = "button";
+    add.textContent = t("action.addOption");
+    add.addEventListener("click", () => {
+      runAction(() => {
+        const nextValue = widget.options.reduce((max, option) => Math.max(max, Number(option.value) || 0), -1) + 1;
+        widget.options.push({
+          label: t("widget.selectOption.n", { index: widget.options.length + 1 }),
+          value: nextValue,
+        });
+        sanitizeSelectWidgetOptions(widget);
+      });
+    });
+    selectSection.appendChild(add);
+    return;
+  }
+
   if (widget.type === "matrix") {
     sanitizeMatrixWidgetOptions(widget);
     const matrixSection = createWidgetSection();
@@ -3098,6 +3483,88 @@ function refreshWidgetConfigPanel(widget) {
     });
     ledSection.appendChild(sourceLabel);
     ledSection.appendChild(sourceSelect);
+    return;
+  }
+
+  if (widget.type === "text") {
+    sanitizeTextWidgetOptions(widget);
+    const textSection = createWidgetSection();
+    const sourceLabel = document.createElement("label");
+    sourceLabel.textContent = t("widget.textSourceLabel");
+    const sourceSelect = document.createElement("select");
+    const textChoices = ["", ...outputNodeNames];
+    textChoices.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name || t("widget.noneOption");
+      sourceSelect.appendChild(opt);
+    });
+    sourceSelect.value = textChoices.includes(widget.source) ? widget.source : "";
+    sourceSelect.addEventListener("change", () => {
+      runAction(() => {
+        widget.source = sourceSelect.value;
+        sanitizeTextWidgetOptions(widget);
+      });
+    });
+    textSection.appendChild(sourceLabel);
+    textSection.appendChild(sourceSelect);
+
+    appendWidgetSectionTitle(textSection, "widget.textMappings");
+    const list = document.createElement("div");
+    list.className = "props-list";
+    widget.mappings.forEach((mapping, idx) => {
+      const row = document.createElement("div");
+      row.className = "prop-row";
+      row.style.gridTemplateColumns = "120px 1fr auto";
+
+      const valueInput = document.createElement("input");
+      valueInput.type = "number";
+      valueInput.step = "any";
+      valueInput.value = String(mapping.value);
+      valueInput.addEventListener("change", () => {
+        runAction(() => {
+          widget.mappings[idx].value = Number(valueInput.value);
+          sanitizeTextWidgetOptions(widget);
+        });
+      });
+
+      const labelInput = document.createElement("input");
+      labelInput.type = "text";
+      labelInput.value = mapping.label;
+      labelInput.addEventListener("change", () => {
+        runAction(() => {
+          widget.mappings[idx].label = labelInput.value;
+          sanitizeTextWidgetOptions(widget);
+        });
+      });
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.textContent = "×";
+      del.addEventListener("click", () => {
+        runAction(() => {
+          widget.mappings.splice(idx, 1);
+          sanitizeTextWidgetOptions(widget);
+        });
+      });
+
+      row.appendChild(valueInput);
+      row.appendChild(labelInput);
+      row.appendChild(del);
+      list.appendChild(row);
+    });
+    textSection.appendChild(list);
+
+    const add = document.createElement("button");
+    add.type = "button";
+    add.textContent = t("action.addMapping");
+    add.addEventListener("click", () => {
+      runAction(() => {
+        widget.mappings.push({ value: 0, label: "" });
+        sanitizeTextWidgetOptions(widget);
+      });
+    });
+    textSection.appendChild(add);
     return;
   }
 
@@ -3586,6 +4053,8 @@ globalThis.Widgets = {
   addCanvasText,
   addLedWidget,
   addButtonWidget,
+  addSelectWidget,
+  addTextWidget,
   addTableWidget,
   addMatrixWidget,
   addSliderWidget,
@@ -3626,6 +4095,8 @@ globalThis.Widgets = {
   sanitizeTableWidgetOptions,
   sanitizeMatrixWidgetOptions,
   sanitizeLedWidgetOptions,
+  sanitizeSelectWidgetOptions,
+  sanitizeTextWidgetOptions,
   sanitizeWidgetXYPairs,
   sanitizeXYChartOptions,
   sanitizeSliderWidgetOptions,

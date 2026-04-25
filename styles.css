@@ -239,11 +239,26 @@ body {
 
 .menu-check {
   margin: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
   color: var(--text);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.menu-check input {
+  margin: 0;
+  justify-self: start;
+}
+
+.menu-check span {
+  white-space: nowrap;
+  justify-self: start;
 }
 
 .menu-field {
@@ -272,18 +287,25 @@ body {
   min-width: 0;
   isolation: isolate;
   z-index: 1;
-  background:
-    linear-gradient(rgba(122, 146, 170, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(122, 146, 170, 0.08) 1px, transparent 1px),
-    radial-gradient(circle at 20% 0%, #ffffff 0, #eef3f8 40%, #e3eaf2 100%);
-  background-size: 24px 24px, 24px 24px, auto;
-  background-position: 0 0, 0 0, 0 0;
+  background: radial-gradient(circle at 20% 0%, #ffffff 0, #eef3f8 40%, #e3eaf2 100%);
 }
 
 .canvas-content {
   position: relative;
   width: max-content;
   height: max-content;
+  --canvas-grid-step: 20px;
+  --canvas-grid-offset-x: 0px;
+  --canvas-grid-offset-y: 0px;
+  background-image:
+    linear-gradient(rgba(122, 146, 170, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(122, 146, 170, 0.14) 1px, transparent 1px);
+  background-size: var(--canvas-grid-step) var(--canvas-grid-step), var(--canvas-grid-step) var(--canvas-grid-step);
+  background-position: var(--canvas-grid-offset-x) var(--canvas-grid-offset-y), var(--canvas-grid-offset-x) var(--canvas-grid-offset-y);
+}
+
+.canvas-content.grid-hidden {
+  background-image: none;
 }
 
 #graphCanvas {
@@ -375,6 +397,7 @@ body {
 .value-widget table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .matrix-widget-grid {
@@ -415,6 +438,10 @@ body {
   border: 1px solid #d9e2ea;
   padding: 4px 6px;
   vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .value-widget th select {
@@ -462,6 +489,7 @@ body {
   gap: 10px;
 }
 
+.select-widget-wrap,
 .led-widget-wrap {
   display: grid;
   gap: 10px;
@@ -469,6 +497,7 @@ body {
   min-height: 100%;
 }
 
+.text-widget-wrap,
 .button-widget-wrap {
   display: grid;
   gap: 10px;
@@ -479,14 +508,32 @@ body {
   color: #4e6072;
 }
 
+.select-widget-source,
 .button-widget-source {
   font-size: 12px;
   color: #4e6072;
 }
 
+.text-widget-source,
 .led-widget-source {
   font-size: 12px;
   color: #4e6072;
+}
+
+.select-widget-input {
+  width: 100%;
+  min-height: 34px;
+}
+
+.text-widget-display {
+  padding: 10px 12px;
+  border: 1px solid #d9e2ea;
+  border-radius: 10px;
+  background: #f8fbfe;
+  color: #193247;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .led-widget-display {
@@ -1488,6 +1535,192 @@ button:disabled {
   top: 50%;
   transform: translate(-50%, -50%);
   overflow: hidden;
+}
+
+.model-analysis-card {
+  width: min(860px, calc(100vw - 40px));
+  max-width: calc(100vw - 20px);
+  max-height: calc(100vh - 20px);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+}
+
+.text-editor-card {
+  width: min(760px, calc(100vw - 40px));
+  height: min(70vh, 520px);
+  min-width: 480px;
+  min-height: 280px;
+  max-width: calc(100vw - 20px);
+  max-height: calc(100vh - 20px);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+}
+
+.text-editor-body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  min-height: 0;
+  flex: 1;
+}
+
+.text-editor-textarea {
+  width: 100%;
+  min-height: 0;
+  resize: none;
+}
+
+.model-analysis-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.model-analysis-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.model-analysis-pill.total {
+  background: #e8eef3;
+  color: #284051;
+}
+
+.model-analysis-pill.error {
+  background: #ffe8e3;
+  color: #9f3521;
+}
+
+.model-analysis-pill.warning {
+  background: #fff2da;
+  color: #9b6100;
+}
+
+.model-analysis-pill.info {
+  background: #e7f3ff;
+  color: #16507b;
+}
+
+.model-analysis-content {
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.model-analysis-empty {
+  padding: 16px 14px;
+  border: 1px dashed #c7d4df;
+  border-radius: 10px;
+  background: #f7fafc;
+  color: #445b6d;
+}
+
+.model-analysis-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-analysis-section-title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #355067;
+}
+
+.model-analysis-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-analysis-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  cursor: pointer;
+}
+
+.model-analysis-item:hover {
+  background: #f7fbfe;
+  border-color: #b8cad8;
+}
+
+.model-analysis-item.error {
+  border-color: #f2beb3;
+  background: #fff7f4;
+}
+
+.model-analysis-item.warning {
+  border-color: #f2d7a7;
+  background: #fffaf1;
+}
+
+.model-analysis-item.info {
+  border-color: #bcd7f0;
+  background: #f7fbff;
+}
+
+.model-analysis-item:focus-visible {
+  outline: 2px solid #2f7bbd;
+  outline-offset: 2px;
+}
+
+.model-analysis-badge {
+  min-width: 82px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.model-analysis-item.error .model-analysis-badge {
+  background: #ffe3dc;
+  color: #a03d28;
+}
+
+.model-analysis-item.warning .model-analysis-badge {
+  background: #ffeecb;
+  color: #9a6200;
+}
+
+.model-analysis-item.info .model-analysis-badge {
+  background: #deefff;
+  color: #1f5d92;
+}
+
+.model-analysis-message {
+  color: #314a5d;
+  line-height: 1.4;
+}
+
+.model-analysis-target {
+  color: #60798b;
+  font-size: 0.82rem;
+  white-space: nowrap;
 }
 
 .help-intro {

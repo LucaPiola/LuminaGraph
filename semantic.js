@@ -823,7 +823,7 @@
         i += 2;
         continue;
       }
-      if ("+-*/%<>()[],!:. ".replace(/\s/g, "").includes(ch)) {
+      if ("+-*/%^<>()[],!:. ".replace(/\s/g, "").includes(ch)) {
         tokens.push({ type: "op", value: ch });
         i += 1;
         continue;
@@ -936,10 +936,10 @@
       }
       if (
         token.type === "op" &&
-        ["+", "-", "*", "/", "%", "**", "<", ">", "<=", ">=", "==", "!=", "===", "!==", "&&", "||"].includes(token.value)
+        ["+", "-", "*", "/", "%", "**", "^", "<", ">", "<=", ">=", "==", "!=", "===", "!==", "&&", "||"].includes(token.value)
       ) {
         next();
-        return { type: "callable-ref", refKind: "operator", name: token.value };
+        return { type: "callable-ref", refKind: "operator", name: token.value === "^" ? "**" : token.value };
       }
       throw new SyntaxError("reduce expects an operator or function as first argument");
     }
@@ -1112,7 +1112,7 @@
 
     function parsePower() {
       let left = parseUnary();
-      if (match("**")) {
+      if (match("**", "^")) {
         left = { type: "binary", op: "**", left, right: parsePower() };
       }
       return left;

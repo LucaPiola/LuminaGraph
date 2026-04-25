@@ -1,6 +1,6 @@
 # STGraphX: readme
 
-_Luca Mari, versione 22 aprile 2026_
+_Luca Mari, versione 25 aprile 2026_
 
 ## Contesto
 
@@ -19,9 +19,9 @@ Applicazione JavaScript con doppia shell e logica condivisa:
 * web, per accesso da browser via `http:` (e con qualche limitazione anche `file:`);
 * desktop, mediante `Electron`.
 
-__Al momento implementati (senza librerie esterne!):__
+__Al momento implementati (senza librerie esterne):__
 
-* editor per grafi orientati, con nodi di forme e colori diversi e tooltip, frecce spline, testi, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard (anche condivisa tra instanze diverse), undo e redo, ...;
+* editor per grafi orientati, con nodi di forme e colori diversi e tooltip, frecce spline, testi, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard (anche condivisa tra instanze diverse dell'app), undo e redo, ...;
 * menu, menu contestuale e pannello di configurazione aggiornato dinamicamente, con tooltip;
 * gestione dei testi dell'interfaccia utente in italiano e inglese, con scelta via query string nella shell web (`?lang=it|en`) e via parametro `--lang=it|en` nella shell Electron;
 * gestione dei nodi algebrici, di stato, parametri e sottomodelli, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale); controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo sullo stato iniziale: solo espressioni locali o riferimenti a parametri; controllo del numero di cifre decimali visualizzate;
@@ -34,11 +34,11 @@ __Al momento implementati (senza librerie esterne!):__
 * generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione/slicing di vettori e matrici con la sintassi di NumPy, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari;
 * funzioni "special form" per operare su vettori e matrici: `array`, `reduce`, `map`, `filter`;
 * gestione di proprietà custom per il modello e i singoli nodi e funzioni `getModelProperty`/`getProperty` e `setModelProperty`/`setProperty`;
-* gestione di nodi di output e di widget di output: grafici, tabelle, matrici, led; pannello di configurazione aggiornato dinamicamente;
-* gestione di nodi di input e di widget di input, anche per parametri: slider e pulsante; pannello di configurazione aggiornato dinamicamente;
+* gestione di nodi di output e di widget di output: grafici, tabelle, matrici, led, testo; pannello di configurazione aggiornato dinamicamente;
+* gestione di nodi di input e di widget di input, anche per parametri: slider, pulsante, selettore di testo; pannello di configurazione aggiornato dinamicamente;
 * gestione dei sottomodelli con file JSON separati, con caricamento dalla stessa cartella del modello, binding dei nodi di input e accesso ai nodi di output con notazione `nomeSottomodello.nomeOutput`; prima gestione in logica ABM dichiarativa / funzionale, mediante variabili di sistema `self` e `$i$`;
 * visualizzazione alternata per il grafo e i widget;
-* editor per testi;
+* editor per testi con formattazione HTML basilare;
 * definizione della base dei tempi e modalità varie di esecuzione; pannello di configurazione aggiornato dinamicamente;
 * caricamento e salvataggio di modelli in file JSON;
 * editor per espressioni con controllo sintattico interattivo, visualizzazione dei valori attuali, help;
@@ -52,6 +52,7 @@ __Al momento non implementati (rispetto a STGraph):__
 * varie funzioni;
 * nodi di stato con output;
 * variabili globali;
+* gestione di interrupt;
 * playmode e altre modalità di esecuzione;
 * lettura e scrittura di file dati (xls, csv, ...);
 * interfaccia a tab per più modelli;
@@ -72,7 +73,7 @@ __Al momento non implementati (rispetto a STGraph):__
 * Quando si chiede di realizzare cose complesse, suggerisce di farlo per passi successivi ("Se vuoi, il prossimo passo utile è...")
 * Scrive ottima documentazione a partire dal codice, e aggiorna automaticamente la documentazione
 * È come un dialogo con uno sviluppatore esperto (inclusi suoi commenti come "Il patch è saltato su un punto di contesto nel CSS. Lo rifaccio in blocchi più piccoli così non rischiamo di lasciare roba a metà.")
-* Sa usare il software che genera: in questo caso, sa creare modelli stg
+* Sa usare il software che ha generato: dunque in questo caso sa creare modelli stg come file json del formato atteso e di contenuto appropriato
 * ...
 
 ## Documentazione aggiuntiva

@@ -15,8 +15,10 @@ const addDiamondNodeItem = document.getElementById("addDiamondNodeItem");
 const addSubmodelNodeItem = document.getElementById("addSubmodelNodeItem");
 const addTextItem = document.getElementById("addTextItem");
 const addButtonWidgetItem = document.getElementById("addButtonWidgetItem");
+const addSelectWidgetItem = document.getElementById("addSelectWidgetItem");
 const addSliderWidgetItem = document.getElementById("addSliderWidgetItem");
 const addLedWidgetItem = document.getElementById("addLedWidgetItem");
+const addTextWidgetItem = document.getElementById("addTextWidgetItem");
 const addMatrixWidgetItem = document.getElementById("addMatrixWidgetItem");
 const addTableWidgetItem = document.getElementById("addTableWidgetItem");
 const addXYChartWidgetItem = document.getElementById("addXYChartWidgetItem");
@@ -32,6 +34,7 @@ const runEvalBtn = document.getElementById("runEvalBtn");
 const runStepBtn = document.getElementById("runStepBtn");
 const runTimedToggleBtn = document.getElementById("runTimedToggleBtn");
 const runResetBtn = document.getElementById("runResetBtn");
+const analyzeModelBtn = document.getElementById("analyzeModelBtn");
 const topRunEvalBtn = document.getElementById("topRunEvalBtn");
 const topRunStepBtn = document.getElementById("topRunStepBtn");
 const topRunTimedBtn = document.getElementById("topRunTimedBtn");
@@ -55,6 +58,7 @@ const recentModelsSection = document.getElementById("recentModelsSection");
 const clearRecentModelsBtn = document.getElementById("clearRecentModelsBtn");
 const loadJsonInput = document.getElementById("loadJsonInput");
 const snapToGridInput = document.getElementById("snapToGridInput");
+const showGridInput = document.getElementById("showGridInput");
 const gridSizeInput = document.getElementById("gridSizeInput");
 
 const noSelection = document.getElementById("noSelection");
@@ -103,11 +107,19 @@ const nodeInitialStateRow = document.getElementById("nodeInitialStateRow");
 const nodeInitialStateInput = document.getElementById("nodeInitialStateInput");
 const nodeInitialStateStatus = document.getElementById("nodeInitialStateStatus");
 const nodeValueOutput = document.getElementById("nodeValueOutput");
+const nodeNameLabel = document.querySelector('label[for="nodeNameInput"]');
+const nodeValueOutputLabel = document.querySelector('label[for="nodeValueOutput"]');
 const nodeFillColorInput = document.getElementById("nodeFillColorInput");
 const nodeStrokeColorInput = document.getElementById("nodeStrokeColorInput");
 const resetNodeColorsBtn = document.getElementById("resetNodeColorsBtn");
 const propsList = document.getElementById("propsList");
 const addPropBtn = document.getElementById("addPropBtn");
+const nodeIdentitySection = nodeNameInput?.closest(".panel-section");
+const nodeFormulaSection = nodeModelPathInput?.closest(".panel-section");
+const nodeValueSection = nodeValueOutput?.closest(".panel-section");
+const nodeColorSection = nodeFillColorInput?.closest(".panel-section");
+const nodePropsSection = propsList?.closest(".panel-section");
+const nodePropsTitle = nodePropsSection?.querySelector("h4");
 
 const edgeInfo = document.getElementById("edgeInfo");
 const textPanel = document.getElementById("textPanel");
@@ -115,8 +127,13 @@ const textWidthInput = document.getElementById("textWidthInput");
 const textHeightInput = document.getElementById("textHeightInput");
 const textFillColorInput = document.getElementById("textFillColorInput");
 const textStrokeColorInput = document.getElementById("textStrokeColorInput");
-const textToolbar = document.getElementById("textToolbar");
 const textHtmlInput = document.getElementById("textHtmlInput");
+const textEditorModal = document.getElementById("textEditorModal");
+const textEditorCard = textEditorModal?.querySelector(".text-editor-card");
+const textEditorInput = document.getElementById("textEditorInput");
+const textEditorToolbar = document.getElementById("textEditorToolbar");
+const textEditorCloseBtn = document.getElementById("textEditorCloseBtn");
+const textEditorDismissBtn = document.getElementById("textEditorDismissBtn");
 const widgetConfig = document.getElementById("widgetConfig");
 const contextMenu = document.getElementById("contextMenu");
 const canvasContent = document.getElementById("canvasContent");
@@ -161,6 +178,11 @@ const functionsHelpContent = document.getElementById("functionsHelpContent");
 const aboutAppModal = document.getElementById("aboutAppModal");
 const aboutAppCloseBtn = document.getElementById("aboutAppCloseBtn");
 const aboutAppDismissBtn = document.getElementById("aboutAppDismissBtn");
+const modelAnalysisModal = document.getElementById("modelAnalysisModal");
+const modelAnalysisCloseBtn = document.getElementById("modelAnalysisCloseBtn");
+const modelAnalysisDismissBtn = document.getElementById("modelAnalysisDismissBtn");
+const modelAnalysisSummary = document.getElementById("modelAnalysisSummary");
+const modelAnalysisContent = document.getElementById("modelAnalysisContent");
 const expressionEditorSwitchModal = document.getElementById("expressionEditorSwitchModal");
 const expressionEditorSwitchCloseBtn = document.getElementById("expressionEditorSwitchCloseBtn");
 const expressionEditorSwitchCancelBtn = document.getElementById("expressionEditorSwitchCancelBtn");
@@ -172,6 +194,8 @@ const {
   addCanvasText,
   addLedWidget,
   addButtonWidget,
+  addSelectWidget,
+  addTextWidget,
   addSliderWidget,
   addMatrixWidget,
   addTableWidget,
@@ -458,6 +482,7 @@ const ui = {
   controlPointDrag: null,
   marquee: null,
   snapToGrid: true,
+  showGrid: true,
   gridSize: 20,
   zoom: 1,
   nodeNameEditStart: null,
@@ -480,6 +505,7 @@ const ui = {
   activeChartPairByWidgetId: new Map(),
   sidebarNodeId: null,
   lastNodeActivate: null,
+  lastTextActivate: null,
   textDrag: null,
   textResize: null,
   expressionPreviewTimer: null,
@@ -579,6 +605,28 @@ function snap(value) {
 
 function snapPoint(p) {
   return { x: snap(p.x), y: snap(p.y) };
+}
+
+function updateCanvasGridAppearance() {
+  if (!canvasContent || !svg) {
+    return;
+  }
+  const vb = svg.viewBox?.baseVal;
+  const viewX = Number(vb?.x) || 0;
+  const viewY = Number(vb?.y) || 0;
+  const stepPx = Math.max(1, ui.gridSize * ui.zoom);
+  const offsetX = -((viewX * ui.zoom) % stepPx);
+  const offsetY = -((viewY * ui.zoom) % stepPx);
+  canvasContent.style.setProperty("--canvas-grid-step", `${stepPx}px`);
+  canvasContent.style.setProperty("--canvas-grid-offset-x", `${offsetX}px`);
+  canvasContent.style.setProperty("--canvas-grid-offset-y", `${offsetY}px`);
+  canvasContent.classList.toggle("grid-hidden", !ui.showGrid);
+  if (showGridInput) {
+    showGridInput.checked = ui.showGrid;
+  }
+  if (gridSizeInput && document.activeElement !== gridSizeInput) {
+    gridSizeInput.value = String(ui.gridSize);
+  }
 }
 
 function deepClone(obj) {
@@ -1583,6 +1631,406 @@ function nodeDefinitionIssueText(issue) {
   return t("error.evalReason.runtime");
 }
 
+function collectExpressionIdentifierReferences(expression) {
+  const src = String(expression ?? "");
+  const refs = new Set();
+  const skipped = new Set(["true", "false", "null", "this", "self", "__self", "$i", "$value", "time", "t0", "t1", "dt"]);
+  let i = 0;
+  let mode = "code";
+  while (i < src.length) {
+    const ch = src[i];
+    if (mode === "code") {
+      if (ch === "'" || ch === "\"" || ch === "`") {
+        mode = ch;
+        i += 1;
+        continue;
+      }
+      if (/[A-Za-z_$]/u.test(ch)) {
+        let j = i + 1;
+        while (j < src.length && /[A-Za-z0-9_$]/u.test(src[j])) {
+          j += 1;
+        }
+        const token = src.slice(i, j);
+        const prev = i > 0 ? src[i - 1] : "";
+        let k = j;
+        while (k < src.length && /\s/u.test(src[k])) {
+          k += 1;
+        }
+        const isFunctionCall = src[k] === "(";
+        if (
+          prev !== "."
+          && !isFunctionCall
+          && !skipped.has(token)
+          && !/^\$[0-9]+$/u.test(token)
+        ) {
+          refs.add(token);
+        }
+        i = j;
+        continue;
+      }
+      i += 1;
+      continue;
+    }
+    if (ch === "\\") {
+      i += 2;
+      continue;
+    }
+    if (ch === mode) {
+      mode = "code";
+    }
+    i += 1;
+  }
+  return refs;
+}
+
+function incomingEdgesForNode(nodeId, model = graph) {
+  return (model?.edges || []).filter((edge) => edge.to === nodeId);
+}
+
+function pureTimeConfigIssue(execution = graph.execution) {
+  const t0 = Number(execution?.t0);
+  const dt = Number(execution?.dt);
+  const t1 = Number(execution?.t1);
+  if (!Number.isFinite(t0) || !Number.isFinite(dt) || !Number.isFinite(t1)) {
+    return t("error.timeInvalid");
+  }
+  if (dt === 0) {
+    return t("error.timeStepZero");
+  }
+  if ((dt > 0 && t0 > t1) || (dt < 0 && t0 < t1)) {
+    return t("error.timeDirection");
+  }
+  return "";
+}
+
+function expressionReferencesForAnalysis(node, fieldKey = "value") {
+  if (!node || isSubmodelNode(node)) {
+    return new Set();
+  }
+  const expr = fieldKey === "initial"
+    ? String(node.initialStateExpression ?? "")
+    : String(node.valueExpression ?? "");
+  return collectExpressionIdentifierReferences(expr);
+}
+
+function stateTransitionPreviewForAnalysis(node, previewState) {
+  if (!node || !isStateNode(node) || !previewState?.model) {
+    return null;
+  }
+  const runtimeNode = getModelNodeById(previewState.model, node.id);
+  if (!runtimeNode) {
+    return null;
+  }
+  const initialContext = {
+    ...previewState.globals,
+    ...nodePropertyAccessForContext(runtimeNode),
+  };
+  incomingEdgesForNode(runtimeNode.id, previewState.model)
+    .map((edge) => getModelNodeById(previewState.model, edge.from))
+    .filter((depNode) => depNode && depNode.shape === "diamond")
+    .forEach((depNode) => {
+      if (!depNode.computedError) {
+        initialContext[depNode.name] = depNode.computedValue;
+      }
+    });
+  const currentValueResult = semantics.evaluateValueExpression(
+    String(runtimeNode.initialStateExpression ?? ""),
+    initialContext,
+  );
+  if (!currentValueResult.ok) {
+    return { ok: false, current: currentValueResult };
+  }
+  const context = {
+    ...previewState.globals,
+    ...nodePropertyAccessForContext(runtimeNode),
+    __self: currentValueResult.value,
+  };
+  incomingEdgesForNode(runtimeNode.id, previewState.model)
+    .map((edge) => getModelNodeById(previewState.model, edge.from))
+    .filter(Boolean)
+    .forEach((depNode) => {
+      if (!depNode.computedError) {
+        context[depNode.name] = depNode.computedValue;
+      }
+    });
+  const source = String(runtimeNode.valueExpression ?? "");
+  const nextValueResult = source.includes("integral(")
+    ? (() => {
+        const derivativeList = semantics.evaluateIntegralDerivativeList(source, context, {
+          allowThisAlias: true,
+        });
+        if (!derivativeList.ok) {
+          return derivativeList;
+        }
+        const dt = Number(graph.execution.dt);
+        const integralValues = (derivativeList.value || [])
+          .map((derivativeValue) => addTensorValues(currentValueResult.value, scaleTensorValue(derivativeValue, dt)));
+        return semantics.evaluateStateTransitionExpressionWithIntegralValues(
+          source,
+          context,
+          integralValues,
+          { allowThisAlias: true },
+        );
+      })()
+    : semantics.evaluateValueExpression(source, context, {
+        allowThisAlias: true,
+        allowIntegral: true,
+      });
+  return {
+    ok: Boolean(currentValueResult.ok && nextValueResult.ok),
+    current: currentValueResult,
+    next: nextValueResult,
+  };
+}
+
+function widgetDisplayName(widget) {
+  if (!widget) {
+    return t("analysis.target.widget", { name: "?" });
+  }
+  const typeLabel = widget.type === "xychart"
+    ? t("panel.widgetChart")
+    : widget.type === "table"
+      ? t("panel.widgetTable")
+      : widget.type === "matrix"
+        ? t("panel.widgetMatrix")
+        : widget.type === "slider"
+          ? t("panel.widgetSlider")
+          : widget.type === "button"
+            ? t("panel.widgetButton")
+            : widget.type === "select"
+              ? t("panel.widgetSelect")
+              : widget.type === "led"
+                ? t("panel.widgetLed")
+                : widget.type === "text"
+                  ? t("panel.widgetText")
+                  : widget.type;
+  const suffix = widget.customTitle ? `: ${widget.customTitle}` : ` #${widget.id}`;
+  return `${typeLabel}${suffix}`;
+}
+
+function pushAnalysisIssue(issues, severity, key, vars, target = null) {
+  issues.push({
+    severity,
+    message: t(key, vars || null),
+    key,
+    target,
+  });
+}
+
+function analyzeModelStaticIssues() {
+  const issues = [];
+  const timeIssue = pureTimeConfigIssue(graph.execution);
+  if (timeIssue) {
+    pushAnalysisIssue(issues, "error", "analysis.issue.invalidTimeConfig", { reason: timeIssue }, { type: "model" });
+  }
+
+  const nodeMap = buildNodeNameMap();
+  graph.nodes.forEach((node) => {
+    const definitionIssue = validateNodeDefinition(node);
+    if (!definitionIssue.ok) {
+      issues.push({
+        severity: "error",
+        message: nodeDefinitionIssueText(definitionIssue),
+        target: { type: "node", id: node.id, name: node.name },
+      });
+    }
+  });
+
+  graph.nodes.forEach((node) => {
+    if (isSubmodelNode(node)) {
+      return;
+    }
+    const incomingEdges = incomingEdgesForNode(node.id);
+    const incomingNameToEdges = new Map();
+    incomingEdges.forEach((edge) => {
+      const fromNode = getNodeById(edge.from);
+      if (!fromNode) {
+        return;
+      }
+      const list = incomingNameToEdges.get(fromNode.name) || [];
+      list.push(edge);
+      incomingNameToEdges.set(fromNode.name, list);
+    });
+
+    const valueRefs = expressionReferencesForAnalysis(node, "value");
+    const initialRefs = isStateNode(node) ? expressionReferencesForAnalysis(node, "initial") : new Set();
+
+    valueRefs.forEach((name) => {
+      const depNode = nodeMap.get(name);
+      if (!depNode || depNode.id === node.id) {
+        return;
+      }
+      if (!incomingNameToEdges.has(name)) {
+        pushAnalysisIssue(
+          issues,
+          "warning",
+          "analysis.issue.missingIncomingEdge",
+          { target: node.name, source: name },
+          { type: "node", id: node.id, name: node.name },
+        );
+      }
+    });
+
+    initialRefs.forEach((name) => {
+      const depNode = nodeMap.get(name);
+      if (!depNode || depNode.id === node.id || depNode.shape !== "diamond") {
+        return;
+      }
+      if (!incomingNameToEdges.has(name)) {
+        pushAnalysisIssue(
+          issues,
+          "warning",
+          "analysis.issue.missingIncomingEdge",
+          { target: node.name, source: name },
+          { type: "node", id: node.id, name: node.name },
+        );
+      }
+    });
+
+    incomingNameToEdges.forEach((edgesForName, sourceName) => {
+      const sourceNode = nodeMap.get(sourceName);
+      if (!sourceNode) {
+        return;
+      }
+      const usedInValue = valueRefs.has(sourceName);
+      const usedInInitial = isStateNode(node) && sourceNode.shape === "diamond" && initialRefs.has(sourceName);
+      if (usedInValue || usedInInitial) {
+        return;
+      }
+      edgesForName.forEach((edge) => {
+        pushAnalysisIssue(
+          issues,
+          "warning",
+          "analysis.issue.unusedEdge",
+          { from: sourceName, to: node.name },
+          { type: "edge", id: edge.id, name: `${sourceName} -> ${node.name}` },
+        );
+      });
+    });
+  });
+
+  graph.nodes.forEach((node) => {
+    const hasOutgoingEdges = graph.edges.some((edge) => edge.from === node.id);
+    const usedByTable = graph.widgets.some((widget) => widget.type === "table" && Array.isArray(widget.columns) && widget.columns.includes(node.name));
+    const usedByChart = graph.widgets.some((widget) => widget.type === "xychart"
+      && Array.isArray(widget.xyPairs)
+      && widget.xyPairs.some((pair) => pair?.xSource === node.name || pair?.ySource === node.name));
+    const usedBySourceWidget = graph.widgets.some((widget) => widget.source === node.name);
+    const observed = Boolean(node.output || hasOutgoingEdges || usedByTable || usedByChart || usedBySourceWidget);
+    if (!observed) {
+      pushAnalysisIssue(
+        issues,
+        "warning",
+        "analysis.issue.unusedNode",
+        { name: node.name },
+        { type: "node", id: node.id, name: node.name },
+      );
+    }
+  });
+
+  graph.widgets.forEach((widget) => {
+    const widgetName = widgetDisplayName(widget);
+    if (widget.type === "slider" || widget.type === "button" || widget.type === "select") {
+      if (!widget.source) {
+        pushAnalysisIssue(issues, "warning", "analysis.issue.widgetNoSource", { name: widgetName }, { type: "widget", id: widget.id, name: widgetName });
+        return;
+      }
+      const sourceNode = nodeMap.get(widget.source);
+      if (!sourceNode) {
+        pushAnalysisIssue(issues, "error", "analysis.issue.widgetMissingSource", { name: widgetName, source: widget.source }, { type: "widget", id: widget.id, name: widgetName });
+        return;
+      }
+      const bindable = widget.type === "button" ? canBindButtonToNode(sourceNode) : canBindSliderToNode(sourceNode);
+      if (!bindable) {
+        pushAnalysisIssue(issues, "error", "analysis.issue.widgetSourceNotBindable", { name: widgetName, source: widget.source }, { type: "widget", id: widget.id, name: widgetName });
+      }
+      return;
+    }
+
+    if (widget.type === "matrix" || widget.type === "led" || widget.type === "text") {
+      if (!widget.source) {
+        pushAnalysisIssue(issues, "warning", "analysis.issue.widgetNoSource", { name: widgetName }, { type: "widget", id: widget.id, name: widgetName });
+        return;
+      }
+      const sourceNode = nodeMap.get(widget.source);
+      if (!sourceNode) {
+        pushAnalysisIssue(issues, "error", "analysis.issue.widgetMissingSource", { name: widgetName, source: widget.source }, { type: "widget", id: widget.id, name: widgetName });
+        return;
+      }
+      if (!sourceNode.output) {
+        pushAnalysisIssue(issues, "warning", "analysis.issue.widgetSourceNotOutput", { name: widgetName, source: widget.source }, { type: "widget", id: widget.id, name: widgetName });
+      }
+      return;
+    }
+
+    if (widget.type === "table") {
+      if (!Array.isArray(widget.columns) || widget.columns.length === 0) {
+        pushAnalysisIssue(issues, "warning", "analysis.issue.tableNoColumns", { name: widgetName }, { type: "widget", id: widget.id, name: widgetName });
+        return;
+      }
+      widget.columns.forEach((columnName) => {
+        if (columnName === "time") {
+          return;
+        }
+        const sourceNode = nodeMap.get(columnName);
+        if (!sourceNode) {
+          pushAnalysisIssue(issues, "error", "analysis.issue.tableMissingColumn", { name: widgetName, source: columnName }, { type: "widget", id: widget.id, name: widgetName });
+          return;
+        }
+        if (!sourceNode.output) {
+          pushAnalysisIssue(issues, "warning", "analysis.issue.tableColumnNotOutput", { name: widgetName, source: columnName }, { type: "widget", id: widget.id, name: widgetName });
+        }
+      });
+      return;
+    }
+
+    if (widget.type === "xychart") {
+      if (!Array.isArray(widget.xyPairs) || widget.xyPairs.length === 0) {
+        pushAnalysisIssue(issues, "warning", "analysis.issue.chartNoPairs", { name: widgetName }, { type: "widget", id: widget.id, name: widgetName });
+        return;
+      }
+      widget.xyPairs.forEach((pair) => {
+        [pair?.xSource, pair?.ySource].forEach((sourceName) => {
+          if (!sourceName) {
+            return;
+          }
+          const sourceNode = nodeMap.get(sourceName);
+          if (!sourceNode) {
+            pushAnalysisIssue(issues, "error", "analysis.issue.chartMissingSeriesSource", { name: widgetName, source: sourceName }, { type: "widget", id: widget.id, name: widgetName });
+            return;
+          }
+          if (!sourceNode.output) {
+            pushAnalysisIssue(issues, "warning", "analysis.issue.chartSeriesNotOutput", { name: widgetName, source: sourceName }, { type: "widget", id: widget.id, name: widgetName });
+          }
+        });
+      });
+    }
+  });
+
+  const previewState = getExpressionPreviewInitializationState();
+  graph.nodes
+    .filter((node) => isStateNode(node))
+    .forEach((node) => {
+      const preview = stateTransitionPreviewForAnalysis(node, previewState);
+      if (!preview?.current?.ok || !preview?.next?.ok) {
+        return;
+      }
+      const currentShape = describeExpressionPreviewShape(preview.current.value);
+      const nextShape = describeExpressionPreviewShape(preview.next.value);
+      if (currentShape && nextShape && currentShape !== nextShape) {
+        pushAnalysisIssue(
+          issues,
+          "warning",
+          "analysis.issue.stateShapeMismatch",
+          { name: node.name, current: currentShape, next: nextShape },
+          { type: "node", id: node.id, name: node.name },
+        );
+      }
+    });
+
+  return issues;
+}
+
 function enforceStrictDefinitionsIfNeeded() {
   if (!graph.execution.strictDefinitions) {
     return true;
@@ -1766,7 +2214,7 @@ function syncExpressionEditorFormulaNotes() {
   expressionStateTransitionHead?.classList.toggle("hidden", !stateVisible);
   if (expressionStateInitialInput) {
     expressionStateInitialInput.value = stateVisible ? String(node.initialStateExpression ?? "") : "";
-    expressionStateInitialInput.disabled = !stateVisible || isExecutionFrozen();
+    expressionStateInitialInput.disabled = !stateVisible || isEditingUiLocked();
   }
   hideExpressionStatus(expressionStateInitialStatus);
   hideExpressionStatus(expressionStateTransitionStatus);
@@ -1774,11 +2222,11 @@ function syncExpressionEditorFormulaNotes() {
   expressionFormulaNotesBox?.classList.toggle("hidden", !visible);
   if (expressionDescriptionInput) {
     expressionDescriptionInput.value = visible ? getNodeDescription(node) : "";
-    expressionDescriptionInput.disabled = !visible || isExecutionFrozen();
+    expressionDescriptionInput.disabled = !visible || isEditingUiLocked();
   }
   if (expressionFormulaNotesInput) {
     expressionFormulaNotesInput.value = visible ? getNodeFormulaNotes(node) : "";
-    expressionFormulaNotesInput.disabled = !visible || isExecutionFrozen();
+    expressionFormulaNotesInput.disabled = !visible || isEditingUiLocked();
   }
   expressionEditorCard?.classList.toggle("state-node-editor", stateVisible);
   expressionEditorMain?.classList.toggle("state-node-editor", stateVisible);
@@ -2069,6 +2517,136 @@ function closeAboutApp() {
     return;
   }
   aboutAppModal.classList.add("hidden");
+}
+
+function closeModelAnalysis() {
+  if (!modelAnalysisModal) {
+    return;
+  }
+  modelAnalysisModal.classList.add("hidden");
+}
+
+function analysisIssueTargetLabel(issue) {
+  const target = issue?.target;
+  if (!target) {
+    return "";
+  }
+  if (target.type === "node") {
+    return t("analysis.target.node", { name: target.name || "?" });
+  }
+  if (target.type === "edge") {
+    return t("analysis.target.edge", { name: target.name || "?" });
+  }
+  if (target.type === "widget") {
+    return t("analysis.target.widget", { name: target.name || "?" });
+  }
+  return t("analysis.target.model");
+}
+
+function focusAnalysisIssueTarget(issue) {
+  const target = issue?.target;
+  if (!target) {
+    return;
+  }
+  closeModelAnalysis();
+  if (target.type === "node" && target.id != null) {
+    selectSingleNode(target.id);
+    return;
+  }
+  if (target.type === "edge" && target.id != null) {
+    selectEdge(target.id);
+    return;
+  }
+  if (target.type === "widget" && target.id != null) {
+    selectWidget(target.id);
+  }
+}
+
+function renderModelAnalysisReport(issues) {
+  if (!modelAnalysisSummary || !modelAnalysisContent) {
+    return;
+  }
+  const safeIssues = Array.isArray(issues) ? issues : [];
+  const counts = {
+    total: safeIssues.length,
+    error: safeIssues.filter((issue) => issue.severity === "error").length,
+    warning: safeIssues.filter((issue) => issue.severity === "warning").length,
+    info: safeIssues.filter((issue) => issue.severity === "info").length,
+  };
+
+  modelAnalysisSummary.innerHTML = "";
+  [
+    ["total", t("analysis.summary.total", { count: counts.total })],
+    ["error", t("analysis.summary.errors", { count: counts.error })],
+    ["warning", t("analysis.summary.warnings", { count: counts.warning })],
+    ["info", t("analysis.summary.info", { count: counts.info })],
+  ].forEach(([kind, text]) => {
+    const pill = document.createElement("div");
+    pill.className = `model-analysis-pill ${kind}`;
+    pill.textContent = text;
+    modelAnalysisSummary.appendChild(pill);
+  });
+
+  modelAnalysisContent.innerHTML = "";
+  if (safeIssues.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "model-analysis-empty";
+    empty.textContent = t("analysis.empty");
+    modelAnalysisContent.appendChild(empty);
+    return;
+  }
+
+  ["error", "warning", "info"].forEach((severity) => {
+    const items = safeIssues.filter((issue) => issue.severity === severity);
+    if (items.length === 0) {
+      return;
+    }
+    const section = document.createElement("section");
+    section.className = "model-analysis-section";
+    const title = document.createElement("h4");
+    title.className = "model-analysis-section-title";
+    title.textContent = t(`analysis.section.${severity}`);
+    section.appendChild(title);
+    const list = document.createElement("div");
+    list.className = "model-analysis-list";
+    items.forEach((issue) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `model-analysis-item ${severity}`;
+      const badge = document.createElement("span");
+      badge.className = "model-analysis-badge";
+      badge.textContent = t(`analysis.badge.${severity}`);
+      const message = document.createElement("div");
+      message.className = "model-analysis-message";
+      message.textContent = issue.message;
+      const target = document.createElement("div");
+      target.className = "model-analysis-target";
+      target.textContent = analysisIssueTargetLabel(issue);
+      button.appendChild(badge);
+      button.appendChild(message);
+      button.appendChild(target);
+      button.addEventListener("click", () => {
+        focusAnalysisIssueTarget(issue);
+      });
+      list.appendChild(button);
+    });
+    section.appendChild(list);
+    modelAnalysisContent.appendChild(section);
+  });
+}
+
+function openModelAnalysis() {
+  if (!modelAnalysisModal) {
+    return;
+  }
+  const issues = analyzeModelStaticIssues();
+  renderModelAnalysisReport(issues);
+  modelAnalysisModal.classList.remove("hidden");
+  setStatusKey("status.modelAnalyzed", {
+    count: issues.length,
+    errors: issues.filter((issue) => issue.severity === "error").length,
+    warnings: issues.filter((issue) => issue.severity === "warning").length,
+  });
 }
 
 function expressionEditorHasUnsavedChanges() {
@@ -3565,6 +4143,9 @@ function propagateNodeRenameInExpressions(oldName, newName) {
     if (widget.type === "matrix" && widget.source === oldName) {
       widget.source = newName;
     }
+    if (widget.type === "text" && widget.source === oldName) {
+      widget.source = newName;
+    }
     if (widget.type === "led" && widget.source === oldName) {
       widget.source = newName;
     }
@@ -3577,7 +4158,7 @@ function propagateNodeRenameInExpressions(oldName, newName) {
         }));
       }
     }
-    if ((widget.type === "slider" || widget.type === "button") && widget.source === oldName) {
+    if ((widget.type === "slider" || widget.type === "button" || widget.type === "select") && widget.source === oldName) {
       widget.source = newName;
     }
   });
@@ -3592,6 +4173,9 @@ function removeNodeFromAllWidgetDisplays(nodeName) {
       widget.columns = widget.columns.filter((name) => name !== nodeName);
     }
     if (widget.type === "matrix" && widget.source === nodeName) {
+      widget.source = "";
+    }
+    if (widget.type === "text" && widget.source === nodeName) {
       widget.source = "";
     }
     if (widget.type === "led" && widget.source === nodeName) {
@@ -3610,7 +4194,7 @@ function removeNodeFromInputWidgetBindings(nodeName) {
     return;
   }
   graph.widgets.forEach((widget) => {
-    if ((widget.type === "slider" || widget.type === "button") && widget.source === nodeName) {
+    if ((widget.type === "slider" || widget.type === "button" || widget.type === "select") && widget.source === nodeName) {
       widget.source = "";
     }
   });
@@ -3891,8 +4475,12 @@ function hasButtonBinding(node) {
   return Boolean(node && graph.widgets.some((widget) => widget.type === "button" && widget.source === node.name));
 }
 
+function hasSelectBinding(node) {
+  return Boolean(node && graph.widgets.some((widget) => widget.type === "select" && widget.source === node.name));
+}
+
 function hasInputWidgetBinding(node) {
-  return hasSliderBinding(node) || hasButtonBinding(node);
+  return hasSliderBinding(node) || hasButtonBinding(node) || hasSelectBinding(node);
 }
 
 function normalizeInputNodeFlags() {
@@ -3907,8 +4495,18 @@ function buttonBindableNodeNames() {
   return graph.nodes.filter((node) => canBindButtonToNode(node)).map((node) => node.name);
 }
 
+function selectBindableNodeNames() {
+  return graph.nodes.filter((node) => canBindSliderToNode(node)).map((node) => node.name);
+}
+
 function sliderBindableNodeNames() {
   return graph.nodes.filter((node) => canBindSliderToNode(node)).map((node) => node.name);
+}
+
+function selectedNodesList() {
+  return [...ui.selectedNodes]
+    .map((id) => getNodeById(id))
+    .filter(Boolean);
 }
 
 function serializeNodeType(shape) {
@@ -4044,6 +4642,7 @@ function updateCanvasSize(anchorClientX = null, anchorClientY = null, force = fa
   const newContentY = ((worldY - bounds.minY) / bounds.height) * targetHeight;
   graphViewport.scrollLeft = newContentX - localX;
   graphViewport.scrollTop = newContentY - localY;
+  updateCanvasGridAppearance();
 }
 
 function updateZoomButtons() {
@@ -4081,6 +4680,7 @@ function applyCanvasVisibility() {
   if (toggleWidgetsItem) {
     toggleWidgetsItem.textContent = widgetsLabel;
   }
+  updateCanvasGridAppearance();
 }
 
 function updateModelRunButtons() {
@@ -4340,6 +4940,43 @@ function selectTextItem(id) {
   }, `text:${id}`);
 }
 
+function isTextEditorOpen() {
+  return Boolean(textEditorModal && !textEditorModal.classList.contains("hidden"));
+}
+
+function syncSelectedTextInputs(item = null) {
+  const target = item || (ui.selected?.type === "text" ? getTextItemById(ui.selected.id) : null);
+  if (!target) {
+    return;
+  }
+  const value = String(target.html ?? "");
+  if (textHtmlInput && document.activeElement !== textHtmlInput) {
+    textHtmlInput.value = value;
+  }
+  if (textEditorInput && document.activeElement !== textEditorInput) {
+    textEditorInput.value = value;
+  }
+}
+
+function closeTextEditor() {
+  if (!textEditorModal) {
+    return;
+  }
+  textEditorModal.classList.add("hidden");
+}
+
+function openTextEditor() {
+  const item = ui.selected?.type === "text" ? getTextItemById(ui.selected.id) : null;
+  if (!item || !textEditorModal) {
+    return;
+  }
+  syncSelectedTextInputs(item);
+  textEditorModal.classList.remove("hidden");
+  window.requestAnimationFrame(() => {
+    textEditorInput?.focus();
+  });
+}
+
 function selectSingleNode(id) {
   requestExpressionEditorSelectionChange(() => {
     ui.selected = { type: "node", id };
@@ -4499,6 +5136,18 @@ function exportGraphData() {
       value: w.type === "button"
         ? Boolean(w.value)
         : (Number.isFinite(Number(w.value)) ? Number(w.value) : 0),
+      options: Array.isArray(w.options)
+        ? w.options.map((option) => ({
+          label: String(option?.label ?? ""),
+          value: Number.isFinite(Number(option?.value)) ? Number(option.value) : 0,
+        }))
+        : [],
+      mappings: Array.isArray(w.mappings)
+        ? w.mappings.map((mapping) => ({
+          value: Number.isFinite(Number(mapping?.value)) ? Number(mapping.value) : 0,
+          label: String(mapping?.label ?? ""),
+        }))
+        : [],
       columns: Array.isArray(w.columns) ? w.columns.map(normalizeTableColumnName) : [],
       xyPairs: Array.isArray(w.xyPairs)
         ? w.xyPairs.map((pair, idx) => ({
@@ -4536,6 +5185,8 @@ function captureCurrentModelContext(nodeName = "") {
     },
     view: {
       zoom: ui.zoom,
+      showGrid: ui.showGrid,
+      gridSize: ui.gridSize,
       scrollLeft: graphViewport.scrollLeft,
       scrollTop: graphViewport.scrollTop,
     },
@@ -4559,6 +5210,8 @@ function restoreModelContext(context) {
   history.transactionStart = null;
   clearAllSelection();
   ui.zoom = clampZoom(Number(context.view?.zoom) || 1);
+  ui.showGrid = context.view?.showGrid !== false;
+  ui.gridSize = clamp(Number(context.view?.gridSize) || ui.gridSize || 20, 5, 100);
   updateHistoryButtons();
   updateFileStatusLabel(dirtySinceLastSave);
   updateModelBreadcrumb();
@@ -4672,7 +5325,7 @@ function applyGraphData(data) {
     : [];
   graph.widgets = Array.isArray(data.widgets)
     ? data.widgets
-      .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider" || w.type === "matrix" || w.type === "button" || w.type === "led"))
+      .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider" || w.type === "matrix" || w.type === "button" || w.type === "led" || w.type === "select" || w.type === "text"))
       .map((w) => ({
         id: w.id,
         type: w.type,
@@ -4710,6 +5363,18 @@ function applyGraphData(data) {
         value: w.type === "button"
           ? (w.value === true || w.value === "true" || w.value === 1 || w.value === "1")
           : (Number.isFinite(Number(w.value)) ? Number(w.value) : 0),
+        options: Array.isArray(w.options)
+          ? w.options.map((option) => ({
+            label: String(option?.label ?? ""),
+            value: Number.isFinite(Number(option?.value)) ? Number(option.value) : 0,
+          }))
+          : [],
+        mappings: Array.isArray(w.mappings)
+          ? w.mappings.map((mapping) => ({
+            value: Number.isFinite(Number(mapping?.value)) ? Number(mapping.value) : 0,
+            label: String(mapping?.label ?? ""),
+          }))
+          : [],
         rows: [],
         columns: Array.isArray(w.columns) ? w.columns.map(normalizeTableColumnName) : [],
         xyPairs: Array.isArray(w.xyPairs)
@@ -4917,9 +5582,12 @@ function updateEditingLockUi() {
     addDiamondNodeItem,
     addSubmodelNodeItem,
     addTextItem,
-  addButtonWidgetItem,
-  addSliderWidgetItem,
-  addMatrixWidgetItem,
+    addButtonWidgetItem,
+    addSelectWidgetItem,
+    addSliderWidgetItem,
+    addLedWidgetItem,
+    addTextWidgetItem,
+    addMatrixWidgetItem,
     addTableWidgetItem,
     addXYChartWidgetItem,
   ].forEach((btn) => {
@@ -4933,6 +5601,7 @@ function updateEditingLockUi() {
   setControlsDisabled(textPanel, frozen);
   setControlsDisabled(edgePanel, frozen);
   setControlsDisabled(widgetPanel, frozen);
+  setControlsDisabled(textEditorModal, frozen, [textEditorCloseBtn, textEditorDismissBtn]);
 
   if (expressionEditorTextarea) {
     expressionEditorTextarea.disabled = frozen;
@@ -5432,13 +6101,17 @@ function refreshSidebar() {
     if (widgetPanelTitle) {
       widgetPanelTitle.textContent = widget.type === "xychart"
         ? t("panel.widgetChart")
-        : (widget.type === "slider"
+        : widget.type === "slider"
           ? t("panel.widgetSlider")
-          : (widget.type === "button"
-            ? t("panel.widgetButton")
-            : (widget.type === "led"
-              ? t("panel.widgetLed")
-              : (widget.type === "matrix" ? t("panel.widgetMatrix") : t("panel.widgetTable")))));
+          : widget.type === "select"
+            ? t("panel.widgetSelect")
+            : widget.type === "text"
+              ? t("panel.widgetText")
+              : widget.type === "button"
+                ? t("panel.widgetButton")
+                : widget.type === "led"
+                  ? t("panel.widgetLed")
+                  : (widget.type === "matrix" ? t("panel.widgetMatrix") : t("panel.widgetTable"));
     }
     refreshWidgetConfigPanel(widget);
     return;
@@ -5471,10 +6144,12 @@ function refreshSidebar() {
     if (document.activeElement !== textStrokeColorInput && textStrokeColorInput) {
       textStrokeColorInput.value = item.strokeColor || "";
     }
-    if (document.activeElement !== textHtmlInput) {
-      textHtmlInput.value = String(item.html ?? "");
-    }
+    syncSelectedTextInputs(item);
     return;
+  }
+
+  if (isTextEditorOpen()) {
+    closeTextEditor();
   }
 
   if (ui.selectedNodes.size === 1) {
@@ -5505,6 +6180,7 @@ function refreshSidebar() {
     const submodelNode = isSubmodelNode(node);
     nodeInputInput.checked = Boolean(node.input);
     nodeOutputInput.checked = Boolean(node.output);
+    nodeOutputInput.indeterminate = false;
     sanitizeNodeVisualOptions(node);
     if (nodeFillColorInput) {
       nodeFillColorInput.value = node.fillColor || "";
@@ -5698,6 +6374,7 @@ function refreshSidebar() {
   if (nodeOutputInput?.closest("label")) {
     nodeOutputInput.closest("label").classList.remove("hidden");
   }
+  nodeOutputInput.indeterminate = false;
   nodeValueExprLabel.classList.remove("hidden");
   nodeValueExprRow?.classList.remove("hidden");
   if (nodeInitialStateInput) {
@@ -5710,12 +6387,112 @@ function refreshSidebar() {
   delete propsList.dataset.ownerKey;
 
   if (ui.selectedNodes.size > 1) {
+    const nodes = selectedNodesList();
     globalPanel.classList.add("hidden");
-    noSelection.classList.remove("hidden");
-    noSelection.textContent = t("text.nodesSelected", { count: ui.selectedNodes.size });
+    textPanel.classList.add("hidden");
+    widgetPanel.classList.add("hidden");
+    edgePanel.classList.add("hidden");
+    nodePanel.classList.remove("hidden");
+    noSelection.classList.add("hidden");
+
+    if (nodeIdentitySection) {
+      nodeIdentitySection.classList.add("hidden");
+    }
+    if (nodeFormulaSection) {
+      nodeFormulaSection.classList.add("hidden");
+    }
+    if (nodeValueSection) {
+      nodeValueSection.classList.add("hidden");
+    }
+    if (nodePropsSection) {
+      nodePropsSection.classList.add("hidden");
+    }
+    if (nodeColorSection) {
+      nodeColorSection.classList.remove("hidden");
+    }
+
+    if (nodeOutputInput?.closest("label")) {
+      const outputTargets = nodes.filter((node) => !isSubmodelNode(node));
+      const allOn = outputTargets.length > 0 && outputTargets.every((node) => Boolean(node.output));
+      const allOff = outputTargets.length > 0 && outputTargets.every((node) => !node.output);
+      nodeOutputInput.closest("label").classList.toggle("hidden", outputTargets.length === 0);
+      nodeOutputInput.indeterminate = !(allOn || allOff);
+      nodeOutputInput.checked = allOn;
+    }
+
+    if (nodeInputLabel) {
+      nodeInputLabel.classList.add("hidden");
+    }
+    nodeNameLabel?.classList.add("hidden");
+    nodeNameInput?.classList.add("hidden");
+    nodeShapeInput?.classList.add("hidden");
+    nodeInputInput.checked = false;
+    nodeInputInput.disabled = true;
+    nodeValueExprLabel.classList.add("hidden");
+    nodeValueExprRow?.classList.add("hidden");
+    hideExpressionStatus(nodeValueExprStatus);
+    if (nodeInitialStateLabel) {
+      nodeInitialStateLabel.classList.add("hidden");
+    }
+    nodeInitialStateRow?.classList.add("hidden");
+    nodeInitialStateInput.classList.add("hidden");
+    hideExpressionStatus(nodeInitialStateStatus);
+    if (nodeModelPathLabel) {
+      nodeModelPathLabel.classList.add("hidden");
+    }
+    if (nodeModelPathInput) {
+      nodeModelPathInput.classList.add("hidden");
+    }
+    if (submodelActionRow) {
+      submodelActionRow.classList.add("hidden");
+    }
+    if (loadSubmodelBtn) {
+      loadSubmodelBtn.classList.add("hidden");
+      loadSubmodelBtn.disabled = true;
+    }
+    if (showSubmodelBtn) {
+      showSubmodelBtn.classList.add("hidden");
+      showSubmodelBtn.disabled = true;
+    }
+    if (nodeSubmodelInfo) {
+      nodeSubmodelInfo.classList.add("hidden");
+      nodeSubmodelInfo.classList.remove("error", "ok");
+      nodeSubmodelInfo.textContent = "";
+    }
+    renderSubmodelBindingsEditor(null);
+    nodeValueOutputLabel?.classList.add("hidden");
+    if (propsList) {
+      propsList.innerHTML = "";
+      delete propsList.dataset.ownerKey;
+    }
+    propsList?.classList.add("hidden");
+    nodePropsTitle?.classList.add("hidden");
+    addPropBtn?.classList.add("hidden");
+    nodeValueOutput.textContent = t("text.nodesSelected", { count: ui.selectedNodes.size });
+    nodeValueOutput.classList.remove("ok", "error");
+    if (nodeFillColorInput) {
+      const fillValues = new Set(nodes.map((node) => String(node.fillColor || "")));
+      nodeFillColorInput.value = fillValues.size === 1 ? [...fillValues][0] : "";
+    }
+    if (nodeStrokeColorInput) {
+      const strokeValues = new Set(nodes.map((node) => String(node.strokeColor || "")));
+      nodeStrokeColorInput.value = strokeValues.size === 1 ? [...strokeValues][0] : "";
+    }
   } else {
     noSelection.classList.add("hidden");
     globalPanel.classList.remove("hidden");
+    nodeIdentitySection?.classList.remove("hidden");
+    nodeFormulaSection?.classList.remove("hidden");
+    nodeValueSection?.classList.remove("hidden");
+    nodeColorSection?.classList.remove("hidden");
+    nodePropsSection?.classList.remove("hidden");
+    nodeNameLabel?.classList.remove("hidden");
+    nodeValueOutputLabel?.classList.remove("hidden");
+    nodeNameInput?.classList.remove("hidden");
+    nodeShapeInput?.classList.remove("hidden");
+    propsList?.classList.remove("hidden");
+    nodePropsTitle?.classList.remove("hidden");
+    addPropBtn?.classList.remove("hidden");
     if (document.activeElement !== modelTitleInput) {
       modelTitleInput.value = String(graph.modelTitle ?? "");
     }
@@ -6265,6 +7042,14 @@ function render() {
     div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
     div.className = "canvas-text-content";
     div.innerHTML = canvasTextDisplayHtml(item);
+    div.addEventListener("dblclick", (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      if (!(ui.selected?.type === "text" && ui.selected.id === item.id)) {
+        selectTextItem(item.id);
+      }
+      openTextEditor();
+    });
     foreignObject.appendChild(div);
 
     const handle = document.createElementNS(SVG_NS, "circle");
@@ -6299,6 +7084,14 @@ function render() {
         selectTextItem(item.id);
       }
       openTextContextMenu(evt, item);
+    });
+    g.addEventListener("dblclick", (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      if (!(ui.selected?.type === "text" && ui.selected.id === item.id)) {
+        selectTextItem(item.id);
+      }
+      openTextEditor();
     });
     handle.addEventListener("pointerdown", (evt) => {
       evt.stopPropagation();
@@ -6449,7 +7242,7 @@ function importGraphData(data) {
   const maxTextItemId = textItems.reduce((max, item) => Math.max(max, item.id), 0);
   const widgets = Array.isArray(data.widgets)
     ? data.widgets
-      .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider" || w.type === "matrix" || w.type === "button" || w.type === "led"))
+      .filter((w) => Number.isInteger(w.id) && (w.type === "table" || w.type === "xychart" || w.type === "slider" || w.type === "matrix" || w.type === "button" || w.type === "led" || w.type === "select" || w.type === "text"))
       .map((w) => ({
         id: w.id,
         type: w.type === "xychart"
@@ -6458,7 +7251,11 @@ function importGraphData(data) {
             ? "slider"
             : (w.type === "matrix"
               ? "matrix"
-              : (w.type === "button" ? "button" : (w.type === "led" ? "led" : "table")))),
+              : (w.type === "button"
+                ? "button"
+                : (w.type === "led"
+                  ? "led"
+                  : (w.type === "select" ? "select" : (w.type === "text" ? "text" : "table")))))),
         customTitle: String(w.customTitle ?? ""),
         x: Number.isFinite(Number(w.x)) ? Number(w.x) : 40,
         y: Number.isFinite(Number(w.y)) ? Number(w.y) : 40,
@@ -6493,6 +7290,18 @@ function importGraphData(data) {
         value: w.type === "button"
           ? (w.value === true || w.value === "true" || w.value === 1 || w.value === "1")
           : (Number.isFinite(Number(w.value)) ? Number(w.value) : 0),
+        options: Array.isArray(w.options)
+          ? w.options.map((option) => ({
+            label: String(option?.label ?? ""),
+            value: Number.isFinite(Number(option?.value)) ? Number(option.value) : 0,
+          }))
+          : [],
+        mappings: Array.isArray(w.mappings)
+          ? w.mappings.map((mapping) => ({
+            value: Number.isFinite(Number(mapping?.value)) ? Number(mapping.value) : 0,
+            label: String(mapping?.label ?? ""),
+          }))
+          : [],
         rows: [],
         columns: Array.isArray(w.columns) ? w.columns.map(normalizeTableColumnName) : [],
         xyPairs: Array.isArray(w.xyPairs)
@@ -9198,8 +10007,8 @@ window.addEventListener("pointermove", (evt) => {
       const z = Math.max(0.0001, ui.zoom || 1);
       const dx = (evt.clientX - ui.widgetDrag.startClientX) / z;
       const dy = (evt.clientY - ui.widgetDrag.startClientY) / z;
-      widget.x = ui.widgetDrag.startX + dx;
-      widget.y = ui.widgetDrag.startY + dy;
+      widget.x = ui.snapToGrid ? snap(ui.widgetDrag.startX + dx) : ui.widgetDrag.startX + dx;
+      widget.y = ui.snapToGrid ? snap(ui.widgetDrag.startY + dy) : ui.widgetDrag.startY + dy;
       renderWidgets();
     }
     return;
@@ -9210,8 +10019,10 @@ window.addEventListener("pointermove", (evt) => {
       const z = Math.max(0.0001, ui.zoom || 1);
       const dx = (evt.clientX - ui.widgetResize.startClientX) / z;
       const dy = (evt.clientY - ui.widgetResize.startClientY) / z;
-      widget.width = clamp(ui.widgetResize.startWidth + dx, 220, 1200);
-      widget.height = clamp(ui.widgetResize.startHeight + dy, 110, 900);
+      const nextWidth = ui.snapToGrid ? snap(ui.widgetResize.startWidth + dx) : ui.widgetResize.startWidth + dx;
+      const nextHeight = ui.snapToGrid ? snap(ui.widgetResize.startHeight + dy) : ui.widgetResize.startHeight + dy;
+      widget.width = clamp(nextWidth, 220, 1200);
+      widget.height = clamp(nextHeight, 110, 900);
       renderWidgets();
     }
     return;
@@ -9396,10 +10207,23 @@ window.addEventListener("pointerup", (evt) => {
     const moved =
       item &&
       (item.x !== ui.textDrag.startX || item.y !== ui.textDrag.startY);
+    const releasedTextId = ui.textDrag.id;
     ui.textDrag = null;
     commitTransaction();
     if (moved) {
       setStatusKey("status.textMoved");
+      ui.lastTextActivate = null;
+    } else if (releasedTextId != null) {
+      const now = Date.now();
+      if (ui.lastTextActivate && ui.lastTextActivate.id === releasedTextId && now - ui.lastTextActivate.time <= 360) {
+        ui.lastTextActivate = null;
+        if (!(ui.selected?.type === "text" && ui.selected.id === releasedTextId)) {
+          selectTextItem(releasedTextId);
+        }
+        openTextEditor();
+      } else {
+        ui.lastTextActivate = { id: releasedTextId, time: now };
+      }
     }
     needsRender = true;
   }
@@ -9624,12 +10448,30 @@ if (addButtonWidgetItem) {
   });
 }
 
+if (addSelectWidgetItem) {
+  addSelectWidgetItem.addEventListener("click", () => {
+    runAction(() => {
+      addSelectWidget();
+    });
+    setStatusKey("status.widgetSelectCreated");
+  });
+}
+
 if (addLedWidgetItem) {
   addLedWidgetItem.addEventListener("click", () => {
     runAction(() => {
       addLedWidget();
     });
     setStatusKey("status.widgetLedCreated");
+  });
+}
+
+if (addTextWidgetItem) {
+  addTextWidgetItem.addEventListener("click", () => {
+    runAction(() => {
+      addTextWidget();
+    });
+    setStatusKey("status.widgetTextCreated");
   });
 }
 
@@ -9754,9 +10596,18 @@ snapToGridInput.addEventListener("change", () => {
   setStatusKey(ui.snapToGrid ? "status.snapOn" : "status.snapOff");
 });
 
+if (showGridInput) {
+  showGridInput.addEventListener("change", () => {
+    ui.showGrid = showGridInput.checked;
+    updateCanvasGridAppearance();
+    setStatusKey(ui.showGrid ? "status.gridOn" : "status.gridOff");
+  });
+}
+
 gridSizeInput.addEventListener("change", () => {
   ui.gridSize = clamp(Number(gridSizeInput.value) || 20, 5, 100);
   gridSizeInput.value = String(ui.gridSize);
+  updateCanvasGridAppearance();
   setStatusKey("status.gridStep", { value: ui.gridSize });
 });
 
@@ -10049,68 +10900,66 @@ nodeInputInput.addEventListener("change", () => {
 });
 
 nodeOutputInput.addEventListener("change", () => {
-  if (ui.selectedNodes.size !== 1) {
+  const nodes = selectedNodesList().filter((node) => !isSubmodelNode(node));
+  if (nodes.length === 0) {
     return;
   }
-  const nodeId = [...ui.selectedNodes][0];
-  const node = getNodeById(nodeId);
-  if (!node) {
-    return;
-  }
-  const wasOutput = Boolean(node.output);
   runAction(() => {
-    node.output = nodeOutputInput.checked;
-    if (wasOutput && !node.output) {
-      removeNodeFromAllWidgetDisplays(node.name);
-    }
+    nodes.forEach((node) => {
+      const wasOutput = Boolean(node.output);
+      node.output = nodeOutputInput.checked;
+      if (wasOutput && !node.output) {
+        removeNodeFromAllWidgetDisplays(node.name);
+      }
+    });
   });
+  nodeOutputInput.indeterminate = false;
 });
 
 if (nodeFillColorInput) {
   nodeFillColorInput.addEventListener("change", () => {
-    if (ui.selectedNodes.size !== 1) {
-      return;
-    }
-    const node = getNodeById([...ui.selectedNodes][0]);
-    if (!node) {
+    const nodes = selectedNodesList();
+    if (nodes.length === 0) {
       return;
     }
     runAction(() => {
-      node.fillColor = normalizeColorString(nodeFillColorInput.value);
-      sanitizeNodeVisualOptions(node);
+      const nextColor = normalizeColorString(nodeFillColorInput.value);
+      nodes.forEach((node) => {
+        node.fillColor = nextColor;
+        sanitizeNodeVisualOptions(node);
+      });
     });
   });
 }
 
 if (nodeStrokeColorInput) {
   nodeStrokeColorInput.addEventListener("change", () => {
-    if (ui.selectedNodes.size !== 1) {
-      return;
-    }
-    const node = getNodeById([...ui.selectedNodes][0]);
-    if (!node) {
+    const nodes = selectedNodesList();
+    if (nodes.length === 0) {
       return;
     }
     runAction(() => {
-      node.strokeColor = normalizeColorString(nodeStrokeColorInput.value);
-      sanitizeNodeVisualOptions(node);
+      const nextColor = normalizeColorString(nodeStrokeColorInput.value);
+      nodes.forEach((node) => {
+        node.strokeColor = nextColor;
+        sanitizeNodeVisualOptions(node);
+      });
     });
   });
 }
 
 if (resetNodeColorsBtn) {
   resetNodeColorsBtn.addEventListener("click", () => {
-    if (ui.selectedNodes.size !== 1) {
-      return;
-    }
-    const node = getNodeById([...ui.selectedNodes][0]);
-    if (!node) {
+    const nodes = selectedNodesList();
+    if (nodes.length === 0) {
       return;
     }
     runAction(() => {
-      node.fillColor = "";
-      node.strokeColor = "";
-      sanitizeNodeVisualOptions(node);
+      nodes.forEach((node) => {
+        node.fillColor = "";
+        node.strokeColor = "";
+        sanitizeNodeVisualOptions(node);
+      });
     });
   });
 }
@@ -10167,66 +11016,114 @@ if (textStrokeColorInput) {
   });
 }
 
-if (textHtmlInput) {
-  textHtmlInput.addEventListener("focus", () => {
+function bindTextInputEditor(input) {
+  if (!input) {
+    return;
+  }
+  input.addEventListener("focus", () => {
     const item = ui.selected?.type === "text" ? getTextItemById(ui.selected.id) : null;
     if (!item) {
       return;
     }
     beginTransaction();
   });
-  textHtmlInput.addEventListener("input", () => {
+  input.addEventListener("input", () => {
     const item = ui.selected?.type === "text" ? getTextItemById(ui.selected.id) : null;
     if (!item) {
       return;
     }
-    item.html = String(textHtmlInput.value ?? "");
+    item.html = String(input.value ?? "");
     sanitizeTextItem(item);
+    syncSelectedTextInputs(item);
     dirtySinceLastSave = true;
     updateFileStatusLabel(true);
     render();
   });
-  textHtmlInput.addEventListener("blur", () => {
+  input.addEventListener("blur", () => {
     commitTransaction();
     render();
   });
 }
 
-if (textToolbar) {
-  textToolbar.addEventListener("click", (evt) => {
+bindTextInputEditor(textHtmlInput);
+bindTextInputEditor(textEditorInput);
+
+if (textHtmlInput) {
+  textHtmlInput.addEventListener("dblclick", () => {
+    openTextEditor();
+  });
+}
+
+function handleTextEditorTool(tool) {
+  if (tool === "h1") {
+    wrapTextSelection("<h1>", "</h1>", t("text.toolbarHeading1"));
+    return;
+  }
+  if (tool === "h2") {
+    wrapTextSelection("<h2>", "</h2>", t("text.toolbarHeading2"));
+    return;
+  }
+  if (tool === "h3") {
+    wrapTextSelection("<h3>", "</h3>", t("text.toolbarHeading3"));
+    return;
+  }
+  if (tool === "p") {
+    wrapTextSelection("<p>", "</p>", t("text.toolbarParagraph"));
+    return;
+  }
+  if (tool === "b") {
+    wrapTextSelection("<strong>", "</strong>");
+    return;
+  }
+  if (tool === "i") {
+    wrapTextSelection("<em>", "</em>");
+    return;
+  }
+  if (tool === "u") {
+    wrapTextSelection("<u>", "</u>");
+    return;
+  }
+  if (tool === "ul") {
+    wrapTextSelection("<ul>\n<li>", "</li>\n</ul>", t("text.toolbarListItem"));
+    return;
+  }
+  if (tool === "ol") {
+    wrapTextSelection("<ol>\n<li>", "</li>\n</ol>", t("text.toolbarListItem"));
+    return;
+  }
+  if (tool === "li") {
+    wrapTextSelection("<li>", "</li>", t("text.toolbarListItem"));
+    return;
+  }
+  if (tool === "br") {
+    insertTextHtmlSnippet("<br>");
+    return;
+  }
+  if (tool === "hr") {
+    insertTextHtmlSnippet("<hr>");
+  }
+}
+
+if (textEditorToolbar) {
+  textEditorToolbar.addEventListener("click", (evt) => {
     const btn = evt.target.closest("[data-text-tool]");
     if (!btn) {
       return;
     }
     evt.preventDefault();
-    const tool = btn.getAttribute("data-text-tool");
-    if (tool === "h1") {
-      wrapTextSelection("<h1>", "</h1>", t("text.toolbarHeading1"));
-      return;
-    }
-    if (tool === "h2") {
-      wrapTextSelection("<h2>", "</h2>", t("text.toolbarHeading2"));
-      return;
-    }
-    if (tool === "p") {
-      wrapTextSelection("<p>", "</p>", t("text.toolbarParagraph"));
-      return;
-    }
-    if (tool === "b") {
-      wrapTextSelection("<strong>", "</strong>");
-      return;
-    }
-    if (tool === "i") {
-      wrapTextSelection("<em>", "</em>");
-      return;
-    }
-    if (tool === "u") {
-      wrapTextSelection("<u>", "</u>");
-      return;
-    }
-    if (tool === "br") {
-      insertTextHtmlSnippet("<br>");
-    }
+    handleTextEditorTool(btn.getAttribute("data-text-tool"));
+  });
+}
+
+if (textEditorCloseBtn) {
+  textEditorCloseBtn.addEventListener("click", () => {
+    closeTextEditor();
+  });
+}
+
+if (textEditorDismissBtn) {
+  textEditorDismissBtn.addEventListener("click", () => {
+    closeTextEditor();
   });
 }
 
@@ -10500,6 +11397,47 @@ if (aboutAppModal) {
     });
   }
 }
+if (modelAnalysisModal) {
+  const modalHead = modelAnalysisModal.querySelector(".modal-head");
+  const modalCard = modelAnalysisModal.querySelector(".model-analysis-card");
+  if (modalHead && modalCard) {
+    modalHead.addEventListener("pointerdown", (evt) => {
+      if (evt.target.closest("button")) {
+        return;
+      }
+      const rect = modalCard.getBoundingClientRect();
+      modalCard.style.transform = "none";
+      modalCard.style.left = `${rect.left}px`;
+      modalCard.style.top = `${rect.top}px`;
+      ui.modalDrag = {
+        pointerId: evt.pointerId,
+        offsetX: evt.clientX - rect.left,
+        offsetY: evt.clientY - rect.top,
+        card: modalCard,
+      };
+    });
+  }
+}
+if (textEditorModal) {
+  const modalHead = textEditorModal.querySelector(".modal-head");
+  if (modalHead && textEditorCard) {
+    modalHead.addEventListener("pointerdown", (evt) => {
+      if (evt.target.closest("button")) {
+        return;
+      }
+      const rect = textEditorCard.getBoundingClientRect();
+      textEditorCard.style.transform = "none";
+      textEditorCard.style.left = `${rect.left}px`;
+      textEditorCard.style.top = `${rect.top}px`;
+      ui.modalDrag = {
+        pointerId: evt.pointerId,
+        offsetX: evt.clientX - rect.left,
+        offsetY: evt.clientY - rect.top,
+        card: textEditorCard,
+      };
+    });
+  }
+}
 if (functionsHelpBtn) {
   functionsHelpBtn.addEventListener("click", () => {
     closeTopMenus();
@@ -10510,6 +11448,12 @@ if (aboutAppBtn) {
   aboutAppBtn.addEventListener("click", () => {
     closeTopMenus();
     openAboutApp();
+  });
+}
+if (analyzeModelBtn) {
+  analyzeModelBtn.addEventListener("click", () => {
+    closeTopMenus();
+    openModelAnalysis();
   });
 }
 if (functionsHelpCloseBtn) {
@@ -10523,6 +11467,12 @@ if (aboutAppCloseBtn) {
 }
 if (aboutAppDismissBtn) {
   aboutAppDismissBtn.addEventListener("click", closeAboutApp);
+}
+if (modelAnalysisCloseBtn) {
+  modelAnalysisCloseBtn.addEventListener("click", closeModelAnalysis);
+}
+if (modelAnalysisDismissBtn) {
+  modelAnalysisDismissBtn.addEventListener("click", closeModelAnalysis);
 }
 if (expressionEditorSwitchCloseBtn) {
   expressionEditorSwitchCloseBtn.addEventListener("click", closeExpressionEditorSwitchModal);
@@ -10552,6 +11502,13 @@ if (aboutAppModal) {
   aboutAppModal.addEventListener("pointerdown", (evt) => {
     if (evt.target === aboutAppModal) {
       closeAboutApp();
+    }
+  });
+}
+if (modelAnalysisModal) {
+  modelAnalysisModal.addEventListener("pointerdown", (evt) => {
+    if (evt.target === modelAnalysisModal) {
+      closeModelAnalysis();
     }
   });
 }
