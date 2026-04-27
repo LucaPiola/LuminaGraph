@@ -1860,6 +1860,7 @@ function refreshRuntimeView() {
   clearStrictInvalidNodeValues();
   updateModelRunButtons();
   updateMenuTimeLabel();
+  render();
   if (ui.sliderInteraction == null) {
     applyWidgetDrivenNodeValues();
     refreshRuntimeWidgetContents();

@@ -1,6 +1,6 @@
 # STGraphX: readme
 
-_Luca Mari, versione 25 aprile 2026_
+_Luca Mari, versione 27 aprile 2026_
 
 ## Contesto
 
@@ -25,6 +25,7 @@ __Al momento implementati (senza librerie esterne):__
 * menu, menu contestuale e pannello di configurazione aggiornato dinamicamente, con tooltip;
 * gestione dei testi dell'interfaccia utente in italiano e inglese, con scelta via query string nella shell web (`?lang=it|en`) e via parametro `--lang=it|en` nella shell Electron;
 * gestione dei nodi algebrici, di stato, parametri e sottomodelli, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale); controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo sullo stato iniziale: solo espressioni locali o riferimenti a parametri; controllo del numero di cifre decimali visualizzate;
+* variabili globali;
 * gestione di esecuzione completa, passo-passo, temporizzata, con modello in modalità read-only durante l'esecuzione;
 * gestione opzionale di blocco di esecuzione ed evidenziazione per nodi non definiti;
 * editor per espressioni, con gestione ed help contestuale e controllo sintattico dinamico;
@@ -33,11 +34,13 @@ __Al momento implementati (senza librerie esterne):__
 * alcune funzioni per distribuzioni di probabilità;
 * generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione/slicing di vettori e matrici con la sintassi di NumPy, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari;
 * funzioni "special form" per operare su vettori e matrici: `array`, `reduce`, `map`, `filter`;
+* una funzione per leggere il contenuto di file dati in formato csv;
 * gestione di proprietà custom per il modello e i singoli nodi e funzioni `getModelProperty`/`getProperty` e `setModelProperty`/`setProperty`;
 * gestione di nodi di output e di widget di output: grafici, tabelle, matrici, led, testo; pannello di configurazione aggiornato dinamicamente;
 * gestione di nodi di input e di widget di input, anche per parametri: slider, pulsante, selettore di testo; pannello di configurazione aggiornato dinamicamente;
 * gestione dei sottomodelli con file JSON separati, con caricamento dalla stessa cartella del modello, binding dei nodi di input e accesso ai nodi di output con notazione `nomeSottomodello.nomeOutput`; prima gestione in logica ABM dichiarativa / funzionale, mediante variabili di sistema `self` e `$i$`;
 * visualizzazione alternata per il grafo e i widget;
+* enfatizzazione delle frecce sul nodo selezionato;
 * editor per testi con formattazione HTML basilare;
 * definizione della base dei tempi e modalità varie di esecuzione; pannello di configurazione aggiornato dinamicamente;
 * caricamento e salvataggio di modelli in file JSON;
@@ -52,10 +55,8 @@ __Al momento non implementati (rispetto a STGraph):__
 * altri widget e altre opzioni per i widget già presenti, in particolare per la visualizzazione di valori non scalari;
 * varie funzioni;
 * nodi di stato con output;
-* variabili globali;
 * gestione di interrupt;
 * playmode e altre modalità di esecuzione;
-* lettura e scrittura di file dati (xls, csv, ...);
 * interfaccia a tab per più modelli;
 * strumenti di monitoraggio e debugging;
 * una pagina di esempi;

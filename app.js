@@ -59,6 +59,7 @@ const clearRecentModelsBtn = document.getElementById("clearRecentModelsBtn");
 const loadJsonInput = document.getElementById("loadJsonInput");
 const snapToGridInput = document.getElementById("snapToGridInput");
 const showGridInput = document.getElementById("showGridInput");
+const highlightNodeEdgesInput = document.getElementById("highlightNodeEdgesInput");
 const gridSizeInput = document.getElementById("gridSizeInput");
 
 const noSelection = document.getElementById("noSelection");
@@ -90,6 +91,8 @@ const nodeShapeInput = document.getElementById("nodeShapeInput");
 const nodeInputInput = document.getElementById("nodeInputInput");
 const nodeInputLabel = nodeInputInput?.closest("label");
 const nodeOutputInput = document.getElementById("nodeOutputInput");
+const nodeGlobalInput = document.getElementById("nodeGlobalInput");
+const nodeGlobalLabel = nodeGlobalInput?.closest("label");
 const nodeValueExprLabel = document.getElementById("nodeValueExprLabel");
 const nodeValueExprRow = document.getElementById("nodeValueExprRow");
 const nodeValueExprInput = document.getElementById("nodeValueExprInput");
@@ -181,8 +184,13 @@ const aboutAppDismissBtn = document.getElementById("aboutAppDismissBtn");
 const modelAnalysisModal = document.getElementById("modelAnalysisModal");
 const modelAnalysisCloseBtn = document.getElementById("modelAnalysisCloseBtn");
 const modelAnalysisDismissBtn = document.getElementById("modelAnalysisDismissBtn");
+const modelAnalysisChecksBtn = document.getElementById("modelAnalysisChecksBtn");
 const modelAnalysisSummary = document.getElementById("modelAnalysisSummary");
 const modelAnalysisContent = document.getElementById("modelAnalysisContent");
+const modelAnalysisChecksModal = document.getElementById("modelAnalysisChecksModal");
+const modelAnalysisChecksCloseBtn = document.getElementById("modelAnalysisChecksCloseBtn");
+const modelAnalysisChecksDismissBtn = document.getElementById("modelAnalysisChecksDismissBtn");
+const modelAnalysisChecksContent = document.getElementById("modelAnalysisChecksContent");
 const expressionEditorSwitchModal = document.getElementById("expressionEditorSwitchModal");
 const expressionEditorSwitchCloseBtn = document.getElementById("expressionEditorSwitchCloseBtn");
 const expressionEditorSwitchCancelBtn = document.getElementById("expressionEditorSwitchCancelBtn");
@@ -432,6 +440,8 @@ const submodelTemplateCache = new Map();
 const submodelFileHandleCache = new Map();
 const submodelSourceCache = new Map();
 const SUBMODEL_DEFERRED_RESOLUTION = "__submodel_deferred_resolution__";
+const READ_DATA_CALL_PATTERN = /\breadData\s*\(/;
+const READ_DATA_LITERAL_CALL_PATTERN = /\breadData\s*\(\s*(['"])((?:\\.|(?!\1).)*)\1\s*\)/g;
 function descriptionPropertyKey() {
   return currentLang === "en" ? "description" : "descrizione";
 }
@@ -457,6 +467,8 @@ const graph = {
   edges: [],
   textItems: [],
   widgets: [],
+  __directoryPath: "",
+  __readDataCache: Object.create(null),
   execution: {
     t0: 0,
     dt: 1,
@@ -483,6 +495,7 @@ const ui = {
   marquee: null,
   snapToGrid: true,
   showGrid: true,
+  highlightNodeEdges: false,
   gridSize: 20,
   zoom: 1,
   nodeNameEditStart: null,
@@ -527,19 +540,26 @@ const clipboard = {
 };
 
 const defs = document.createElementNS(SVG_NS, "defs");
-const marker = document.createElementNS(SVG_NS, "marker");
-marker.setAttribute("id", "arrow");
-marker.setAttribute("viewBox", "0 0 10 10");
-marker.setAttribute("refX", "9");
-marker.setAttribute("refY", "5");
-marker.setAttribute("markerWidth", "8");
-marker.setAttribute("markerHeight", "8");
-marker.setAttribute("orient", "auto-start-reverse");
-const arrowPath = document.createElementNS(SVG_NS, "path");
-arrowPath.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
-arrowPath.setAttribute("fill", "#3b4e61");
-marker.appendChild(arrowPath);
-defs.appendChild(marker);
+function createArrowMarker(id, color) {
+  const marker = document.createElementNS(SVG_NS, "marker");
+  marker.setAttribute("id", id);
+  marker.setAttribute("viewBox", "0 0 10 10");
+  marker.setAttribute("refX", "9");
+  marker.setAttribute("refY", "5");
+  marker.setAttribute("markerWidth", "8");
+  marker.setAttribute("markerHeight", "8");
+  marker.setAttribute("orient", "auto-start-reverse");
+  const arrowPath = document.createElementNS(SVG_NS, "path");
+  arrowPath.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+  arrowPath.setAttribute("fill", color);
+  marker.appendChild(arrowPath);
+  defs.appendChild(marker);
+}
+createArrowMarker("arrow", "#3b4e61");
+createArrowMarker("arrow-selected", "#0e7ac4");
+createArrowMarker("arrow-incoming", "#d17b16");
+createArrowMarker("arrow-outgoing", "#0d8c8c");
+createArrowMarker("arrow-both", "#8b5fbf");
 svg.appendChild(defs);
 
 const edgesLayer = document.createElementNS(SVG_NS, "g");
@@ -624,6 +644,9 @@ function updateCanvasGridAppearance() {
   canvasContent.classList.toggle("grid-hidden", !ui.showGrid);
   if (showGridInput) {
     showGridInput.checked = ui.showGrid;
+  }
+  if (highlightNodeEdgesInput) {
+    highlightNodeEdgesInput.checked = ui.highlightNodeEdges === true;
   }
   if (gridSizeInput && document.activeElement !== gridSizeInput) {
     gridSizeInput.value = String(ui.gridSize);
@@ -1109,6 +1132,38 @@ function localizeExpressionErrorMessage(message) {
   if (["type", "typeerror"].includes(lower)) {
     return t("error.evalReason.type");
   }
+  if (lower === "readdata is only available in parameters") {
+    return t("expr.error.readDataOnlyParameters");
+  }
+  if (lower === "readdata expects a string literal path") {
+    return t("expr.error.readDataLiteralPath");
+  }
+  if (lower === "readdata path is invalid") {
+    return t("expr.error.readDataPathInvalid");
+  }
+  if (lower === "readdata requires access to the model folder") {
+    return t("expr.error.readDataModelFolderUnavailable");
+  }
+  const readDataUnavailableMatch = raw.match(/^readData file is unavailable: (.+)$/i);
+  if (readDataUnavailableMatch) {
+    return t("expr.error.readDataFileUnavailable", { path: readDataUnavailableMatch[1] });
+  }
+  if (lower === "readdata csv is empty") {
+    return t("expr.error.readDataCsvEmpty");
+  }
+  if (lower === "readdata csv must be rectangular") {
+    return t("expr.error.readDataCsvRectangular");
+  }
+  if (lower === "readdata csv contains an unterminated quoted field") {
+    return t("expr.error.readDataCsvQuotedField");
+  }
+  const readDataNumericCellMatch = raw.match(/^readData CSV cell is not numeric at \[(\d+), (\d+)\]$/i);
+  if (readDataNumericCellMatch) {
+    return t("expr.error.readDataCsvNumericCell", {
+      row: readDataNumericCellMatch[1],
+      col: readDataNumericCellMatch[2],
+    });
+  }
   if (lower === "'this' is only available in state transitions") {
     return t("expr.error.thisOnlyState");
   }
@@ -1499,8 +1554,18 @@ function validateExpressionDraft(value, fieldKey = null) {
     return { ok: true, empty: true };
   }
   const allowStateTransitionOnly = Boolean(meta && meta.key === "value" && node && isStateNode(node));
+  const readDataUsage = validateReadDataExpressionUsage(text, {
+    allowReadData: Boolean(node && node.shape === "diamond"),
+  });
+  if (!readDataUsage.ok) {
+    return { ok: false, empty: false, message: localizeExpressionErrorMessage(readDataUsage.message || "") };
+  }
   const extraNames = [];
   if (node) {
+    globalParameterNodesForModel(graph, node.id)
+      .forEach((depNode) => {
+        extraNames.push(depNode.name);
+      });
     graph.edges
       .filter((edge) => edge.to === node.id)
       .map((edge) => getNodeById(edge.from))
@@ -1534,7 +1599,17 @@ function validateNodeDefinition(node) {
     return { ok: true };
   }
   const validateExpr = (value, fieldKey, options = {}) => {
+    const readDataUsage = validateReadDataExpressionUsage(value, {
+      allowReadData: node?.shape === "diamond",
+    });
+    if (!readDataUsage.ok) {
+      return { ok: false, reason: "runtime", message: readDataUsage.message || "" };
+    }
     const extraNames = [];
+    globalParameterNodesForModel(graph, node.id)
+      .forEach((depNode) => {
+        extraNames.push(depNode.name);
+      });
     graph.edges
       .filter((edge) => edge.to === node.id)
       .map((edge) => getNodeById(edge.from))
@@ -1688,6 +1763,10 @@ function incomingEdgesForNode(nodeId, model = graph) {
   return (model?.edges || []).filter((edge) => edge.to === nodeId);
 }
 
+function outgoingEdgesForNode(nodeId, model = graph) {
+  return (model?.edges || []).filter((edge) => edge.from === nodeId);
+}
+
 function pureTimeConfigIssue(execution = graph.execution) {
   const t0 = Number(execution?.t0);
   const dt = Number(execution?.dt);
@@ -1720,6 +1799,35 @@ function expressionReferencesForAnalysis(node, fieldKey = "value") {
     ? String(node.initialStateExpression ?? "")
     : String(node.valueExpression ?? "");
   return collectExpressionIdentifierReferences(expr);
+}
+
+function nodeIsImplicitlyReferenced(targetNode, model = graph) {
+  if (!targetNode) {
+    return false;
+  }
+  const targetName = String(targetNode.name ?? "").trim();
+  if (!targetName) {
+    return false;
+  }
+  return (model?.nodes || []).some((node) => {
+    if (!node || node.id === targetNode.id) {
+      return false;
+    }
+    if (expressionReferencesForAnalysis(node, "value").has(targetName)) {
+      return true;
+    }
+    if (isStateNode(node) && expressionReferencesForAnalysis(node, "initial").has(targetName)) {
+      return true;
+    }
+    if (isSubmodelNode(node)) {
+      for (const refs of submodelBindingReferences(node).values()) {
+        if (refs.has(targetName)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  });
 }
 
 function submodelBindingReferences(node) {
@@ -1796,6 +1904,11 @@ function stateTransitionPreviewForAnalysis(node, previewState) {
     ...previewState.globals,
     ...nodePropertyAccessForContext(runtimeNode),
   };
+  globalParameterNodesForModel(previewState.model, runtimeNode.id).forEach((depNode) => {
+    if (!depNode.computedError) {
+      initialContext[depNode.name] = depNode.computedValue;
+    }
+  });
   incomingEdgesForNode(runtimeNode.id, previewState.model)
     .map((edge) => getModelNodeById(previewState.model, edge.from))
     .filter((depNode) => depNode && depNode.shape === "diamond")
@@ -1816,6 +1929,11 @@ function stateTransitionPreviewForAnalysis(node, previewState) {
     ...nodePropertyAccessForContext(runtimeNode),
     __self: currentValueResult.value,
   };
+  globalParameterNodesForModel(previewState.model, runtimeNode.id).forEach((depNode) => {
+    if (!depNode.computedError) {
+      context[depNode.name] = depNode.computedValue;
+    }
+  });
   incomingEdgesForNode(runtimeNode.id, previewState.model)
     .map((edge) => getModelNodeById(previewState.model, edge.from))
     .filter(Boolean)
@@ -1833,7 +1951,7 @@ function stateTransitionPreviewForAnalysis(node, previewState) {
         if (!derivativeList.ok) {
           return derivativeList;
         }
-        const dt = Number(graph.execution.dt);
+        const dt = Number(previewState.model?.execution?.dt ?? graph.execution.dt);
         const integralValues = (derivativeList.value || [])
           .map((derivativeValue) => addTensorValues(currentValueResult.value, scaleTensorValue(derivativeValue, dt)));
         return semantics.evaluateStateTransitionExpressionWithIntegralValues(
@@ -2041,6 +2159,9 @@ function analyzeModelStaticIssues() {
           );
         }
         const extraNames = [...incomingNameToEdges.keys()];
+        globalParameterNodesForModel(graph, node.id).forEach((depNode) => {
+          extraNames.push(depNode.name);
+        });
         const validation = semantics.validateExpressionSyntax(source, extraNames);
         if (!validation.ok) {
           pushAnalysisIssue(
@@ -2058,7 +2179,7 @@ function analyzeModelStaticIssues() {
           if (!depNode || depNode.id === node.id) {
             return;
           }
-          if (!incomingNameToEdges.has(name)) {
+          if (!incomingNameToEdges.has(name) && !isGlobalParameterNode(depNode)) {
             pushAnalysisIssue(
               issues,
               "warning",
@@ -2129,7 +2250,7 @@ function analyzeModelStaticIssues() {
       if (!depNode || depNode.id === node.id) {
         return;
       }
-      if (!incomingNameToEdges.has(name)) {
+      if (!incomingNameToEdges.has(name) && !isGlobalParameterNode(depNode)) {
         pushAnalysisIssue(
           issues,
           "warning",
@@ -2145,7 +2266,7 @@ function analyzeModelStaticIssues() {
       if (!depNode || depNode.id === node.id || depNode.shape !== "diamond") {
         return;
       }
-      if (!incomingNameToEdges.has(name)) {
+      if (!incomingNameToEdges.has(name) && !isGlobalParameterNode(depNode)) {
         pushAnalysisIssue(
           issues,
           "warning",
@@ -2185,11 +2306,12 @@ function analyzeModelStaticIssues() {
       && Array.isArray(widget.xyPairs)
       && widget.xyPairs.some((pair) => pair?.xSource === node.name || pair?.ySource === node.name));
     const usedBySourceWidget = graph.widgets.some((widget) => widget.source === node.name);
-    const observed = Boolean(node.output || hasOutgoingEdges || usedByTable || usedByChart || usedBySourceWidget);
+    const usedImplicitly = nodeIsImplicitlyReferenced(node, graph);
+    const observed = Boolean(node.output || hasOutgoingEdges || usedByTable || usedByChart || usedBySourceWidget || usedImplicitly);
     if (!observed) {
       pushAnalysisIssue(
         issues,
-        "warning",
+        "info",
         "analysis.issue.unusedNode",
         { name: node.name },
         { type: "node", id: node.id, name: node.name },
@@ -2798,6 +2920,109 @@ function closeModelAnalysis() {
   modelAnalysisModal.classList.add("hidden");
 }
 
+function modelAnalysisCheckEntries() {
+  return [
+    { severity: "error", nameKey: "analysis.issue.invalidTimeConfig", descKey: "analysis.checks.invalidTimeConfig" },
+    { severity: "warning", nameKey: "analysis.issue.invalidDelay", descKey: "analysis.checks.invalidDelay" },
+    { severity: "error", nameKey: "analysis.issue.danglingEdge", descKey: "analysis.checks.danglingEdge" },
+    { severity: "warning", nameKey: "analysis.issue.duplicateEdge", descKey: "analysis.checks.duplicateEdge" },
+    { severity: "warning", nameKey: "analysis.issue.selfLoop", descKey: "analysis.checks.selfLoop" },
+    { severity: "error", nameKey: "analysis.issue.algebraicCycle", descKey: "analysis.checks.algebraicCycle" },
+    { severity: "warning", nameKey: "analysis.issue.missingIncomingEdge", descKey: "analysis.checks.missingIncomingEdge" },
+    { severity: "warning", nameKey: "analysis.issue.unusedEdge", descKey: "analysis.checks.unusedEdge" },
+    { severity: "info", nameKey: "analysis.issue.unusedNode", descKey: "analysis.checks.unusedNode" },
+    { severity: "error", nameKey: "analysis.issue.invalidSubmodelBinding", descKey: "analysis.checks.invalidSubmodelBinding" },
+    { severity: "warning", nameKey: "analysis.issue.unknownSubmodelBinding", descKey: "analysis.checks.unknownSubmodelBinding" },
+    { severity: "error", nameKey: "analysis.issue.duplicateSubmodelInputPort", descKey: "analysis.checks.duplicateSubmodelInputPort" },
+    { severity: "warning", nameKey: "analysis.issue.ambiguousSubmodelTargetPort", descKey: "analysis.checks.ambiguousSubmodelTargetPort" },
+    { severity: "warning", nameKey: "analysis.issue.ambiguousSubmodelSourcePort", descKey: "analysis.checks.ambiguousSubmodelSourcePort" },
+    { severity: "warning", nameKey: "analysis.issue.widgetNoSource", descKey: "analysis.checks.widgetNoSource" },
+    { severity: "error", nameKey: "analysis.issue.widgetMissingSource", descKey: "analysis.checks.widgetMissingSource" },
+    { severity: "warning", nameKey: "analysis.issue.widgetSourceNotOutput", descKey: "analysis.checks.widgetSourceNotOutput" },
+    { severity: "error", nameKey: "analysis.issue.widgetSourceNotBindable", descKey: "analysis.checks.widgetSourceNotBindable" },
+    { severity: "warning", nameKey: "analysis.issue.tableNoColumns", descKey: "analysis.checks.tableNoColumns" },
+    { severity: "error", nameKey: "analysis.issue.tableMissingColumn", descKey: "analysis.checks.tableMissingColumn" },
+    { severity: "warning", nameKey: "analysis.issue.tableColumnNotOutput", descKey: "analysis.checks.tableColumnNotOutput" },
+    { severity: "warning", nameKey: "analysis.issue.chartNoPairs", descKey: "analysis.checks.chartNoPairs" },
+    { severity: "error", nameKey: "analysis.issue.chartMissingSeriesSource", descKey: "analysis.checks.chartMissingSeriesSource" },
+    { severity: "warning", nameKey: "analysis.issue.chartSeriesNotOutput", descKey: "analysis.checks.chartSeriesNotOutput" },
+    { severity: "warning", nameKey: "analysis.issue.stateShapeMismatch", descKey: "analysis.checks.stateShapeMismatch" },
+  ];
+}
+
+function renderModelAnalysisChecksHelp() {
+  if (!modelAnalysisChecksContent) {
+    return;
+  }
+  modelAnalysisChecksContent.innerHTML = "";
+  const groups = new Map();
+  modelAnalysisCheckEntries().forEach((entry) => {
+    if (!groups.has(entry.severity)) {
+      groups.set(entry.severity, []);
+    }
+    groups.get(entry.severity).push(entry);
+  });
+  ["error", "warning", "info"].forEach((severity) => {
+    const entries = groups.get(severity) || [];
+    if (!entries.length) {
+      return;
+    }
+    const section = document.createElement("section");
+    section.className = "model-analysis-checks-group";
+    const title = document.createElement("h4");
+    title.className = "model-analysis-checks-group-title";
+    title.textContent = t(`analysis.section.${severity}`);
+    section.appendChild(title);
+    entries.forEach((entry) => {
+      const item = document.createElement("div");
+      item.className = `model-analysis-check-item ${severity}`;
+      const badge = document.createElement("span");
+      badge.className = "model-analysis-check-badge";
+      badge.textContent = t(`analysis.badge.${severity}`);
+      const text = document.createElement("div");
+      text.className = "model-analysis-check-text";
+      const name = document.createElement("div");
+      name.className = "model-analysis-check-name";
+      name.textContent = t(entry.nameKey, {
+        reason: "…",
+        from: "A",
+        to: "B",
+        name: "X",
+        target: "B",
+        source: "A",
+        input: "in1",
+        path: "A -> B -> C",
+        current: "vettore",
+        next: "matrice",
+      });
+      const desc = document.createElement("div");
+      desc.className = "model-analysis-check-desc";
+      desc.textContent = t(entry.descKey);
+      text.appendChild(name);
+      text.appendChild(desc);
+      item.appendChild(badge);
+      item.appendChild(text);
+      section.appendChild(item);
+    });
+    modelAnalysisChecksContent.appendChild(section);
+  });
+}
+
+function openModelAnalysisChecksHelp() {
+  if (!modelAnalysisChecksModal) {
+    return;
+  }
+  renderModelAnalysisChecksHelp();
+  modelAnalysisChecksModal.classList.remove("hidden");
+}
+
+function closeModelAnalysisChecksHelp() {
+  if (!modelAnalysisChecksModal) {
+    return;
+  }
+  modelAnalysisChecksModal.classList.add("hidden");
+}
+
 function analysisIssueTargetLabel(issue) {
   const target = issue?.target;
   if (!target) {
@@ -3039,6 +3264,17 @@ function expressionCatalogForEditor() {
   }
 
   if ((meta.key === "value" || meta.key === "initial") && node) {
+    globalParameterNodesForModel(graph, node.id)
+      .forEach((depNode) => {
+        const nodeDescription = getNodeDescription(depNode);
+        pushEntry(depNode.name, {
+          kind: "variable",
+          signature: depNode.name,
+          description: nodeDescription || depNode.name,
+          insertText: depNode.name,
+          cursorOffset: depNode.name.length,
+        });
+      });
     graph.edges
       .filter((edge) => edge.to === node.id)
       .map((edge) => getNodeById(edge.from))
@@ -3588,6 +3824,8 @@ function createExpressionPreviewRuntimeModel() {
     nodes: graph.nodes,
     edges: graph.edges,
     execution: normalizeExecutionConfig(graph.execution),
+    __directoryPath: String(graph.__directoryPath ?? ""),
+    __readDataCache: graph.__readDataCache || Object.create(null),
   });
   clearRuntimeSubmodelState(model);
   model.execution.currentTime = null;
@@ -3633,6 +3871,11 @@ function buildExpressionPreviewBaseContext(previewState, meta = null) {
     return { context, node };
   }
   Object.assign(context, nodePropertyAccessForContext(node));
+  globalParameterNodesForModel(previewState.model, node.id).forEach((depNode) => {
+    if (!depNode.computedError) {
+      context[depNode.name] = depNode.computedValue;
+    }
+  });
   previewState.model.edges
     .filter((edge) => edge.to === node.id)
     .map((edge) => getModelNodeById(previewState.model, edge.from))
@@ -3654,6 +3897,11 @@ function evaluateInitialStatePreviewValue(node, globals, model = graph) {
     ...globals,
     ...nodePropertyAccessForContext(node),
   };
+  globalParameterNodesForModel(model, node.id).forEach((depNode) => {
+    if (!depNode.computedError) {
+      context[depNode.name] = depNode.computedValue;
+    }
+  });
   (model?.edges || [])
     .filter((edge) => edge.to === node.id)
     .map((edge) => getModelNodeById(model, edge.from))
@@ -4525,6 +4773,43 @@ function canMarkNodeAsInput(node) {
   return isAlgebraicNode(node) && !nodeHasIncomingEdges(node.id);
 }
 
+function canMarkNodeAsGlobal(node) {
+  return Boolean(node && node.shape === "diamond");
+}
+
+function isGlobalParameterNode(node) {
+  return Boolean(node && node.shape === "diamond" && node.global);
+}
+
+function nodeHasRuntimeError(node) {
+  return Boolean(
+    node
+    && (
+      String(node.computedError || "").trim()
+      || String(node.pendingStateError || "").trim()
+    ),
+  );
+}
+
+function globalParameterNodesForModel(model = graph, excludeId = null) {
+  return (model?.nodes || []).filter((node) => isGlobalParameterNode(node) && node.id !== excludeId);
+}
+
+function globalParameterNameSetForModel(model = graph, excludeId = null) {
+  return new Set(globalParameterNodesForModel(model, excludeId).map((node) => String(node.name ?? "")).filter(Boolean));
+}
+
+function referencedGlobalParameterNodesForTarget(model, targetNode, fieldKey = "value") {
+  if (!targetNode) {
+    return [];
+  }
+  const refs = fieldKey === "initial"
+    ? expressionReferencesForAnalysis(targetNode, "initial")
+    : expressionReferencesForAnalysis(targetNode, "value");
+  return globalParameterNodesForModel(model, targetNode.id)
+    .filter((node) => refs.has(String(node.name ?? "")));
+}
+
 function canBindButtonToNode(node) {
   return Boolean(node && (node.shape === "diamond" || node.input));
 }
@@ -4552,6 +4837,137 @@ function normalizeSubmodelPath(value) {
     return "";
   }
   return base;
+}
+
+function expressionUsesReadData(expression) {
+  return READ_DATA_CALL_PATTERN.test(String(expression ?? ""));
+}
+
+function decodeExpressionStringLiteral(quote, body) {
+  const raw = String(body ?? "");
+  return raw.replace(/\\([\\'"nrt])/g, (_match, escaped) => {
+    if (escaped === "n") {
+      return "\n";
+    }
+    if (escaped === "r") {
+      return "\r";
+    }
+    if (escaped === "t") {
+      return "\t";
+    }
+    return escaped;
+  });
+}
+
+function extractReadDataPaths(expression) {
+  const text = String(expression ?? "");
+  const paths = [];
+  READ_DATA_LITERAL_CALL_PATTERN.lastIndex = 0;
+  let match = READ_DATA_LITERAL_CALL_PATTERN.exec(text);
+  while (match) {
+    paths.push(decodeExpressionStringLiteral(match[1], match[2]));
+    match = READ_DATA_LITERAL_CALL_PATTERN.exec(text);
+  }
+  return paths;
+}
+
+function normalizeReadDataPath(value) {
+  let raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  raw = raw.replace(/\\/g, "/");
+  while (raw.startsWith("./")) {
+    raw = raw.slice(2);
+  }
+  raw = raw.trim();
+  if (!raw || raw === "." || raw.startsWith("/") || /^[A-Za-z]:\//.test(raw)) {
+    return "";
+  }
+  const parts = raw.split("/").filter(Boolean);
+  if (!parts.length || parts.some((part) => part === "." || part === "..")) {
+    return "";
+  }
+  return parts.join("/");
+}
+
+function validateReadDataExpressionUsage(expression, options = {}) {
+  const text = String(expression ?? "");
+  if (!expressionUsesReadData(text)) {
+    return { ok: true };
+  }
+  if (!options.allowReadData) {
+    return { ok: false, message: "readData is only available in parameters" };
+  }
+  const callCount = (text.match(/\breadData\s*\(/g) || []).length;
+  const paths = extractReadDataPaths(text);
+  if (paths.length !== callCount) {
+    return { ok: false, message: "readData expects a string literal path" };
+  }
+  const invalidPath = paths.find((path) => !normalizeReadDataPath(path));
+  if (invalidPath !== undefined) {
+    return { ok: false, message: "readData path is invalid" };
+  }
+  return { ok: true };
+}
+
+function splitCsvLine(line) {
+  const fields = [];
+  let current = "";
+  let inQuotes = false;
+  for (let idx = 0; idx < line.length; idx += 1) {
+    const ch = line[idx];
+    if (ch === '"') {
+      if (inQuotes && line[idx + 1] === '"') {
+        current += '"';
+        idx += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (ch === "," && !inQuotes) {
+      fields.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (inQuotes) {
+    throw new Error("readData CSV contains an unterminated quoted field");
+  }
+  fields.push(current);
+  return fields;
+}
+
+function parseCsvMatrix(text, sourcePath = "") {
+  const normalizedText = String(text ?? "").replace(/^\uFEFF/, "");
+  const lines = normalizedText
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\r$/, ""))
+    .filter((line) => line.trim().length > 0);
+  if (!lines.length) {
+    throw new Error("readData CSV is empty");
+  }
+  const matrix = lines.map((line, rowIndex) => splitCsvLine(line).map((cell, colIndex) => {
+    const trimmed = String(cell ?? "").trim();
+    if (!trimmed) {
+      return "";
+    }
+    const value = Number(trimmed);
+    if (Number.isFinite(value)) {
+      return value;
+    }
+    return trimmed;
+  }));
+  const width = matrix[0].length;
+  if (!width) {
+    throw new Error("readData CSV is empty");
+  }
+  if (matrix.some((row) => row.length !== width)) {
+    throw new Error("readData CSV must be rectangular");
+  }
+  return matrix;
 }
 
 function submodelInterfaceSummary(node) {
@@ -4614,7 +5030,9 @@ async function chooseSubmodelFileForNode(node) {
   }
   try {
     const data = JSON.parse(item.text);
-    submodelTemplateCache.set(normalizedPath, buildRuntimeModelFromData(data));
+    submodelTemplateCache.set(normalizedPath, buildRuntimeModelFromData(data, {
+      directoryPath: String(item.directoryHandle?.path ?? ""),
+    }));
   } catch (_err) {
     // Parsing/semantic errors are surfaced by the normal refresh path below.
   }
@@ -4788,6 +5206,9 @@ function normalizeInputNodeFlags() {
   graph.nodes.forEach((node) => {
     if (!canMarkNodeAsInput(node)) {
       node.input = false;
+    }
+    if (!canMarkNodeAsGlobal(node)) {
+      node.global = false;
     }
   });
 }
@@ -5337,6 +5758,7 @@ function exportGraphData() {
     view: {
       zoom: clampZoom(Number(ui.zoom) || 1),
       showGrid: ui.showGrid !== false,
+      highlightNodeEdges: ui.highlightNodeEdges === true,
       gridSize: clamp(Number(ui.gridSize) || 20, 5, 100),
       scrollLeft: Math.max(0, Number(graphViewport?.scrollLeft) || 0),
       scrollTop: Math.max(0, Number(graphViewport?.scrollTop) || 0),
@@ -5363,6 +5785,7 @@ function exportGraphData() {
         id: n.id,
         name: n.name,
         output: Boolean(n.output),
+        global: Boolean(n.global),
         type,
         x: n.x,
         y: n.y,
@@ -5503,6 +5926,7 @@ function captureCurrentModelContext(nodeName = "") {
     view: {
       zoom: ui.zoom,
       showGrid: ui.showGrid,
+      highlightNodeEdges: ui.highlightNodeEdges,
       gridSize: ui.gridSize,
       scrollLeft: graphViewport.scrollLeft,
       scrollTop: graphViewport.scrollTop,
@@ -5528,6 +5952,7 @@ function restoreModelContext(context) {
   clearAllSelection();
   ui.zoom = clampZoom(Number(context.view?.zoom) || 1);
   ui.showGrid = context.view?.showGrid !== false;
+  ui.highlightNodeEdges = context.view?.highlightNodeEdges === true;
   ui.gridSize = clamp(Number(context.view?.gridSize) || ui.gridSize || 20, 5, 100);
   updateHistoryButtons();
   updateFileStatusLabel(dirtySinceLastSave);
@@ -5577,6 +6002,7 @@ function applyGraphData(data) {
       name: n.name,
       input: shape === "ellipse" ? Boolean(n.input) : false,
       output: Boolean(n.output),
+      global: shape === "diamond" ? Boolean(n.global) : false,
       shape,
       x: n.x,
       y: n.y,
@@ -5737,6 +6163,7 @@ function applyGraphData(data) {
   textItemCounter = Number(data.textItemCounter) || 1;
   ui.zoom = clampZoom(Number(savedView?.zoom) || 1);
   ui.showGrid = savedView?.showGrid !== false;
+  ui.highlightNodeEdges = savedView?.highlightNodeEdges === true;
   ui.gridSize = clamp(Number(savedView?.gridSize) || ui.gridSize || 20, 5, 100);
   normalizeInputNodeFlags();
   initializeStateNodes(graph.execution.t0);
@@ -6001,6 +6428,7 @@ function collectSelectedForClipboard() {
       name: n.name,
       input: Boolean(n.input),
       output: Boolean(n.output),
+      global: Boolean(n.global),
       shape: n.shape,
       x: n.x,
       y: n.y,
@@ -6080,6 +6508,7 @@ function pasteFromClipboard() {
         name: uniqueName,
         input: Boolean(n.input),
         output: Boolean(n.output),
+        global: Boolean(n.global),
         shape: n.shape,
         x: snap(n.x + offset),
         y: snap(n.y + offset),
@@ -6294,6 +6723,7 @@ function addNode(shape, atPoint = null) {
     name: defaultName,
     input: false,
     output: false,
+    global: false,
     shape,
     x: px,
     y: py,
@@ -6543,10 +6973,13 @@ function refreshSidebar() {
       nodeShapeInput.value = node.shape;
     }
     const showInputToggle = canMarkNodeAsInput(node);
+    const showGlobalToggle = canMarkNodeAsGlobal(node);
     const submodelNode = isSubmodelNode(node);
     nodeInputInput.checked = Boolean(node.input);
     nodeOutputInput.checked = Boolean(node.output);
     nodeOutputInput.indeterminate = false;
+    nodeGlobalInput.checked = Boolean(node.global);
+    nodeGlobalInput.indeterminate = false;
     sanitizeNodeVisualOptions(node);
     if (nodeFillColorInput) {
       nodeFillColorInput.value = node.fillColor || "";
@@ -6558,6 +6991,10 @@ function refreshSidebar() {
       nodeInputLabel.classList.toggle("hidden", !showInputToggle);
     }
     nodeInputInput.disabled = !showInputToggle;
+    if (nodeGlobalLabel) {
+      nodeGlobalLabel.classList.toggle("hidden", !showGlobalToggle);
+    }
+    nodeGlobalInput.disabled = !showGlobalToggle;
     const stateNode = isStateNode(node);
     const parameterNode = node.shape === "diamond";
     if (nodeOutputInput?.closest("label")) {
@@ -6711,6 +7148,11 @@ function refreshSidebar() {
     nodeInputLabel.classList.add("hidden");
   }
   nodeInputInput.disabled = true;
+  nodeGlobalInput.checked = false;
+  if (nodeGlobalLabel) {
+    nodeGlobalLabel.classList.add("hidden");
+  }
+  nodeGlobalInput.disabled = true;
   if (nodeInitialStateLabel) {
     nodeInitialStateLabel.classList.add("hidden");
   }
@@ -6789,11 +7231,16 @@ function refreshSidebar() {
     if (nodeInputLabel) {
       nodeInputLabel.classList.add("hidden");
     }
+    if (nodeGlobalLabel) {
+      nodeGlobalLabel.classList.add("hidden");
+    }
     nodeNameLabel?.classList.add("hidden");
     nodeNameInput?.classList.add("hidden");
     nodeShapeInput?.classList.add("hidden");
     nodeInputInput.checked = false;
     nodeInputInput.disabled = true;
+    nodeGlobalInput.checked = false;
+    nodeGlobalInput.disabled = true;
     nodeValueExprLabel.classList.add("hidden");
     nodeValueExprRow?.classList.add("hidden");
     hideExpressionStatus(nodeValueExprStatus);
@@ -6919,6 +7366,10 @@ function render() {
   previewLayer.innerHTML = "";
   marqueeLayer.innerHTML = "";
 
+  const highlightedNodeId = ui.highlightNodeEdges && ui.selectedNodes.size === 1
+    ? [...ui.selectedNodes][0]
+    : null;
+
   graph.edges.forEach((edge) => {
     const geom = buildEdgeGeometry(edge);
     if (!geom) {
@@ -6928,17 +7379,36 @@ function render() {
     const g = document.createElementNS(SVG_NS, "g");
     g.classList.add("edge");
     const isSelected = ui.selected?.type === "edge" && ui.selected.id === edge.id;
+    const isIncomingHighlight = highlightedNodeId != null && edge.to === highlightedNodeId;
+    const isOutgoingHighlight = highlightedNodeId != null && edge.from === highlightedNodeId;
+    const isBothHighlight = isIncomingHighlight && isOutgoingHighlight;
     if (isSelected) {
       g.classList.add("selected");
     }
     if (isAnalysisFocusActive("edge", edge.id)) {
       g.classList.add("analysis-focus");
     }
+    if (isBothHighlight) {
+      g.classList.add("related-both");
+    } else if (isIncomingHighlight) {
+      g.classList.add("related-incoming");
+    } else if (isOutgoingHighlight) {
+      g.classList.add("related-outgoing");
+    }
 
     const path = document.createElementNS(SVG_NS, "path");
     path.classList.add("edge-line");
     path.setAttribute("d", geom.path);
-    path.setAttribute("marker-end", "url(#arrow)");
+    const markerId = isSelected
+      ? "arrow-selected"
+      : isBothHighlight
+        ? "arrow-both"
+        : isIncomingHighlight
+          ? "arrow-incoming"
+          : isOutgoingHighlight
+            ? "arrow-outgoing"
+            : "arrow";
+    path.setAttribute("marker-end", `url(#${markerId})`);
 
     const hit = document.createElementNS(SVG_NS, "path");
     hit.classList.add("edge-hit");
@@ -7095,6 +7565,12 @@ function render() {
     });
     if (ui.selectedNodes.has(node.id)) {
       g.classList.add("selected");
+    }
+    if (isGlobalParameterNode(node)) {
+      g.classList.add("global-node");
+    }
+    if (nodeHasRuntimeError(node)) {
+      g.classList.add("runtime-error");
     }
     if (isAnalysisFocusActive("node", node.id)) {
       g.classList.add("analysis-focus");
@@ -7288,6 +7764,21 @@ function render() {
       outputBadgeLabel.textContent = "O";
     }
 
+    let globalBadge = null;
+    let globalBadgeLabel = null;
+    if (isGlobalParameterNode(node)) {
+      globalBadge = document.createElementNS(SVG_NS, "circle");
+      globalBadge.classList.add("node-global-badge");
+      globalBadge.setAttribute("cx", node.x - node.width / 2 + 9);
+      globalBadge.setAttribute("cy", node.y + node.height / 2 - 9);
+      globalBadge.setAttribute("r", "7");
+      globalBadgeLabel = document.createElementNS(SVG_NS, "text");
+      globalBadgeLabel.classList.add("node-global-badge-label");
+      globalBadgeLabel.setAttribute("x", node.x - node.width / 2 + 9);
+      globalBadgeLabel.setAttribute("y", node.y + node.height / 2 - 9);
+      globalBadgeLabel.textContent = "G";
+    }
+
     const submodelPorts = [];
     if (isSubmodelNode(node)) {
       const makePorts = (items, side) => {
@@ -7367,6 +7858,10 @@ function render() {
     if (outputBadge && outputBadgeLabel) {
       g.appendChild(outputBadge);
       g.appendChild(outputBadgeLabel);
+    }
+    if (globalBadge && globalBadgeLabel) {
+      g.appendChild(globalBadge);
+      g.appendChild(globalBadgeLabel);
     }
     submodelPorts.forEach((port) => g.appendChild(port));
     g.appendChild(centerPortHit);
@@ -7525,6 +8020,7 @@ function importGraphData(data) {
         name: typeof n.name === "string" ? n.name : t("node.defaultName", { id: n.id }),
         input: shape === "ellipse" ? Boolean(n.input) : false,
         output: Boolean(n.output),
+        global: shape === "diamond" ? Boolean(n.global) : false,
         type: serializeNodeType(shape),
         x: Number.isFinite(n.x) ? n.x : 200,
         y: Number.isFinite(n.y) ? n.y : 200,
@@ -7716,6 +8212,7 @@ function importGraphData(data) {
       ? {
         zoom: clampZoom(Number(data.view.zoom) || 1),
         showGrid: data.view.showGrid !== false,
+        highlightNodeEdges: data.view.highlightNodeEdges === true,
         gridSize: clamp(Number(data.view.gridSize) || 20, 5, 100),
         scrollLeft: Math.max(0, Number(data.view.scrollLeft) || 0),
         scrollTop: Math.max(0, Number(data.view.scrollTop) || 0),
@@ -8030,6 +8527,8 @@ function loadGraphFromJsonText(jsonText, sourceName = "", fileHandle = null, dir
     currentFileHandle = fileHandle || null;
     const effectiveDirectoryHandle = directoryHandle || tryDeriveDirectoryHandleFromFileHandle(fileHandle) || null;
     currentModelDirectoryHandle = effectiveDirectoryHandle;
+    graph.__directoryPath = String(effectiveDirectoryHandle?.path ?? "");
+    graph.__readDataCache = Object.create(null);
     currentFileName = sourceName || currentFileName || defaultGraphFilename();
     history.undo = [];
     history.redo = [];
@@ -8072,22 +8571,101 @@ function downloadJsonFile(filename, json) {
 
 async function ensureCurrentModelDirectoryHandle() {
   if (currentModelDirectoryHandle) {
+    graph.__directoryPath = String(currentModelDirectoryHandle?.path ?? graph.__directoryPath ?? "");
     return currentModelDirectoryHandle;
   }
   const derivedFromCurrentFile = await deriveDirectoryHandleFromFileHandle(currentFileHandle);
   if (derivedFromCurrentFile) {
     currentModelDirectoryHandle = derivedFromCurrentFile;
+    graph.__directoryPath = String(currentModelDirectoryHandle?.path ?? graph.__directoryPath ?? "");
     return currentModelDirectoryHandle;
   }
   if (supportsDirectoryInputSelection()) {
     currentModelDirectoryHandle = await pickModelDirectoryWithInput();
+    graph.__directoryPath = String(currentModelDirectoryHandle?.path ?? graph.__directoryPath ?? "");
     return currentModelDirectoryHandle;
   }
   if (supportsDirectoryPicker()) {
     currentModelDirectoryHandle = await showDirectoryPickerCompat({ mode: "read" });
+    graph.__directoryPath = String(currentModelDirectoryHandle?.path ?? graph.__directoryPath ?? "");
     return currentModelDirectoryHandle;
   }
   throw new Error(t("error.submodelDirectoryUnsupported"));
+}
+
+async function getModelDirectoryHandleForReadData(model) {
+  if (model === graph) {
+    return ensureCurrentModelDirectoryHandle();
+  }
+  const directoryPath = String(model?.__directoryPath ?? "").trim();
+  if (directoryPath && hasPlatformApi("createDirectoryHandleFromDirectoryPath")) {
+    return window.STGraphXPlatform.createDirectoryHandleFromDirectoryPath(directoryPath);
+  }
+  throw new Error("readData requires access to the model folder");
+}
+
+async function prepareReadDataCacheForModel(model) {
+  if (!model) {
+    return;
+  }
+  const parameterNodes = (model.nodes || []).filter((node) => node?.shape === "diamond");
+  const referencedPaths = new Set();
+  parameterNodes.forEach((node) => {
+    const source = String(node.valueExpression ?? "");
+    if (!expressionUsesReadData(source)) {
+      return;
+    }
+    const usage = validateReadDataExpressionUsage(source, { allowReadData: true });
+    if (!usage.ok) {
+      throw new Error(usage.message || "readData expects a string literal path");
+    }
+    extractReadDataPaths(source).forEach((path) => {
+      const normalized = normalizeReadDataPath(path);
+      if (normalized) {
+        referencedPaths.add(normalized);
+      }
+    });
+  });
+  model.__readDataCache = Object.create(null);
+  if (!referencedPaths.size) {
+    return;
+  }
+  const directoryHandle = await getModelDirectoryHandleForReadData(model);
+  for (const relativePath of referencedPaths) {
+    let fileHandle;
+    let file;
+    try {
+      fileHandle = await directoryHandle.getFileHandle(relativePath);
+      file = await fileHandle.getFile();
+    } catch (_err) {
+      throw new Error(`readData file is unavailable: ${relativePath}`);
+    }
+    let text;
+    try {
+      text = await file.text();
+    } catch (_err) {
+      throw new Error(`readData file is unavailable: ${relativePath}`);
+    }
+    model.__readDataCache[relativePath] = parseCsvMatrix(text, relativePath);
+  }
+}
+
+async function prepareReadDataCachesForModelTree(model, visited = new Set()) {
+  if (!model || visited.has(model)) {
+    return;
+  }
+  visited.add(model);
+  await prepareReadDataCacheForModel(model);
+  for (const node of model.nodes || []) {
+    if (!isSubmodelNode(node)) {
+      continue;
+    }
+    const normalizedPath = normalizeSubmodelPath(node.modelPath);
+    if (!normalizedPath || !submodelTemplateCache.has(normalizedPath)) {
+      continue;
+    }
+    await prepareReadDataCachesForModelTree(submodelTemplateCache.get(normalizedPath), visited);
+  }
 }
 
 function basenameOfSubmodelPath(modelPath) {
@@ -8158,7 +8736,14 @@ function createPseudoFileHandle(file) {
 function createPseudoDirectoryHandle(files) {
   const fileMap = new Map();
   Array.from(files || []).forEach((file) => {
+    const rawRelativePath = String(file?.webkitRelativePath || file?.name || "").replace(/\\/g, "/");
+    const relativeParts = rawRelativePath.split("/").filter(Boolean);
+    const relativePath = relativeParts.length > 1 ? relativeParts.slice(1).join("/") : relativeParts[0] || "";
+    const normalizedRelativePath = normalizeReadDataPath(relativePath);
     const baseName = normalizeSubmodelPath(file?.name) || basenameOfSubmodelPath(file?.name);
+    if (normalizedRelativePath && !fileMap.has(normalizedRelativePath)) {
+      fileMap.set(normalizedRelativePath, file);
+    }
     if (baseName && !fileMap.has(baseName)) {
       fileMap.set(baseName, file);
     }
@@ -8167,10 +8752,11 @@ function createPseudoDirectoryHandle(files) {
     kind: "directory",
     name: "",
     async getFileHandle(name) {
+      const normalizedPath = normalizeReadDataPath(name);
       const baseName = normalizeSubmodelPath(name) || basenameOfSubmodelPath(name);
-      const file = fileMap.get(baseName);
+      const file = (normalizedPath && fileMap.get(normalizedPath)) || fileMap.get(baseName);
       if (!file) {
-        const err = new Error(`Missing file: ${baseName}`);
+        const err = new Error(`Missing file: ${normalizedPath || baseName}`);
         err.name = "NotFoundError";
         throw err;
       }
@@ -8191,14 +8777,15 @@ function pickModelDirectoryWithInput() {
     input.setAttribute("webkitdirectory", "");
     input.setAttribute("directory", "");
     input.addEventListener("change", async () => {
-      const files = Array.from(input.files || []).filter((file) => String(file?.name || "").toLowerCase().endsWith(".json"));
+      const files = Array.from(input.files || []);
       input.remove();
       if (!files.length) {
         reject(new Error(t("error.loadCancelled")));
         return;
       }
       try {
-        await cacheSelectedSubmodelEntries(files);
+        const jsonFiles = files.filter((file) => String(file?.name || "").toLowerCase().endsWith(".json"));
+        await cacheSelectedSubmodelEntries(jsonFiles);
         resolve(createPseudoDirectoryHandle(files));
       } catch (err) {
         reject(err);
@@ -8316,7 +8903,9 @@ async function prepareSelectedJsonEntries(entries) {
     }
     if (item.data) {
       try {
-        submodelTemplateCache.set(item.baseName, buildRuntimeModelFromData(item.data));
+        submodelTemplateCache.set(item.baseName, buildRuntimeModelFromData(item.data, {
+          directoryPath: String(item.directoryHandle?.path ?? ""),
+        }));
       } catch (_err) {
         // Ignore invalid child cache candidates; the actual load path will surface errors.
       }
@@ -8342,7 +8931,9 @@ async function cacheSelectedSubmodelEntries(entries, allowedNames = null) {
     }
     try {
       const data = JSON.parse(item.text);
-      submodelTemplateCache.set(baseName, buildRuntimeModelFromData(data));
+      submodelTemplateCache.set(baseName, buildRuntimeModelFromData(data, {
+        directoryPath: String(item.directoryHandle?.path ?? ""),
+      }));
     } catch (_err) {
       // Ignore invalid JSON here; the actual submodel load path will report the error.
     }
@@ -8497,9 +9088,11 @@ async function loadSubmodelInterfaceByPath(modelPath) {
   if (!normalizedPath) {
     throw new Error(t("error.submodelPathInvalid"));
   }
-  const { text } = await resolveSubmodelFileByPath(normalizedPath);
+  const { text, directoryHandle } = await resolveSubmodelFileByPath(normalizedPath);
   const data = JSON.parse(text);
-  submodelTemplateCache.set(normalizedPath, buildRuntimeModelFromData(data));
+  submodelTemplateCache.set(normalizedPath, buildRuntimeModelFromData(data, {
+    directoryPath: String(directoryHandle?.path ?? ""),
+  }));
   return extractSubmodelInterfaceFromData(data);
 }
 
@@ -8520,11 +9113,13 @@ async function loadSubmodelTemplateByPath(modelPath, visited = new Set(), option
     }
     return cachedTemplate;
   }
-  const { text } = await resolveSubmodelFileByPath(normalizedPath, {
+  const { text, directoryHandle } = await resolveSubmodelFileByPath(normalizedPath, {
     allowPrompt: options.allowPrompt !== false,
   });
   const data = JSON.parse(text);
-  const template = buildRuntimeModelFromData(data);
+  const template = buildRuntimeModelFromData(data, {
+    directoryPath: String(directoryHandle?.path ?? ""),
+  });
   submodelTemplateCache.set(normalizedPath, template);
   const nextVisited = new Set(visited);
   nextVisited.add(normalizedPath);
@@ -8590,11 +9185,13 @@ async function refreshSubmodelInterface(node, updateStatus = true, options = {})
   }
   try {
     const normalizedPath = normalizeSubmodelPath(modelPath);
-    const { text } = await resolveSubmodelFileByPath(normalizedPath, {
+    const { text, directoryHandle } = await resolveSubmodelFileByPath(normalizedPath, {
       allowPrompt: options.allowPrompt !== false,
     });
     const data = JSON.parse(text);
-    submodelTemplateCache.set(normalizedPath, buildRuntimeModelFromData(data));
+    submodelTemplateCache.set(normalizedPath, buildRuntimeModelFromData(data, {
+      directoryPath: String(directoryHandle?.path ?? ""),
+    }));
     const iface = extractSubmodelInterfaceFromData(data);
     node.interfaceCache = {
       inputs: Array.isArray(iface.inputs) ? iface.inputs.map((value) => String(value)) : [],
@@ -8664,7 +9261,9 @@ async function openSubmodelNode(node) {
   }
   try {
     const { text, fileHandle, file, directoryHandle } = await resolveSubmodelFileByPath(modelPath);
-    submodelTemplateCache.set(modelPath, buildRuntimeModelFromData(JSON.parse(text)));
+    submodelTemplateCache.set(modelPath, buildRuntimeModelFromData(JSON.parse(text), {
+      directoryPath: String(directoryHandle?.path ?? ""),
+    }));
     modelContextStack.push(captureCurrentModelContext(node.name));
     const effectiveDirectoryHandle = directoryHandle || await deriveDirectoryHandleFromFileHandle(fileHandle) || null;
     loadGraphFromJsonText(
@@ -8752,7 +9351,10 @@ async function saveGraphJson(forceSaveAs = false) {
     filename = currentFileHandle.name || filename;
     currentFileName = filename;
     currentModelDirectoryHandle = currentModelDirectoryHandle || await deriveDirectoryHandleFromFileHandle(currentFileHandle) || null;
-    submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
+    graph.__directoryPath = String(currentModelDirectoryHandle?.path ?? graph.__directoryPath ?? "");
+    submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data, {
+      directoryPath: String(currentModelDirectoryHandle?.path ?? ""),
+    }));
     markSavedSnapshot();
     await rememberRecentModel(currentFileName || filename, currentFileHandle);
     setStatusKey("status.saved");
@@ -8770,7 +9372,10 @@ async function saveGraphJson(forceSaveAs = false) {
           return false;
         }
         currentModelDirectoryHandle = await deriveDirectoryHandleFromFileHandle(currentFileHandle) || currentModelDirectoryHandle || null;
-        submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
+        graph.__directoryPath = String(currentModelDirectoryHandle?.path ?? graph.__directoryPath ?? "");
+        submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data, {
+          directoryPath: String(currentModelDirectoryHandle?.path ?? ""),
+        }));
         markSavedSnapshot();
         await rememberRecentModel(currentFileName || filename, currentFileHandle);
         setStatusKey("status.saved");
@@ -8794,7 +9399,9 @@ async function saveGraphJson(forceSaveAs = false) {
       selectedName = normalizeJsonFilename(proposed);
     }
     currentFileName = selectedName;
-    submodelTemplateCache.set(String(currentFileName || selectedName), buildRuntimeModelFromData(data));
+    submodelTemplateCache.set(String(currentFileName || selectedName), buildRuntimeModelFromData(data, {
+      directoryPath: String(currentModelDirectoryHandle?.path ?? ""),
+    }));
     downloadJsonFile(selectedName, json);
     markSavedSnapshot();
     await rememberRecentModel(currentFileName || selectedName, currentFileHandle);
@@ -8829,7 +9436,10 @@ async function saveGraphJson(forceSaveAs = false) {
         filename = currentFileHandle.name || filename;
         currentFileName = filename;
         currentModelDirectoryHandle = await deriveDirectoryHandleFromFileHandle(currentFileHandle) || currentModelDirectoryHandle || null;
-        submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
+        graph.__directoryPath = String(currentModelDirectoryHandle?.path ?? graph.__directoryPath ?? "");
+        submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data, {
+          directoryPath: String(currentModelDirectoryHandle?.path ?? ""),
+        }));
         markSavedSnapshot();
         await rememberRecentModel(currentFileName || filename, currentFileHandle);
         setStatusKey("status.savedAs");
@@ -8856,7 +9466,9 @@ async function saveGraphJson(forceSaveAs = false) {
   }
 
   downloadJsonFile(filename, json);
-  submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data));
+  submodelTemplateCache.set(String(currentFileName || filename), buildRuntimeModelFromData(data, {
+    directoryPath: String(currentModelDirectoryHandle?.path ?? ""),
+  }));
   markSavedSnapshot();
   await rememberRecentModel(currentFileName || filename, currentFileHandle);
   setStatusKey(forceSaveAs ? "status.savedAs" : "status.saved");
@@ -8929,6 +9541,8 @@ async function createNewGraph() {
   graph.edges = [];
   graph.textItems = [];
   graph.widgets = [];
+  graph.__directoryPath = "";
+  graph.__readDataCache = Object.create(null);
   invalidateExecutionPlan();
   stopTimedExecution(false);
   graph.execution = {
@@ -9090,7 +9704,7 @@ function serializeNodePropertyStoredValue(value) {
   return String(value);
 }
 
-function buildRuntimeModelFromData(data) {
+function buildRuntimeModelFromData(data, options = {}) {
   if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
     throw new Error(t("error.invalidJson"));
   }
@@ -9107,6 +9721,7 @@ function buildRuntimeModelFromData(data) {
         name: typeof n.name === "string" ? n.name : t("node.defaultName", { id: n.id }),
         input: shape === "ellipse" ? Boolean(n.input) : false,
         output: Boolean(n.output),
+        global: shape === "diamond" ? Boolean(n.global) : false,
         shape,
         x: Number.isFinite(Number(n.x)) ? Number(n.x) : 200,
         y: Number.isFinite(Number(n.y)) ? Number(n.y) : 200,
@@ -9180,6 +9795,8 @@ function buildRuntimeModelFromData(data) {
       strictDefinitions: execCfg.strictDefinitions,
       currentTime: null,
     },
+    __directoryPath: String(options.directoryPath ?? ""),
+    __readDataCache: Object.create(null),
   };
 }
 
@@ -9208,6 +9825,20 @@ function setModelPropertyValue(key, value) {
   return value;
 }
 
+function readDataFromModelCache(model, relativePath) {
+  const normalizedPath = normalizeReadDataPath(relativePath);
+  if (!normalizedPath) {
+    throw new Error("readData path is invalid");
+  }
+  const cache = model?.__readDataCache && typeof model.__readDataCache === "object"
+    ? model.__readDataCache
+    : null;
+  if (!cache || !Object.prototype.hasOwnProperty.call(cache, normalizedPath)) {
+    throw new Error(`readData file is unavailable: ${normalizedPath}`);
+  }
+  return cache[normalizedPath];
+}
+
 function buildExecutionGlobals(timeValue) {
   return {
     time: timeValue,
@@ -9216,6 +9847,7 @@ function buildExecutionGlobals(timeValue) {
     dt: Number(graph.execution.dt),
     getModelProperty: getModelPropertyValue,
     setModelProperty: setModelPropertyValue,
+    readData: (path) => readDataFromModelCache(graph, path),
   };
 }
 
@@ -9241,6 +9873,7 @@ function buildExecutionGlobalsForModel(model, rootExecution, timeValue) {
       }
       return value;
     },
+    readData: (path) => readDataFromModelCache(model, path),
   };
 }
 
@@ -9288,6 +9921,18 @@ function evaluateParameterNodesForModel(model, timeValue, rootExecution) {
         ...nodePropertyAccessForContext(node),
       };
       let blockedByDependency = false;
+      referencedGlobalParameterNodesForTarget(model, node, "value").forEach((depNode) => {
+        if (!resolved.has(depNode.id)) {
+          blockedByDependency = true;
+          return;
+        }
+        if (!depNode.computedError) {
+          context[depNode.name] = depNode.computedValue;
+        }
+      });
+      if (blockedByDependency) {
+        continue;
+      }
       (model.edges || [])
         .filter((edge) => edge.to === node.id)
         .forEach((edge) => {
@@ -9340,6 +9985,11 @@ function buildInitialStateContextForModel(model, node, timeValue, rootExecution)
     ...buildExecutionGlobalsForModel(model, rootExecution, timeValue),
     ...nodePropertyAccessForContext(node),
   };
+  globalParameterNodesForModel(model, node.id).forEach((depNode) => {
+    if (!depNode.computedError) {
+      context[depNode.name] = depNode.computedValue;
+    }
+  });
   (model.edges || [])
     .filter((edge) => edge.to === node.id)
     .forEach((edge) => {
@@ -9866,7 +10516,15 @@ function createSubmodelNodeEvaluator(model, timeValue, env, options = {}) {
       return { ok: false, reason: "runtime", message: "recursive submodel reference" };
     }
     try {
-      const inputOverrides = buildSubmodelInputOverrides(model, runtimeNode, context);
+      const effectiveContext = { ...context };
+      const bindingRefs = submodelBindingReferences(runtimeNode);
+      globalParameterNodesForModel(model, runtimeNode.id).forEach((depNode) => {
+        const used = [...bindingRefs.values()].some((refs) => refs.has(depNode.name));
+        if (used && !depNode.computedError) {
+          effectiveContext[depNode.name] = depNode.computedValue;
+        }
+      });
+      const inputOverrides = buildSubmodelInputOverrides(model, runtimeNode, effectiveContext);
       const runtimeChildModel = ensureSubmodelRuntimeModel(runtimeNode);
       if (!runtimeChildModel) {
         return { ok: false, reason: "runtime", message: "submodel is not loaded" };
@@ -9948,6 +10606,11 @@ function evaluateTransitionResultsWithIntegralValuesForModel(
         return value;
       },
     };
+    globalParameterNodesForModel(model, node.id).forEach((depNode) => {
+      if (!depNode.computedError) {
+        context[depNode.name] = depNode.computedValue;
+      }
+    });
     (executionPlan.incoming.get(node.id) || []).forEach((fromId) => {
       const fromNode = getModelNodeById(model, fromId);
       if (!fromNode) {
@@ -10003,6 +10666,11 @@ function evaluateTransitionResultsWithIntegralValues(timeValue, integralStateIds
       ...globals,
       __self: node.computedValue,
     };
+    globalParameterNodesForModel(graph, node.id).forEach((depNode) => {
+      if (!depNode.computedError) {
+        context[depNode.name] = depNode.computedValue;
+      }
+    });
     (executionPlan.incoming.get(node.id) || []).forEach((fromId) => {
       const fromNode = getNodeById(fromId);
       if (!fromNode) {
@@ -10135,6 +10803,15 @@ async function prepareSubmodelsForExecution() {
         ready = false;
       }
     }
+  }
+  if (!ready) {
+    return false;
+  }
+  try {
+    await prepareReadDataCachesForModelTree(graph);
+  } catch (err) {
+    setStatus(localizeExpressionErrorMessage(String(err?.message || "")), true);
+    return false;
   }
   return ready;
 }
@@ -10304,8 +10981,11 @@ async function runManualStep() {
   await executeOneStep(true);
 }
 
-function resetExecution() {
+async function resetExecution() {
   stopTimedExecution(false);
+  if (!(await prepareSubmodelsForExecution())) {
+    return;
+  }
   const cfg = validateTimeConfig();
   if (!cfg) {
     return;
@@ -11007,6 +11687,15 @@ if (showGridInput) {
   });
 }
 
+if (highlightNodeEdgesInput) {
+  highlightNodeEdgesInput.addEventListener("change", () => {
+    ui.highlightNodeEdges = highlightNodeEdgesInput.checked;
+    render();
+    scheduleFileStatusRefresh();
+    setStatusKey(ui.highlightNodeEdges ? "status.highlightNodeEdgesOn" : "status.highlightNodeEdgesOff");
+  });
+}
+
 gridSizeInput.addEventListener("change", () => {
   ui.gridSize = clamp(Number(gridSizeInput.value) || 20, 5, 100);
   gridSizeInput.value = String(ui.gridSize);
@@ -11203,6 +11892,9 @@ nodeShapeInput.addEventListener("change", () => {
   runAction(() => {
     const wasSliderBindable = canBindSliderToNode(node);
     node.shape = nodeShapeInput.value;
+    if (!canMarkNodeAsGlobal(node)) {
+      node.global = false;
+    }
     if (isSubmodelNode(node)) {
       node.input = false;
       node.output = false;
@@ -11306,6 +11998,24 @@ nodeInputInput.addEventListener("change", () => {
     if (wasInput && !node.input) {
       removeNodeFromInputWidgetBindings(node.name);
     }
+  });
+});
+
+nodeGlobalInput.addEventListener("change", () => {
+  if (ui.selectedNodes.size !== 1) {
+    return;
+  }
+  const nodeId = [...ui.selectedNodes][0];
+  const node = getNodeById(nodeId);
+  if (!node) {
+    return;
+  }
+  if (!canMarkNodeAsGlobal(node)) {
+    nodeGlobalInput.checked = false;
+    return;
+  }
+  runAction(() => {
+    node.global = nodeGlobalInput.checked;
   });
 });
 
@@ -11884,6 +12594,15 @@ if (modelAnalysisCloseBtn) {
 if (modelAnalysisDismissBtn) {
   modelAnalysisDismissBtn.addEventListener("click", closeModelAnalysis);
 }
+if (modelAnalysisChecksBtn) {
+  modelAnalysisChecksBtn.addEventListener("click", openModelAnalysisChecksHelp);
+}
+if (modelAnalysisChecksCloseBtn) {
+  modelAnalysisChecksCloseBtn.addEventListener("click", closeModelAnalysisChecksHelp);
+}
+if (modelAnalysisChecksDismissBtn) {
+  modelAnalysisChecksDismissBtn.addEventListener("click", closeModelAnalysisChecksHelp);
+}
 if (expressionEditorSwitchCloseBtn) {
   expressionEditorSwitchCloseBtn.addEventListener("click", closeExpressionEditorSwitchModal);
 }
@@ -11912,6 +12631,13 @@ if (aboutAppModal) {
   aboutAppModal.addEventListener("pointerdown", (evt) => {
     if (evt.target === aboutAppModal) {
       closeAboutApp();
+    }
+  });
+}
+if (modelAnalysisChecksModal) {
+  modelAnalysisChecksModal.addEventListener("pointerdown", (evt) => {
+    if (evt.target === modelAnalysisChecksModal) {
+      closeModelAnalysisChecksHelp();
     }
   });
 }
@@ -12056,6 +12782,13 @@ document.addEventListener("keydown", (evt) => {
     if (evt.key === "Escape") {
       evt.preventDefault();
       closeAboutApp();
+    }
+    return;
+  }
+  if (!modelAnalysisChecksModal?.classList.contains("hidden")) {
+    if (evt.key === "Escape") {
+      evt.preventDefault();
+      closeModelAnalysisChecksHelp();
     }
     return;
   }

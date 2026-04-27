@@ -89,6 +89,10 @@
               <input id="showGridInput" type="checkbox" checked />
               <span data-i18n="menu.view.showGrid"></span>
             </label>
+            <label class="menu-check" for="highlightNodeEdgesInput" data-title-i18n="tooltip.menu.view.highlightNodeEdges">
+              <input id="highlightNodeEdgesInput" type="checkbox" />
+              <span data-i18n="menu.view.highlightNodeEdges"></span>
+            </label>
             <label class="menu-field" for="gridSizeInput" data-i18n="menu.view.gridStep" data-title-i18n="tooltip.menu.view.gridStep"></label>
             <input id="gridSizeInput" type="number" min="5" max="100" step="1" value="20" data-title-i18n="tooltip.menu.view.gridStep" />
             <label class="menu-field" for="decimalDigitsInput" data-i18n="label.decimals" data-title-i18n="tooltip.model.decimals"></label>
@@ -236,6 +240,11 @@
                   <label class="menu-check" for="nodeOutputInput" data-title-i18n="tooltip.node.output">
                     <input id="nodeOutputInput" type="checkbox" />
                     <span data-i18n="label.output"></span>
+                  </label>
+
+                  <label class="menu-check" for="nodeGlobalInput" data-title-i18n="tooltip.node.global">
+                    <input id="nodeGlobalInput" type="checkbox" />
+                    <span data-i18n="label.global"></span>
                   </label>
                 </div>
               </div>
@@ -461,7 +470,21 @@
         <div id="modelAnalysisSummary" class="model-analysis-summary"></div>
         <div id="modelAnalysisContent" class="model-analysis-content"></div>
         <div class="modal-actions">
+          <button id="modelAnalysisChecksBtn" type="button" data-i18n="analysis.checks.button"></button>
           <button id="modelAnalysisDismissBtn" type="button" data-i18n="action.close"></button>
+        </div>
+      </div>
+    </div>
+    <div id="modelAnalysisChecksModal" class="modal-backdrop modal-modeless hidden">
+      <div class="modal-card model-analysis-checks-card" role="dialog" aria-modal="false" aria-labelledby="modelAnalysisChecksTitle">
+        <div class="modal-head">
+          <h3 id="modelAnalysisChecksTitle" data-i18n="analysis.checks.title"></h3>
+          <button id="modelAnalysisChecksCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
+        </div>
+        <div id="modelAnalysisChecksIntro" class="help-intro" data-i18n="analysis.checks.intro"></div>
+        <div id="modelAnalysisChecksContent" class="model-analysis-checks-content"></div>
+        <div class="modal-actions">
+          <button id="modelAnalysisChecksDismissBtn" type="button" data-i18n="action.close"></button>
         </div>
       </div>
     </div>

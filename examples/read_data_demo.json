@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "modelTitle": "Esempio readData",
+  "view": {
+    "zoom": 0.85,
+    "showGrid": true,
+    "gridSize": 20,
+    "scrollLeft": 0,
+    "scrollTop": 17
+  },
+  "modelProperties": [],
+  "nodeCounter": 9,
+  "edgeCounter": 7,
+  "widgetCounter": 8,
+  "textItemCounter": 4,
+  "execution": {
+    "t0": 0,
+    "dt": 1,
+    "t1": 5,
+    "delayMs": 100,
+    "decimals": 3,
+    "integrator": "euler",
+    "strictDefinitions": false
+  },
+  "nodes": [
+    {
+      "id": 1,
+      "name": "dati",
+      "output": true,
+      "type": "parameter",
+      "x": 240,
+      "y": 120,
+      "width": 140,
+      "height": 70,
+      "fillColor": "#dff6ec",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": "Matrice numerica letta dal file CSV"
+        }
+      ],
+      "valueExpression": "readData(\"data/read_data.csv\")"
+    },
+    {
+      "id": 8,
+      "name": "n",
+      "output": true,
+      "type": "algebraic",
+      "x": 240,
+      "y": 240,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "input": false,
+      "valueExpression": "dati[time]"
+    }
+  ],
+  "edges": [
+    {
+      "id": 6,
+      "from": 1,
+      "to": 8,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    }
+  ],
+  "textItems": [
+    {
+      "id": 1,
+      "x": 80,
+      "y": -20,
+      "width": 380,
+      "height": 80,
+      "fillColor": "",
+      "strokeColor": "",
+      "html": "<h1>Esempio di readData()</h1><p>Un parametro legge una matrice da un file CSV.</p>"
+    }
+  ],
+  "widgets": [
+    {
+      "id": 1,
+      "type": "matrix",
+      "customTitle": "Matrice letta da CSV",
+      "x": 540,
+      "y": -20,
+      "width": 300,
+      "height": 360,
+      "minimized": false,
+      "outputOnly": true,
+      "showHistory": false,
+      "xMin": "auto",
+      "xMax": "auto",
+      "yMin": "auto",
+      "yMax": "auto",
+      "showGrid": true,
+      "legendPosition": "top-right",
+      "source": "dati",
+      "showNumericValues": true,
+      "showIndices": false,
+      "autoFitCells": true,
+      "cellSize": 28,
+      "valueMin": 0,
+      "valueMax": 2,
+      "displayRows": null,
+      "displayCols": null,
+      "colorScheme": "heat",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "options": [],
+      "mappings": [],
+      "columns": [],
+      "xyPairs": []
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "customTitle": "dati letti nel tempo",
+      "x": 140,
+      "y": 280,
+      "width": 220,
+      "height": 240,
+      "minimized": false,
+      "outputOnly": false,
+      "showHistory": true,
+      "xMin": "auto",
+      "xMax": "auto",
+      "yMin": "auto",
+      "yMax": "auto",
+      "showGrid": true,
+      "legendPosition": "top-right",
+      "source": "",
+      "showNumericValues": true,
+      "showIndices": true,
+      "autoFitCells": true,
+      "cellSize": 28,
+      "valueMin": "auto",
+      "valueMax": "auto",
+      "displayRows": null,
+      "displayCols": null,
+      "colorScheme": "blue",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "options": [],
+      "mappings": [],
+      "columns": [
+        "n"
+      ],
+      "xyPairs": []
+    }
+  ]
+}

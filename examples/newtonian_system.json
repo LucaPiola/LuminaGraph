@@ -4,19 +4,20 @@
   "view": {
     "zoom": 0.65,
     "showGrid": true,
+    "highlightNodeEdges": true,
     "gridSize": 20,
-    "scrollLeft": 132,
-    "scrollTop": 106
+    "scrollLeft": 186,
+    "scrollTop": 124
   },
   "modelProperties": [],
-  "nodeCounter": 38,
-  "edgeCounter": 95,
-  "widgetCounter": 12,
-  "textItemCounter": 5,
+  "nodeCounter": 42,
+  "edgeCounter": 101,
+  "widgetCounter": 16,
+  "textItemCounter": 9,
   "execution": {
     "t0": 0,
     "dt": 0.005,
-    "t1": 80,
+    "t1": 25,
     "delayMs": 1,
     "decimals": 4,
     "integrator": "rk4",
@@ -27,12 +28,13 @@
       "id": 1,
       "name": "G",
       "output": false,
+      "global": true,
       "type": "parameter",
-      "x": 80,
-      "y": 80,
+      "x": 220,
+      "y": 200,
       "width": 120,
       "height": 70,
-      "fillColor": "",
+      "fillColor": "#dff6ec",
       "strokeColor": "",
       "properties": [
         {
@@ -50,12 +52,13 @@
       "id": 2,
       "name": "Ms",
       "output": false,
+      "global": true,
       "type": "parameter",
-      "x": 80,
-      "y": 170,
+      "x": 220,
+      "y": 290,
       "width": 120,
       "height": 70,
-      "fillColor": "",
+      "fillColor": "#dff6ec",
       "strokeColor": "",
       "properties": [
         {
@@ -73,12 +76,13 @@
       "id": 3,
       "name": "M1",
       "output": false,
+      "global": true,
       "type": "parameter",
-      "x": 80,
-      "y": 260,
+      "x": 220,
+      "y": 380,
       "width": 120,
       "height": 70,
-      "fillColor": "",
+      "fillColor": "#dff6ec",
       "strokeColor": "",
       "properties": [
         {
@@ -96,12 +100,13 @@
       "id": 4,
       "name": "M2",
       "output": false,
+      "global": true,
       "type": "parameter",
-      "x": 80,
-      "y": 350,
+      "x": 220,
+      "y": 470,
       "width": 120,
       "height": 70,
-      "fillColor": "",
+      "fillColor": "#dff6ec",
       "strokeColor": "",
       "properties": [
         {
@@ -119,12 +124,13 @@
       "id": 5,
       "name": "Mm",
       "output": false,
+      "global": true,
       "type": "parameter",
-      "x": 80,
-      "y": 440,
+      "x": 220,
+      "y": 560,
       "width": 120,
       "height": 70,
-      "fillColor": "",
+      "fillColor": "#dff6ec",
       "strokeColor": "",
       "properties": [
         {
@@ -142,12 +148,13 @@
       "id": 6,
       "name": "eps",
       "output": false,
+      "global": true,
       "type": "parameter",
-      "x": 80,
-      "y": 530,
+      "x": 220,
+      "y": 650,
       "width": 120,
       "height": 70,
-      "fillColor": "",
+      "fillColor": "#dff6ec",
       "strokeColor": "",
       "properties": [
         {
@@ -164,9 +171,10 @@
     {
       "id": 7,
       "name": "frameBody",
-      "output": true,
+      "output": false,
+      "global": false,
       "type": "algebraic",
-      "x": 260,
+      "x": 220,
       "y": 80,
       "width": 170,
       "height": 76,
@@ -189,6 +197,7 @@
       "id": 8,
       "name": "rs",
       "output": false,
+      "global": false,
       "type": "state",
       "x": 980,
       "y": 60,
@@ -213,6 +222,7 @@
       "id": 9,
       "name": "vs",
       "output": false,
+      "global": false,
       "type": "state",
       "x": 980,
       "y": 150,
@@ -237,6 +247,7 @@
       "id": 10,
       "name": "r1",
       "output": false,
+      "global": false,
       "type": "state",
       "x": 980,
       "y": 280,
@@ -261,6 +272,7 @@
       "id": 11,
       "name": "v1",
       "output": false,
+      "global": false,
       "type": "state",
       "x": 980,
       "y": 370,
@@ -285,6 +297,7 @@
       "id": 12,
       "name": "r2",
       "output": false,
+      "global": false,
       "type": "state",
       "x": 980,
       "y": 500,
@@ -309,6 +322,7 @@
       "id": 13,
       "name": "v2",
       "output": false,
+      "global": false,
       "type": "state",
       "x": 980,
       "y": 590,
@@ -333,6 +347,7 @@
       "id": 14,
       "name": "rm",
       "output": false,
+      "global": false,
       "type": "state",
       "x": 980,
       "y": 720,
@@ -357,6 +372,7 @@
       "id": 15,
       "name": "vm",
       "output": false,
+      "global": false,
       "type": "state",
       "x": 980,
       "y": 810,
@@ -381,6 +397,7 @@
       "id": 16,
       "name": "n1",
       "output": true,
+      "global": false,
       "type": "algebraic",
       "x": 420,
       "y": 110,
@@ -405,6 +422,7 @@
       "id": 17,
       "name": "n2",
       "output": true,
+      "global": false,
       "type": "algebraic",
       "x": 420,
       "y": 200,
@@ -429,6 +447,7 @@
       "id": 18,
       "name": "nm",
       "output": false,
+      "global": false,
       "type": "algebraic",
       "x": 420,
       "y": 290,
@@ -453,6 +472,7 @@
       "id": 19,
       "name": "n12",
       "output": false,
+      "global": false,
       "type": "algebraic",
       "x": 420,
       "y": 380,
@@ -477,6 +497,7 @@
       "id": 20,
       "name": "n1m",
       "output": false,
+      "global": false,
       "type": "algebraic",
       "x": 420,
       "y": 470,
@@ -501,6 +522,7 @@
       "id": 21,
       "name": "n2m",
       "output": true,
+      "global": false,
       "type": "algebraic",
       "x": 420,
       "y": 560,
@@ -525,6 +547,7 @@
       "id": 22,
       "name": "as",
       "output": false,
+      "global": false,
       "type": "algebraic",
       "x": 700,
       "y": 90,
@@ -549,6 +572,7 @@
       "id": 23,
       "name": "a1",
       "output": false,
+      "global": false,
       "type": "algebraic",
       "x": 700,
       "y": 300,
@@ -573,6 +597,7 @@
       "id": 24,
       "name": "a2",
       "output": false,
+      "global": false,
       "type": "algebraic",
       "x": 700,
       "y": 520,
@@ -597,6 +622,7 @@
       "id": 25,
       "name": "am",
       "output": false,
+      "global": false,
       "type": "algebraic",
       "x": 700,
       "y": 740,
@@ -621,6 +647,7 @@
       "id": 26,
       "name": "rRef",
       "output": false,
+      "global": false,
       "type": "algebraic",
       "x": 1220,
       "y": 70,
@@ -645,6 +672,7 @@
       "id": 27,
       "name": "xs",
       "output": true,
+      "global": false,
       "type": "algebraic",
       "x": 1220,
       "y": 150,
@@ -669,6 +697,7 @@
       "id": 28,
       "name": "ys",
       "output": true,
+      "global": false,
       "type": "algebraic",
       "x": 1220,
       "y": 220,
@@ -693,6 +722,7 @@
       "id": 29,
       "name": "x1",
       "output": true,
+      "global": false,
       "type": "algebraic",
       "x": 1220,
       "y": 320,
@@ -717,6 +747,7 @@
       "id": 30,
       "name": "y1",
       "output": true,
+      "global": false,
       "type": "algebraic",
       "x": 1220,
       "y": 390,
@@ -741,6 +772,7 @@
       "id": 31,
       "name": "x2",
       "output": true,
+      "global": false,
       "type": "algebraic",
       "x": 1220,
       "y": 510,
@@ -765,6 +797,7 @@
       "id": 32,
       "name": "y2",
       "output": true,
+      "global": false,
       "type": "algebraic",
       "x": 1220,
       "y": 580,
@@ -789,6 +822,7 @@
       "id": 33,
       "name": "xm",
       "output": true,
+      "global": false,
       "type": "algebraic",
       "x": 1220,
       "y": 700,
@@ -813,6 +847,7 @@
       "id": 34,
       "name": "ym",
       "output": true,
+      "global": false,
       "type": "algebraic",
       "x": 1220,
       "y": 770,
@@ -852,14 +887,6 @@
       "controlPoints": []
     },
     {
-      "id": 3,
-      "from": 6,
-      "to": 16,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
       "id": 4,
       "from": 8,
       "to": 17,
@@ -870,14 +897,6 @@
     {
       "id": 5,
       "from": 12,
-      "to": 17,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 6,
-      "from": 6,
       "to": 17,
       "sourcePort": "",
       "targetPort": "",
@@ -900,14 +919,6 @@
       "controlPoints": []
     },
     {
-      "id": 9,
-      "from": 6,
-      "to": 18,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
       "id": 10,
       "from": 10,
       "to": 19,
@@ -918,14 +929,6 @@
     {
       "id": 11,
       "from": 12,
-      "to": 19,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 12,
-      "from": 6,
       "to": 19,
       "sourcePort": "",
       "targetPort": "",
@@ -948,14 +951,6 @@
       "controlPoints": []
     },
     {
-      "id": 15,
-      "from": 6,
-      "to": 20,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
       "id": 16,
       "from": 12,
       "to": 21,
@@ -967,46 +962,6 @@
       "id": 17,
       "from": 14,
       "to": 21,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 18,
-      "from": 6,
-      "to": 21,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 19,
-      "from": 1,
-      "to": 22,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 20,
-      "from": 3,
-      "to": 22,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 21,
-      "from": 4,
-      "to": 22,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 22,
-      "from": 5,
-      "to": 22,
       "sourcePort": "",
       "targetPort": "",
       "controlPoints": []
@@ -1068,38 +1023,6 @@
       "controlPoints": []
     },
     {
-      "id": 30,
-      "from": 1,
-      "to": 23,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 31,
-      "from": 2,
-      "to": 23,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 32,
-      "from": 4,
-      "to": 23,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 33,
-      "from": 5,
-      "to": 23,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
       "id": 34,
       "from": 8,
       "to": 23,
@@ -1156,38 +1079,6 @@
       "controlPoints": []
     },
     {
-      "id": 41,
-      "from": 1,
-      "to": 24,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 42,
-      "from": 2,
-      "to": 24,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 43,
-      "from": 3,
-      "to": 24,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 44,
-      "from": 5,
-      "to": 24,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
       "id": 45,
       "from": 8,
       "to": 24,
@@ -1239,38 +1130,6 @@
       "id": 51,
       "from": 21,
       "to": 24,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 52,
-      "from": 1,
-      "to": 25,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 53,
-      "from": 2,
-      "to": 25,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 54,
-      "from": 3,
-      "to": 25,
-      "sourcePort": "",
-      "targetPort": "",
-      "controlPoints": []
-    },
-    {
-      "id": 55,
-      "from": 4,
-      "to": 25,
       "sourcePort": "",
       "targetPort": "",
       "controlPoints": []
@@ -1567,10 +1426,10 @@
   "textItems": [
     {
       "id": 1,
-      "x": 40,
-      "y": -100,
-      "width": 760,
-      "height": 82,
+      "x": 200,
+      "y": -80,
+      "width": 1160,
+      "height": 80,
       "fillColor": "#f7fbff",
       "strokeColor": "#2f6f9f",
       "html": "<h1>Sistema gravitazionale newtoniano</h1><p>Sole mobile, due pianeti e un satellite. Il grafico x-y puo essere visto in prospettiva eliocentrica, geocentrica o lunacentrica tramite il selettore del riferimento.</p>"
@@ -1770,7 +1629,6 @@
       "mappings": [],
       "columns": [
         "time",
-        "frameBody",
         "n1",
         "n2",
         "n2m"
@@ -1781,8 +1639,8 @@
       "id": 4,
       "type": "slider",
       "customTitle": "Massa del sole",
-      "x": -16.923076923076906,
-      "y": 763.0769230769231,
+      "x": 240,
+      "y": 840,
       "width": 320,
       "height": 110,
       "minimized": false,
@@ -1817,8 +1675,8 @@
       "id": 5,
       "type": "slider",
       "customTitle": "Massa del pianeta interno",
-      "x": 312.3076923076923,
-      "y": 764.6153846153846,
+      "x": 580,
+      "y": 840,
       "width": 320,
       "height": 110,
       "minimized": false,
@@ -1853,8 +1711,8 @@
       "id": 6,
       "type": "slider",
       "customTitle": "Massa del pianeta esterno",
-      "x": -18.46153846153841,
-      "y": 878.4615384615385,
+      "x": 240,
+      "y": 960,
       "width": 320,
       "height": 110,
       "minimized": false,
@@ -1889,8 +1747,8 @@
       "id": 7,
       "type": "slider",
       "customTitle": "Massa del satellite",
-      "x": 313.8461538461539,
-      "y": 884.6153846153846,
+      "x": 580,
+      "y": 960,
       "width": 320,
       "height": 110,
       "minimized": false,
@@ -1925,10 +1783,10 @@
       "id": 8,
       "type": "select",
       "customTitle": "Sistema di riferimento del grafico x-y",
-      "x": 683.0769230769231,
-      "y": 890.7692307692307,
-      "width": 360,
-      "height": 112,
+      "x": 940,
+      "y": 960,
+      "width": 300,
+      "height": 110,
       "minimized": false,
       "outputOnly": false,
       "showHistory": false,
@@ -1951,7 +1809,7 @@
       "min": 0,
       "max": 3,
       "step": 1,
-      "value": 2,
+      "value": 0,
       "options": [
         {
           "label": "Sole",
@@ -1971,59 +1829,6 @@
         }
       ],
       "mappings": [],
-      "columns": [],
-      "xyPairs": []
-    },
-    {
-      "id": 9,
-      "type": "text",
-      "customTitle": "Riferimento attuale",
-      "x": 1058.4615384615386,
-      "y": 890.7692307692307,
-      "width": 240,
-      "height": 112,
-      "minimized": false,
-      "outputOnly": true,
-      "showHistory": false,
-      "xMin": "auto",
-      "xMax": "auto",
-      "yMin": "auto",
-      "yMax": "auto",
-      "showGrid": true,
-      "legendPosition": "top-right",
-      "source": "frameBody",
-      "showNumericValues": true,
-      "showIndices": true,
-      "autoFitCells": true,
-      "cellSize": 28,
-      "valueMin": "auto",
-      "valueMax": "auto",
-      "displayRows": null,
-      "displayCols": null,
-      "colorScheme": "blue",
-      "min": 0,
-      "max": 100,
-      "step": 1,
-      "value": 0,
-      "options": [],
-      "mappings": [
-        {
-          "value": 0,
-          "label": "Sole"
-        },
-        {
-          "value": 1,
-          "label": "Pianeta interno"
-        },
-        {
-          "value": 2,
-          "label": "Pianeta esterno"
-        },
-        {
-          "value": 3,
-          "label": "Satellite"
-        }
-      ],
       "columns": [],
       "xyPairs": []
     }

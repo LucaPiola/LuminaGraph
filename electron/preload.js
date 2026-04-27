@@ -55,8 +55,30 @@ function createDirectoryHandle(directoryPath) {
     name: path.basename(directoryPath),
     path: directoryPath,
     async getFileHandle(name) {
-      const baseName = path.basename(String(name || ''));
-      const filePath = path.join(directoryPath, baseName);
+      const relativePath = String(name || '').replace(/\\/g, '/');
+      const normalizedPath = path.normalize(relativePath);
+      if (
+        !normalizedPath ||
+        normalizedPath === '.' ||
+        path.isAbsolute(normalizedPath) ||
+        normalizedPath.split(path.sep).includes('..')
+      ) {
+        const err = new Error(`Invalid relative path: ${relativePath}`);
+        err.name = 'NotFoundError';
+        throw err;
+      }
+      const filePath = path.resolve(directoryPath, normalizedPath);
+      const relativeFromDirectory = path.relative(directoryPath, filePath);
+      if (
+        !relativeFromDirectory ||
+        relativeFromDirectory === '' ||
+        relativeFromDirectory.startsWith('..') ||
+        path.isAbsolute(relativeFromDirectory)
+      ) {
+        const err = new Error(`Invalid relative path: ${relativePath}`);
+        err.name = 'NotFoundError';
+        throw err;
+      }
       await fs.access(filePath);
       return createFileHandle(filePath);
     },

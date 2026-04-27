@@ -150,8 +150,16 @@
     return typeof value === "number" && Number.isFinite(value);
   }
 
+  function isComputedScalar(value) {
+    return isFiniteNumber(value) || typeof value === "string";
+  }
+
   function isNumericVector(value) {
     return Array.isArray(value) && value.every((item) => isFiniteNumber(item));
+  }
+
+  function isComputedVector(value) {
+    return Array.isArray(value) && value.every((item) => isComputedScalar(item));
   }
 
   function isNumericMatrix(value) {
@@ -159,6 +167,17 @@
       return false;
     }
     if (!value.every((row) => Array.isArray(row) && row.every((item) => isFiniteNumber(item)))) {
+      return false;
+    }
+    const columns = value[0].length;
+    return value.every((row) => row.length === columns);
+  }
+
+  function isComputedMatrix(value) {
+    if (!Array.isArray(value) || value.length === 0) {
+      return false;
+    }
+    if (!value.every((row) => Array.isArray(row) && row.every((item) => isComputedScalar(item)))) {
       return false;
     }
     const columns = value[0].length;
@@ -195,23 +214,102 @@
     return value.every((item) => isNumericNestedArray(item));
   }
 
+  function isComputedTensor(value) {
+    if (isComputedScalar(value)) {
+      return true;
+    }
+    if (!Array.isArray(value)) {
+      return false;
+    }
+    if (value.length === 0) {
+      return true;
+    }
+    if (!value.every((item) => isComputedTensor(item))) {
+      return false;
+    }
+    const first = value[0];
+    if (!Array.isArray(first)) {
+      return value.every((item) => !Array.isArray(item) && isComputedScalar(item));
+    }
+    return value.every((item) => Array.isArray(item) && sameArrayShape(first, item));
+  }
+
   function validateComputedValue(value) {
     if (isFiniteNumber(value)) {
       return { ok: true, kind: "number", value };
     }
+    if (typeof value === "string") {
+      return { ok: true, kind: "text", value };
+    }
     if (isNumericVector(value)) {
+      return { ok: true, kind: "vector", value: value.slice() };
+    }
+    if (isComputedVector(value)) {
       return { ok: true, kind: "vector", value: value.slice() };
     }
     if (isNumericMatrix(value)) {
       return { ok: true, kind: "matrix", value: value.map((row) => row.slice()) };
     }
+    if (isComputedMatrix(value)) {
+      return { ok: true, kind: "matrix", value: value.map((row) => row.slice()) };
+    }
     if (isNumericTensor(value)) {
+      return { ok: true, kind: "array", value: JSON.parse(JSON.stringify(value)) };
+    }
+    if (isComputedTensor(value)) {
       return { ok: true, kind: "array", value: JSON.parse(JSON.stringify(value)) };
     }
     if (isNumericNestedArray(value)) {
       return { ok: true, kind: "array", value: JSON.parse(JSON.stringify(value)) };
     }
     return { ok: false, reason: "type" };
+  }
+
+  function collectIdentifierReferences(expression) {
+    const src = String(expression ?? "");
+    const refs = new Set();
+    const skipped = new Set(["true", "false", "null", "this", "self", "__self", "$i", "$j", "$value", "time", "t0", "t1", "dt"]);
+    let i = 0;
+    let mode = "code";
+    while (i < src.length) {
+      const ch = src[i];
+      if (mode === "code") {
+        if (ch === "'" || ch === "\"" || ch === "`") {
+          mode = ch;
+          i += 1;
+          continue;
+        }
+        if (/[A-Za-z_$]/u.test(ch)) {
+          let j = i + 1;
+          while (j < src.length && /[A-Za-z0-9_$]/u.test(src[j])) {
+            j += 1;
+          }
+          const token = src.slice(i, j);
+          const prev = i > 0 ? src[i - 1] : "";
+          let k = j;
+          while (k < src.length && /\s/u.test(src[k])) {
+            k += 1;
+          }
+          const isFunctionCall = src[k] === "(";
+          if (prev !== "." && !isFunctionCall && !skipped.has(token) && !/^\$[0-9]+$/u.test(token)) {
+            refs.add(token);
+          }
+          i = j;
+          continue;
+        }
+        i += 1;
+        continue;
+      }
+      if (ch === "\\") {
+        i += 2;
+        continue;
+      }
+      if (ch === mode) {
+        mode = "code";
+      }
+      i += 1;
+    }
+    return refs;
   }
 
   function eulerIntegrateValue(currentValue, deltaValue, dtValue) {
@@ -1862,6 +1960,9 @@
     if (typeof value === "number") {
       return String(value);
     }
+    if (typeof value === "string") {
+      return value;
+    }
     return JSON.stringify(value);
   }
 
@@ -1938,6 +2039,14 @@
 
     const pending = new Set(nodes.map((node) => node.id));
     const results = new Map();
+    const globalParameterNodes = nodes.filter((node) => isGlobalParameterNode(node));
+    const globalReferences = new Map(
+      nodes.map((node) => [
+        node.id,
+        globalParameterNodes.filter((globalNode) =>
+          globalNode.id !== node.id && collectIdentifierReferences(node.valueExpression).has(globalNode.name)),
+      ]),
+    );
     let progressed = true;
 
     while (pending.size > 0 && progressed) {
@@ -1952,6 +2061,20 @@
         const predecessorIds = incoming.get(nodeId) || [];
         const context = { ...globals, ...ensureNodePropertyAccess(node) };
         let dependenciesReady = true;
+        (globalReferences.get(node.id) || []).forEach((globalNode) => {
+          if (!dependenciesReady || globalNode.id === node.id) {
+            return;
+          }
+          const depResult = results.get(globalNode.id);
+          if (!depResult || !depResult.ok) {
+            dependenciesReady = false;
+            return;
+          }
+          context[globalNode.name] = depResult.value;
+        });
+        if (!dependenciesReady) {
+          continue;
+        }
         predecessorIds.forEach((fromId) => {
           const fromNode = nodeById.get(fromId);
           if (!fromNode) {
@@ -1994,6 +2117,10 @@
     return String(node?.shape || "") === "diamond";
   }
 
+  function isGlobalParameterNode(node) {
+    return isParameterNode(node) && Boolean(node?.global);
+  }
+
   function hasExternalValue(node) {
     return Boolean(node?.externalValueEnabled);
   }
@@ -2011,6 +2138,7 @@
       nodeById,
       incoming,
       stateNodes: nodes.filter((node) => isStateNode(node)),
+      globalParameterNodes: nodes.filter((node) => isGlobalParameterNode(node)),
     };
   }
 
@@ -2023,6 +2151,16 @@
     const customNodeEvaluator = typeof options?.customNodeEvaluator === "function"
       ? options.customNodeEvaluator
       : null;
+    const globalParameterNodes = Array.isArray(runtimePlan.globalParameterNodes)
+      ? runtimePlan.globalParameterNodes
+      : [];
+    const globalValueRefs = new Map(
+      nodes.map((node) => [
+        node.id,
+        globalParameterNodes.filter((globalNode) =>
+          globalNode.id !== node.id && collectIdentifierReferences(node.valueExpression).has(globalNode.name)),
+      ]),
+    );
     const resolvedStateValue = (node) => {
       if (stateValueOverrides && stateValueOverrides.has(node.id)) {
         return stateValueOverrides.get(node.id);
@@ -2041,17 +2179,78 @@
       fixedResults.set(node.id, { ok: true, value: node.externalValue });
     });
 
-    parameterNodes.forEach((node) => {
-      if (node.computedError) {
-        parameterResults.set(node.id, { ok: false, reason: node.computedError });
-        return;
+    const getGlobalParameterResult = (globalNode) => {
+      if (!globalNode) {
+        return null;
       }
-      if (node.computedValue !== null && node.computedValue !== undefined) {
-        parameterResults.set(node.id, { ok: true, value: node.computedValue });
-        return;
+      if (hasExternalValue(globalNode)) {
+        return fixedResults.get(globalNode.id) || null;
       }
-      parameterResults.set(node.id, evaluateValueExpression(node.valueExpression, { ...globals }));
+      return parameterResults.get(globalNode.id) || null;
+    };
+
+    const pendingParameters = new Set(parameterNodes.map((node) => node.id));
+    let parameterProgressed = true;
+    while (pendingParameters.size > 0 && parameterProgressed) {
+      parameterProgressed = false;
+      for (const nodeId of Array.from(pendingParameters)) {
+        const node = nodeById.get(nodeId);
+        if (!node) {
+          pendingParameters.delete(nodeId);
+          continue;
+        }
+        if (node.computedError) {
+          parameterResults.set(node.id, { ok: false, reason: node.computedError });
+          pendingParameters.delete(nodeId);
+          parameterProgressed = true;
+          continue;
+        }
+        if (node.computedValue !== null && node.computedValue !== undefined) {
+          parameterResults.set(node.id, { ok: true, value: node.computedValue });
+          pendingParameters.delete(nodeId);
+          parameterProgressed = true;
+          continue;
+        }
+        const context = { ...globals };
+        let dependenciesReady = true;
+        (globalValueRefs.get(node.id) || []).forEach((globalNode) => {
+          if (!dependenciesReady || globalNode.id === node.id) {
+            return;
+          }
+          const depResult = getGlobalParameterResult(globalNode);
+          if (!depResult || !depResult.ok) {
+            dependenciesReady = false;
+            return;
+          }
+          context[globalNode.name] = depResult.value;
+        });
+        if (!dependenciesReady) {
+          continue;
+        }
+        parameterResults.set(node.id, evaluateValueExpression(node.valueExpression, context));
+        pendingParameters.delete(nodeId);
+        parameterProgressed = true;
+      }
+    }
+    pendingParameters.forEach((nodeId) => {
+      parameterResults.set(nodeId, { ok: false, reason: "dependency" });
     });
+
+    const addGlobalParameterResultsToContext = (context, targetNodeId, referencedGlobals = globalParameterNodes) => {
+      let ready = true;
+      referencedGlobals.forEach((globalNode) => {
+        if (!ready || globalNode.id === targetNodeId) {
+          return;
+        }
+        const depResult = getGlobalParameterResult(globalNode);
+        if (!depResult || !depResult.ok) {
+          ready = false;
+          return;
+        }
+        context[globalNode.name] = depResult.value;
+      });
+      return ready;
+    };
 
     const pending = new Set(algebraicNodes.map((node) => node.id));
     let progressed = true;
@@ -2065,7 +2264,10 @@
         }
         const context = { ...globals, ...ensureNodePropertyAccess(node) };
         const predecessors = incoming.get(nodeId) || [];
-        let dependenciesReady = true;
+        let dependenciesReady = addGlobalParameterResultsToContext(context, node.id, globalParameterNodes);
+        if (!dependenciesReady) {
+          continue;
+        }
 
         predecessors.forEach((fromId) => {
           if (!dependenciesReady) {
@@ -2132,7 +2334,11 @@
         integral: createStateIntegral(node, globals),
       };
       const predecessors = incoming.get(node.id) || [];
-      let dependenciesReady = true;
+      let dependenciesReady = addGlobalParameterResultsToContext(context, node.id, globalParameterNodes);
+      if (!dependenciesReady) {
+        stateTransitionResults.set(node.id, { ok: false, reason: "dependency" });
+        return;
+      }
 
       predecessors.forEach((fromId) => {
         if (!dependenciesReady) {
