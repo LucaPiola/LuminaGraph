@@ -1728,7 +1728,7 @@ function refreshSliderWidgetRuntimeBody(root, widget) {
   const minLabel = root.querySelector(".slider-bound-min");
   const maxLabel = root.querySelector(".slider-bound-max");
   const sourceNode = getNodeByName(widget.source);
-  const lockedForRun = sourceNode?.shape === "diamond" && graph.execution.currentTime != null;
+  const lockedForRun = sourceNode?.shape === "diamond" && isEditingUiLocked();
   if (sourceLine) {
     sourceLine.textContent = widget.source || t("text.unnamed");
   }
@@ -1764,7 +1764,7 @@ function refreshButtonWidgetRuntimeBody(root, widget) {
     return;
   }
   const sourceNode = getNodeByName(widget.source);
-  const lockedForRun = sourceNode?.shape === "diamond" && graph.execution.currentTime != null;
+  const lockedForRun = sourceNode?.shape === "diamond" && isEditingUiLocked();
   sourceLine.textContent = widget.source || t("text.unnamed");
   toggleBtn.disabled = lockedForRun;
   toggleBtn.classList.toggle("is-on", Boolean(widget.value));
@@ -1782,7 +1782,7 @@ function refreshSelectWidgetRuntimeBody(root, widget) {
     return;
   }
   const sourceNode = getNodeByName(widget.source);
-  const lockedForRun = sourceNode?.shape === "diamond" && graph.execution.currentTime != null;
+  const lockedForRun = sourceNode?.shape === "diamond" && isEditingUiLocked();
   sourceLine.textContent = widget.source || t("text.unnamed");
   const optionsKey = JSON.stringify(widget.options);
   if (selectInput.dataset.options !== optionsKey) {
@@ -2078,7 +2078,7 @@ function renderWidgets() {
       sourceLine.className = "slider-widget-source";
       sourceLine.textContent = widget.source || t("text.unnamed");
       const sourceNode = getNodeByName(widget.source);
-      const lockedForRun = sourceNode?.shape === "diamond" && graph.execution.currentTime != null;
+      const lockedForRun = sourceNode?.shape === "diamond" && isEditingUiLocked();
 
       const slider = document.createElement("input");
       slider.type = "range";
@@ -2196,7 +2196,7 @@ function renderWidgets() {
       sourceLine.className = "select-widget-source";
       sourceLine.textContent = widget.source || t("text.unnamed");
       const sourceNode = getNodeByName(widget.source);
-      const lockedForRun = sourceNode?.shape === "diamond" && graph.execution.currentTime != null;
+      const lockedForRun = sourceNode?.shape === "diamond" && isEditingUiLocked();
 
       const selectInput = document.createElement("select");
       selectInput.className = "select-widget-input";
@@ -2241,7 +2241,7 @@ function renderWidgets() {
       sourceLine.className = "button-widget-source";
       sourceLine.textContent = widget.source || t("text.unnamed");
       const sourceNode = getNodeByName(widget.source);
-      const lockedForRun = sourceNode?.shape === "diamond" && graph.execution.currentTime != null;
+      const lockedForRun = sourceNode?.shape === "diamond" && isEditingUiLocked();
 
       const toggleBtn = document.createElement("button");
       toggleBtn.type = "button";
@@ -4068,6 +4068,7 @@ globalThis.Widgets = {
   addMatrixWidget,
   addSliderWidget,
   addXYChartWidget,
+  getNodeByName,
   getModelNodeById,
   buildNodeNameMap,
   defaultChartSeriesColor,

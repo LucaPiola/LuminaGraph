@@ -1,6 +1,6 @@
 # STGraphX: readme
 
-_Luca Mari, versione 27 aprile 2026_
+Luca Mari, versione 10 maggio 2026
 
 ## Contesto
 
@@ -10,7 +10,7 @@ STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
 
 (si può provare <a href="https://lmari.github.io/STGraphX" target="_blank" rel="noopener noreferrer">qui</a>)
 
-Ho guardato ma mai toccato il codice generato, che al momento è di circa 500 linee HTML, 2000 linee CSS, e di oltre 15000 linee JS.
+Ho guardato ma mai toccato il codice generato, che al momento è di circa 600 linee HTML (index.html), 3k linee CSS (styles.css), 22k linee JS (codice: app.js (14k), graph-functions.js (1k), semantic.js (2k), widgets.js (4k); testi it, en: i18n-inline.js (1k)).
 
 ## Stato del progetto
 
@@ -35,6 +35,8 @@ __Al momento implementati (senza librerie esterne):__
 * generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione/slicing di vettori e matrici con la sintassi di NumPy, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari;
 * funzioni "special form" per operare su vettori e matrici: `array`, `reduce`, `map`, `filter`;
 * una funzione per leggere il contenuto di file dati in formato csv;
+* una voce di menu per esportare la serie storica dei valori delle variabili di output in un file csv;
+* possibilità di definire funzioni locali ai modelli;
 * gestione di proprietà custom per il modello e i singoli nodi e funzioni `getModelProperty`/`getProperty` e `setModelProperty`/`setProperty`;
 * gestione di nodi di output e di widget di output: grafici, tabelle, matrici, led, testo; pannello di configurazione aggiornato dinamicamente;
 * gestione di nodi di input e di widget di input, anche per parametri: slider, pulsante, selettore di testo; pannello di configurazione aggiornato dinamicamente;
@@ -48,17 +50,17 @@ __Al momento implementati (senza librerie esterne):__
 * menu di help;
 * nel menu File, gestione dei modelli aperti di recente;
 * una prima gestione di controllo di correttezza del modello;
+* un primo debugger, con gestione di watch e breakpoint
 * ...
 
 __Al momento non implementati (rispetto a STGraph):__
 
-* altri widget e altre opzioni per i widget già presenti, in particolare per la visualizzazione di valori non scalari;
+* altri widget e altre opzioni per i widget già presenti;
 * varie funzioni;
 * nodi di stato con output;
 * gestione di interrupt;
 * playmode e altre modalità di esecuzione;
 * interfaccia a tab per più modelli;
-* strumenti di monitoraggio e debugging;
 * una pagina di esempi;
 * ...
 

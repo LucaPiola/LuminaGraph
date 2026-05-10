@@ -35,6 +35,7 @@ const runStepBtn = document.getElementById("runStepBtn");
 const runTimedToggleBtn = document.getElementById("runTimedToggleBtn");
 const runResetBtn = document.getElementById("runResetBtn");
 const analyzeModelBtn = document.getElementById("analyzeModelBtn");
+const watchDebuggerBtn = document.getElementById("watchDebuggerBtn");
 const topRunEvalBtn = document.getElementById("topRunEvalBtn");
 const topRunStepBtn = document.getElementById("topRunStepBtn");
 const topRunTimedBtn = document.getElementById("topRunTimedBtn");
@@ -51,6 +52,7 @@ const deleteBtnLabel = deleteBtn?.querySelector("[data-i18n='menu.edit.delete']"
 const newGraphBtn = document.getElementById("newGraphBtn");
 const saveJsonBtn = document.getElementById("saveJsonBtn");
 const saveAsJsonBtn = document.getElementById("saveAsJsonBtn");
+const exportCsvBtn = document.getElementById("exportCsvBtn");
 const loadJsonBtn = document.getElementById("loadJsonBtn");
 const recentModelsMenuRoot = document.getElementById("recentModelsMenuRoot");
 const recentModelsSep = document.getElementById("recentModelsSep");
@@ -79,6 +81,7 @@ const strictDefinitionsInput = document.getElementById("strictDefinitionsInput")
 const timeCurrentOutput = document.getElementById("timeCurrentOutput");
 const modelPropsList = document.getElementById("modelPropsList");
 const addModelPropBtn = document.getElementById("addModelPropBtn");
+const editLocalFunctionsBtn = document.getElementById("editLocalFunctionsBtn");
 const zoomRangeInput = document.getElementById("zoomRangeInput");
 const zoomRangeValue = document.getElementById("zoomRangeValue");
 const runFullModelBtn = document.getElementById("runFullModelBtn");
@@ -181,6 +184,8 @@ const functionsHelpContent = document.getElementById("functionsHelpContent");
 const aboutAppModal = document.getElementById("aboutAppModal");
 const aboutAppCloseBtn = document.getElementById("aboutAppCloseBtn");
 const aboutAppDismissBtn = document.getElementById("aboutAppDismissBtn");
+const aboutAppVersionValue = document.getElementById("aboutAppVersionValue");
+const aboutAppAuthorValue = document.getElementById("aboutAppAuthorValue");
 const modelAnalysisModal = document.getElementById("modelAnalysisModal");
 const modelAnalysisCloseBtn = document.getElementById("modelAnalysisCloseBtn");
 const modelAnalysisDismissBtn = document.getElementById("modelAnalysisDismissBtn");
@@ -191,6 +196,22 @@ const modelAnalysisChecksModal = document.getElementById("modelAnalysisChecksMod
 const modelAnalysisChecksCloseBtn = document.getElementById("modelAnalysisChecksCloseBtn");
 const modelAnalysisChecksDismissBtn = document.getElementById("modelAnalysisChecksDismissBtn");
 const modelAnalysisChecksContent = document.getElementById("modelAnalysisChecksContent");
+const watchDebuggerModal = document.getElementById("watchDebuggerModal");
+const watchDebuggerCloseBtn = document.getElementById("watchDebuggerCloseBtn");
+const watchDebuggerDismissBtn = document.getElementById("watchDebuggerDismissBtn");
+const watchDebuggerSummary = document.getElementById("watchDebuggerSummary");
+const watchAddSelectedBtn = document.getElementById("watchAddSelectedBtn");
+const watchBreakpointEnabledInput = document.getElementById("watchBreakpointEnabledInput");
+const watchBreakpointInput = document.getElementById("watchBreakpointInput");
+const watchBreakpointStatus = document.getElementById("watchBreakpointStatus");
+const watchDebuggerList = document.getElementById("watchDebuggerList");
+const localFunctionsModal = document.getElementById("localFunctionsModal");
+const localFunctionsCloseBtn = document.getElementById("localFunctionsCloseBtn");
+const localFunctionsCancelBtn = document.getElementById("localFunctionsCancelBtn");
+const localFunctionsApplyBtn = document.getElementById("localFunctionsApplyBtn");
+const localFunctionsAddBtn = document.getElementById("localFunctionsAddBtn");
+const localFunctionsList = document.getElementById("localFunctionsList");
+const localFunctionsStatus = document.getElementById("localFunctionsStatus");
 const expressionEditorSwitchModal = document.getElementById("expressionEditorSwitchModal");
 const expressionEditorSwitchCloseBtn = document.getElementById("expressionEditorSwitchCloseBtn");
 const expressionEditorSwitchCancelBtn = document.getElementById("expressionEditorSwitchCancelBtn");
@@ -208,6 +229,7 @@ const {
   addMatrixWidget,
   addTableWidget,
   addXYChartWidget,
+  getNodeByName,
   getModelNodeById,
   buildNodeNameMap,
   defaultChartSeriesColor,
@@ -457,16 +479,230 @@ function formulaNotesPropertyKey() {
 function formulaNotesPropertyKeys() {
   return new Set(["note formula", "formula notes"]);
 }
+
+function ensureDebugConfig(model = graph) {
+  if (!model.debug || typeof model.debug !== "object") {
+    model.debug = {};
+  }
+  if (!Array.isArray(model.debug.watches)) {
+    model.debug.watches = [];
+  }
+  model.debug.breakpointEnabled = Boolean(model.debug.breakpointEnabled);
+  model.debug.breakpointExpression = String(model.debug.breakpointExpression ?? "");
+  return model.debug;
+}
+
+function sanitizeDebugConfig(model = graph) {
+  const debug = ensureDebugConfig(model);
+  const validNames = new Set((model?.nodes || []).map((node) => String(node?.name ?? "").trim()).filter(Boolean));
+  debug.watches = [...new Set(
+    debug.watches
+      .map((name) => String(name ?? "").trim())
+      .filter((name) => validNames.has(name)),
+  )];
+  debug.breakpointEnabled = Boolean(debug.breakpointEnabled);
+  debug.breakpointExpression = String(debug.breakpointExpression ?? "");
+  return debug;
+}
+
+function ensureLocalFunctions(model = graph) {
+  if (!Array.isArray(model.localFunctions)) {
+    model.localFunctions = [];
+  }
+  return model.localFunctions;
+}
+
+function sanitizeLocalFunctionName(name) {
+  return String(name ?? "").trim();
+}
+
+function sanitizeLocalFunctionParams(params) {
+  if (Array.isArray(params)) {
+    return params.map((param) => sanitizeLocalFunctionName(param)).filter(Boolean);
+  }
+  return String(params ?? "")
+    .split(",")
+    .map((param) => sanitizeLocalFunctionName(param))
+    .filter(Boolean);
+}
+
+function sanitizeLocalFunctionDefinition(definition = {}) {
+  return {
+    name: sanitizeLocalFunctionName(definition.name),
+    params: sanitizeLocalFunctionParams(definition.params),
+    expression: String(definition.expression ?? "").trim(),
+    description: String(definition.description ?? "").trim(),
+  };
+}
+
+function sanitizeLocalFunctions(model = graph) {
+  const definitions = ensureLocalFunctions(model)
+    .map((definition) => sanitizeLocalFunctionDefinition(definition))
+    .filter((definition) => definition.name);
+  model.localFunctions = definitions;
+  return definitions;
+}
+
+function localFunctionMapForModel(model = graph) {
+  return semantics.normalizeLocalFunctionDefinitions(sanitizeLocalFunctions(model));
+}
+
+function localFunctionNamesForModel(model = graph) {
+  return Array.from(localFunctionMapForModel(model).keys());
+}
+
+function localFunctionSignature(definition) {
+  const sanitized = sanitizeLocalFunctionDefinition(definition);
+  return `${sanitized.name}(${sanitized.params.join(", ")})`;
+}
+
+function localFunctionCallNames(expression, availableNames) {
+  const names = new Set();
+  const source = String(expression ?? "");
+  const pattern = /\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
+  let match = null;
+  while ((match = pattern.exec(source))) {
+    const name = String(match[1] ?? "").trim();
+    if (name && availableNames.has(name)) {
+      names.add(name);
+    }
+  }
+  return names;
+}
+
+function validateLocalFunctions(definitions, options = {}) {
+  const sanitized = definitions.map((definition) => sanitizeLocalFunctionDefinition(definition));
+  const nodeNameSet = new Set((options.model?.nodes || graph.nodes || []).map((node) => String(node?.name ?? "").trim()).filter(Boolean));
+  const nameSet = new Set();
+  const order = [];
+  for (const definition of sanitized) {
+    if (!definition.name) {
+      return { ok: false, message: t("localFunctions.error.nameRequired") };
+    }
+    if (!semantics.isValidVariableName(definition.name)) {
+      return { ok: false, message: t("localFunctions.error.invalidName", { name: definition.name }) };
+    }
+    if (semantics.isReservedWord(definition.name) || semantics.isFunctionName(definition.name)) {
+      return { ok: false, message: t("localFunctions.error.reservedName", { name: definition.name }) };
+    }
+    if (nameSet.has(definition.name)) {
+      return { ok: false, message: t("localFunctions.error.duplicateName", { name: definition.name }) };
+    }
+    if (nodeNameSet.has(definition.name)) {
+      return { ok: false, message: t("localFunctions.error.conflictNode", { name: definition.name }) };
+    }
+    nameSet.add(definition.name);
+    order.push(definition.name);
+    const paramSet = new Set();
+    for (const paramName of definition.params) {
+      if (!semantics.isValidVariableName(paramName) || semantics.isReservedWord(paramName) || semantics.isFunctionName(paramName)) {
+        return { ok: false, message: t("localFunctions.error.invalidParam", { name: paramName, fn: definition.name }) };
+      }
+      if (paramSet.has(paramName)) {
+        return { ok: false, message: t("localFunctions.error.duplicateParam", { name: paramName, fn: definition.name }) };
+      }
+      paramSet.add(paramName);
+    }
+    if (!definition.expression) {
+      return { ok: false, message: t("localFunctions.error.expressionRequired", { fn: definition.name }) };
+    }
+  }
+
+  const dependencies = new Map();
+  sanitized.forEach((definition) => {
+    const validation = semantics.validateExpressionSyntax(definition.expression, definition.params, {
+      allowThisAlias: false,
+      allowIntegral: false,
+      localFunctions: sanitized,
+    });
+    if (!validation.ok) {
+      return dependencies.set(definition.name, {
+        error: t("localFunctions.error.invalidExpression", {
+          fn: definition.name,
+          reason: localizeExpressionErrorMessage(validation.message || ""),
+        }),
+      });
+    }
+    dependencies.set(definition.name, {
+      calls: localFunctionCallNames(definition.expression, nameSet),
+    });
+  });
+  for (const entry of dependencies.values()) {
+    if (entry?.error) {
+      return { ok: false, message: entry.error };
+    }
+  }
+
+  const visiting = new Set();
+  const visited = new Set();
+  const visit = (name, stack = []) => {
+    if (visiting.has(name)) {
+      return stack.concat(name);
+    }
+    if (visited.has(name)) {
+      return null;
+    }
+    visiting.add(name);
+    const calls = dependencies.get(name)?.calls || new Set();
+    for (const calledName of calls) {
+      const cycle = visit(calledName, [...stack, name]);
+      if (cycle) {
+        return cycle;
+      }
+    }
+    visiting.delete(name);
+    visited.add(name);
+    return null;
+  };
+  for (const name of order) {
+    const cycle = visit(name, []);
+    if (cycle) {
+      return { ok: false, message: t("localFunctions.error.cycle", { chain: cycle.join(" -> ") }) };
+    }
+  }
+
+  if (options.requireAtLeastOne && sanitized.length === 0) {
+    return { ok: false, message: t("localFunctions.error.empty") };
+  }
+  return { ok: true, definitions: sanitized };
+}
+
+function localFunctionsForSemantics(model = graph) {
+  return sanitizeLocalFunctions(model);
+}
+
+function commitDebugConfigChange(mutator) {
+  const beforeState = exportGraphData();
+  mutator();
+  sanitizeDebugConfig(graph);
+  const afterState = exportGraphData();
+  if (JSON.stringify(beforeState) !== JSON.stringify(afterState)) {
+    pushUndoState(beforeState);
+    history.redo = [];
+    dirtySinceLastSave = true;
+    updateFileStatusLabel(true);
+    updateHistoryButtons();
+  }
+  render();
+}
+
 let dirtySinceLastSave = false;
 let fileStatusRefreshTimer = null;
 
 const graph = {
   modelTitle: "",
   properties: [],
+  localFunctions: [],
   nodes: [],
   edges: [],
   textItems: [],
   widgets: [],
+  debug: {
+    watches: [],
+    breakpointEnabled: false,
+    breakpointExpression: "",
+  },
+  __simulationHistory: [],
   __directoryPath: "",
   __readDataCache: Object.create(null),
   execution: {
@@ -525,6 +761,9 @@ const ui = {
   expressionEditorPendingSelectionAction: null,
   expressionPreviewInitCache: null,
   analysisFocus: null,
+  watchPreviousSnapshot: new Map(),
+  breakpointLastResult: null,
+  localFunctionsEditor: null,
 };
 
 const history = {
@@ -1498,6 +1737,11 @@ function localizeExpressionErrorMessage(message) {
   if (lower.startsWith("unsupported ast node ")) {
     return t("expr.error.unsupportedAstNode", { kind: raw.replace(/^Unsupported AST node\s*/i, "") });
   }
+  if (lower.startsWith("local function recursion is not allowed:")) {
+    return t("localFunctions.error.runtimeRecursion", {
+      name: raw.replace(/^local function recursion is not allowed:\s*/i, ""),
+    });
+  }
   const expectedTokenMatch = raw.match(/^Expected '(.+)'$/i);
   if (expectedTokenMatch) {
     return t("expr.error.expectedToken", { token: expectedTokenMatch[1] });
@@ -1578,6 +1822,7 @@ function validateExpressionDraft(value, fieldKey = null) {
   const result = semantics.validateExpressionSyntax(text, extraNames, {
     allowThisAlias: allowStateTransitionOnly,
     allowIntegral: allowStateTransitionOnly,
+    localFunctions: localFunctionsForSemantics(graph),
   });
   return result.ok
     ? { ok: true, empty: false }
@@ -1618,7 +1863,10 @@ function validateNodeDefinition(node) {
       .forEach((depNode) => {
         extraNames.push(depNode.name);
       });
-    return semantics.validateExpressionSyntax(String(value ?? ""), extraNames, options);
+    return semantics.validateExpressionSyntax(String(value ?? ""), extraNames, {
+      ...options,
+      localFunctions: localFunctionsForSemantics(graph),
+    });
   };
   const valueExpr = String(node.valueExpression ?? "");
   const initialExpr = String(node.initialStateExpression ?? "");
@@ -1920,6 +2168,7 @@ function stateTransitionPreviewForAnalysis(node, previewState) {
   const currentValueResult = semantics.evaluateValueExpression(
     String(runtimeNode.initialStateExpression ?? ""),
     initialContext,
+    { localFunctions: localFunctionsForSemantics(previewState.model) },
   );
   if (!currentValueResult.ok) {
     return { ok: false, current: currentValueResult };
@@ -1947,6 +2196,7 @@ function stateTransitionPreviewForAnalysis(node, previewState) {
     ? (() => {
         const derivativeList = semantics.evaluateIntegralDerivativeList(source, context, {
           allowThisAlias: true,
+          localFunctions: localFunctionsForSemantics(previewState.model),
         });
         if (!derivativeList.ok) {
           return derivativeList;
@@ -1958,12 +2208,13 @@ function stateTransitionPreviewForAnalysis(node, previewState) {
           source,
           context,
           integralValues,
-          { allowThisAlias: true },
+          { allowThisAlias: true, localFunctions: localFunctionsForSemantics(previewState.model) },
         );
       })()
     : semantics.evaluateValueExpression(source, context, {
         allowThisAlias: true,
         allowIntegral: true,
+        localFunctions: localFunctionsForSemantics(previewState.model),
       });
   return {
     ok: Boolean(currentValueResult.ok && nextValueResult.ok),
@@ -2162,7 +2413,9 @@ function analyzeModelStaticIssues() {
         globalParameterNodesForModel(graph, node.id).forEach((depNode) => {
           extraNames.push(depNode.name);
         });
-        const validation = semantics.validateExpressionSyntax(source, extraNames);
+        const validation = semantics.validateExpressionSyntax(source, extraNames, {
+          localFunctions: localFunctionsForSemantics(graph),
+        });
         if (!validation.ok) {
           pushAnalysisIssue(
             issues,
@@ -2903,6 +3156,15 @@ function openAboutApp() {
   if (!aboutAppModal) {
     return;
   }
+  const appMeta = window.STGraphXAppMeta || {};
+  const releaseDate = String(appMeta.releaseDate || "").trim();
+  const author = String(appMeta.author || "").trim();
+  if (aboutAppVersionValue) {
+    aboutAppVersionValue.textContent = releaseDate;
+  }
+  if (aboutAppAuthorValue) {
+    aboutAppAuthorValue.textContent = author;
+  }
   aboutAppModal.classList.remove("hidden");
 }
 
@@ -2918,6 +3180,449 @@ function closeModelAnalysis() {
     return;
   }
   modelAnalysisModal.classList.add("hidden");
+}
+
+function showLocalFunctionsStatus(message = "", isError = false) {
+  if (!localFunctionsStatus) {
+    return;
+  }
+  const text = String(message ?? "").trim();
+  if (!text) {
+    localFunctionsStatus.textContent = "";
+    localFunctionsStatus.classList.add("hidden");
+    localFunctionsStatus.classList.remove("error");
+    return;
+  }
+  localFunctionsStatus.textContent = text;
+  localFunctionsStatus.classList.remove("hidden");
+  localFunctionsStatus.classList.toggle("error", isError);
+}
+
+function localFunctionsDraft() {
+  if (!ui.localFunctionsEditor) {
+    ui.localFunctionsEditor = {
+      draft: sanitizeLocalFunctions(graph).map((definition) => ({ ...definition, params: definition.params.slice() })),
+    };
+  }
+  return ui.localFunctionsEditor.draft;
+}
+
+function renderLocalFunctionsEditor() {
+  if (!localFunctionsList) {
+    return;
+  }
+  const draft = localFunctionsDraft();
+  const frozen = isEditingUiLocked();
+  localFunctionsList.innerHTML = "";
+  if (!draft.length) {
+    const empty = document.createElement("div");
+    empty.className = "local-function-empty";
+    empty.textContent = t("localFunctions.empty");
+    localFunctionsList.appendChild(empty);
+    return;
+  }
+  draft.forEach((definition, index) => {
+    const item = document.createElement("section");
+    item.className = "local-function-item";
+
+    const top = document.createElement("div");
+    top.className = "local-function-top";
+
+    const nameRow = document.createElement("label");
+    nameRow.className = "local-function-row";
+    const nameLabel = document.createElement("span");
+    nameLabel.textContent = t("localFunctions.name");
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = definition.name;
+    nameInput.disabled = frozen;
+    nameInput.addEventListener("input", () => {
+      definition.name = String(nameInput.value ?? "");
+      showLocalFunctionsStatus();
+    });
+    nameRow.appendChild(nameLabel);
+    nameRow.appendChild(nameInput);
+
+    const paramsRow = document.createElement("label");
+    paramsRow.className = "local-function-row";
+    const paramsLabel = document.createElement("span");
+    paramsLabel.textContent = t("localFunctions.params");
+    const paramsInput = document.createElement("input");
+    paramsInput.type = "text";
+    paramsInput.value = definition.params.join(", ");
+    paramsInput.disabled = frozen;
+    paramsInput.addEventListener("input", () => {
+      definition.params = sanitizeLocalFunctionParams(paramsInput.value);
+      showLocalFunctionsStatus();
+    });
+    paramsRow.appendChild(paramsLabel);
+    paramsRow.appendChild(paramsInput);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "small-btn";
+    removeBtn.textContent = t("action.remove");
+    removeBtn.disabled = frozen;
+    removeBtn.addEventListener("click", () => {
+      draft.splice(index, 1);
+      renderLocalFunctionsEditor();
+      showLocalFunctionsStatus();
+    });
+
+    top.appendChild(nameRow);
+    top.appendChild(paramsRow);
+    top.appendChild(removeBtn);
+
+    const fields = document.createElement("div");
+    fields.className = "local-function-fields";
+
+    const exprRow = document.createElement("label");
+    exprRow.className = "local-function-row";
+    const exprLabel = document.createElement("span");
+    exprLabel.textContent = t("localFunctions.expression");
+    const exprInput = document.createElement("textarea");
+    exprInput.rows = 3;
+    exprInput.spellcheck = false;
+    exprInput.value = definition.expression;
+    exprInput.disabled = frozen;
+    exprInput.addEventListener("input", () => {
+      definition.expression = String(exprInput.value ?? "");
+      showLocalFunctionsStatus();
+    });
+    exprRow.appendChild(exprLabel);
+    exprRow.appendChild(exprInput);
+
+    const descRow = document.createElement("label");
+    descRow.className = "local-function-row";
+    const descLabel = document.createElement("span");
+    descLabel.textContent = t("localFunctions.description");
+    const descInput = document.createElement("textarea");
+    descInput.rows = 2;
+    descInput.value = definition.description;
+    descInput.disabled = frozen;
+    descInput.addEventListener("input", () => {
+      definition.description = String(descInput.value ?? "");
+      showLocalFunctionsStatus();
+    });
+    descRow.appendChild(descLabel);
+    descRow.appendChild(descInput);
+
+    fields.appendChild(exprRow);
+    fields.appendChild(descRow);
+    item.appendChild(top);
+    item.appendChild(fields);
+    localFunctionsList.appendChild(item);
+  });
+}
+
+function openLocalFunctionsEditor() {
+  if (!localFunctionsModal) {
+    return;
+  }
+  updateEditingLockUi();
+  ui.localFunctionsEditor = {
+    draft: sanitizeLocalFunctions(graph).map((definition) => ({ ...definition, params: definition.params.slice() })),
+  };
+  renderLocalFunctionsEditor();
+  showLocalFunctionsStatus();
+  localFunctionsModal.classList.remove("hidden");
+}
+
+function closeLocalFunctionsEditor() {
+  if (!localFunctionsModal) {
+    return;
+  }
+  localFunctionsModal.classList.add("hidden");
+  ui.localFunctionsEditor = null;
+  showLocalFunctionsStatus();
+}
+
+function commitLocalFunctionsEditor() {
+  const draft = localFunctionsDraft();
+  const validation = validateLocalFunctions(draft, { model: graph });
+  if (!validation.ok) {
+    showLocalFunctionsStatus(validation.message || t("error.evalReason.runtime"), true);
+    return false;
+  }
+  runAction(() => {
+    graph.localFunctions = validation.definitions.map((definition) => ({
+      ...definition,
+      params: definition.params.slice(),
+    }));
+  });
+  renderExpressionLibrary();
+  closeLocalFunctionsEditor();
+  setStatus(t("localFunctions.updated"));
+  return true;
+}
+
+function selectedWatchableNode() {
+  if (ui.selectedNodes.size !== 1) {
+    return null;
+  }
+  const nodeId = [...ui.selectedNodes][0];
+  return getNodeById(nodeId) || null;
+}
+
+function formatWatchValue(value, error = "") {
+  if (String(error || "").trim()) {
+    return t("text.valueError", { reason: evalReasonText(error) });
+  }
+  if (value === null || value === undefined) {
+    return "—";
+  }
+  try {
+    return summarizeExpressionPreviewValue(value);
+  } catch (_err) {
+    try {
+      return String(value);
+    } catch (_err2) {
+      return "<?>"; 
+    }
+  }
+}
+
+function captureWatchSnapshot() {
+  try {
+    const debug = sanitizeDebugConfig(graph);
+    const snapshot = new Map();
+    debug.watches.forEach((name) => {
+      const node = getNodeByName(name);
+      if (!node) {
+        return;
+      }
+      snapshot.set(name, {
+        summary: formatWatchValue(node.computedValue, node.computedError),
+      });
+    });
+    ui.watchPreviousSnapshot = snapshot;
+  } catch (_err) {
+    ui.watchPreviousSnapshot = new Map();
+  }
+}
+
+function breakpointAvailableNames() {
+  return [...new Set([
+    "time",
+    "t0",
+    "t1",
+    "dt",
+    ...graph.nodes.map((node) => String(node.name ?? "")).filter(Boolean),
+  ])];
+}
+
+function breakpointExpressionSource() {
+  if (watchBreakpointInput && document.activeElement === watchBreakpointInput) {
+    return String(watchBreakpointInput.value ?? "");
+  }
+  return String(ensureDebugConfig(graph).breakpointExpression ?? "");
+}
+
+function validateBreakpointExpressionText(source = breakpointExpressionSource()) {
+  const text = String(source ?? "").trim();
+  if (!text) {
+    return { ok: true, empty: true };
+  }
+  return semantics.validateExpressionSyntax(text, breakpointAvailableNames(), {
+    localFunctions: localFunctionsForSemantics(graph),
+  });
+}
+
+function breakpointResultTruthy(value) {
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (typeof value === "string") {
+    return value.trim().length > 0 && value.trim().toLowerCase() !== "false";
+  }
+  return Boolean(value);
+}
+
+function breakpointNodeContextValue(node) {
+  if (!node) {
+    return undefined;
+  }
+  if (isStateNode(node) && node.pendingStateValue !== null && node.pendingStateValue !== undefined) {
+    return node.pendingStateValue;
+  }
+  return node.computedValue;
+}
+
+function buildBreakpointContext(timeValue) {
+  const context = buildExecutionGlobals(timeValue);
+  graph.nodes.forEach((node) => {
+    const value = breakpointNodeContextValue(node);
+    if (value !== undefined && value !== null) {
+      context[node.name] = value;
+    }
+  });
+  return context;
+}
+
+function evaluateBreakpointConditionAtTime(timeValue) {
+  const debug = sanitizeDebugConfig(graph);
+  if (!debug.breakpointEnabled) {
+    return { enabled: false, hit: false };
+  }
+  const expression = String(debug.breakpointExpression ?? "").trim();
+  if (!expression) {
+    return { enabled: true, hit: false, invalid: true, message: t("watch.breakpointEmpty") };
+  }
+  const result = semantics.evaluateValueExpression(expression, buildBreakpointContext(timeValue), {
+    localFunctions: localFunctionsForSemantics(graph),
+  });
+  if (!result.ok) {
+    return {
+      enabled: true,
+      hit: false,
+      invalid: true,
+      message: localizeExpressionErrorMessage(result.message || result.reason || ""),
+    };
+  }
+  return { enabled: true, hit: breakpointResultTruthy(result.value), value: result.value, expression };
+}
+
+function ensureBreakpointReadyForExecution() {
+  const debug = sanitizeDebugConfig(graph);
+  if (!debug.breakpointEnabled) {
+    return true;
+  }
+  const expression = String(debug.breakpointExpression ?? "").trim();
+  if (!expression) {
+    setStatus(t("watch.breakpointEmpty"), true);
+    openWatchDebugger();
+    return false;
+  }
+  const validation = validateBreakpointExpressionText(expression);
+  if (!validation.ok) {
+    setStatus(t("error.breakpointInvalid", { reason: localizeExpressionErrorMessage(validation.message || "") }), true);
+    openWatchDebugger();
+    return false;
+  }
+  return true;
+}
+
+function renderWatchDebugger() {
+  if (!watchDebuggerList || !watchDebuggerSummary || !watchBreakpointEnabledInput || !watchAddSelectedBtn) {
+    return;
+  }
+  const debug = sanitizeDebugConfig(graph);
+  const selectedNode = selectedWatchableNode();
+  const canAddSelected = Boolean(selectedNode && !debug.watches.includes(selectedNode.name) && !isEditingUiLocked());
+  watchAddSelectedBtn.disabled = !canAddSelected;
+  if (watchBreakpointEnabledInput) {
+    watchBreakpointEnabledInput.checked = Boolean(debug.breakpointEnabled);
+    watchBreakpointEnabledInput.disabled = isEditingUiLocked();
+  }
+  if (watchBreakpointInput && document.activeElement !== watchBreakpointInput) {
+    watchBreakpointInput.value = String(debug.breakpointExpression ?? "");
+  }
+  if (watchBreakpointInput) {
+    watchBreakpointInput.disabled = isEditingUiLocked();
+  }
+  watchDebuggerSummary.textContent = t("watch.summary", { count: debug.watches.length });
+
+  const breakpointValidation = validateBreakpointExpressionText();
+  if (watchBreakpointStatus) {
+    if (debug.breakpointEnabled) {
+      if (!String(breakpointExpressionSource() || "").trim()) {
+        showExpressionStatus(watchBreakpointStatus, { ok: false, message: t("watch.breakpointEmpty") }, false);
+      } else if (!breakpointValidation.ok) {
+        showExpressionStatus(
+          watchBreakpointStatus,
+          { ok: false, message: localizeExpressionErrorMessage(breakpointValidation.message || "") },
+          false,
+        );
+      } else if (ui.breakpointLastResult?.hit) {
+        watchBreakpointStatus.classList.remove("invalid", "hidden");
+        watchBreakpointStatus.textContent = t("watch.breakpointHit", {
+          time: formatNumberValue(Number(ui.breakpointLastResult.time)),
+        });
+      } else {
+        showExpressionStatus(watchBreakpointStatus, { ok: true }, true);
+      }
+    } else {
+      hideExpressionStatus(watchBreakpointStatus);
+    }
+  }
+
+  watchDebuggerList.innerHTML = "";
+  if (debug.watches.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-props";
+    empty.textContent = t("watch.empty");
+    watchDebuggerList.appendChild(empty);
+    return;
+  }
+
+  debug.watches.forEach((name) => {
+    const node = getNodeByName(name);
+    if (!node) {
+      return;
+    }
+    try {
+      const item = document.createElement("div");
+      item.className = "watch-item";
+      const head = document.createElement("div");
+      head.className = "watch-item-head";
+      const title = document.createElement("strong");
+      title.textContent = name;
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "small-btn";
+      removeBtn.textContent = t("action.remove");
+      removeBtn.disabled = isEditingUiLocked();
+      removeBtn.addEventListener("click", () => {
+        commitDebugConfigChange(() => {
+          ensureDebugConfig(graph).watches = ensureDebugConfig(graph).watches.filter((entry) => entry !== name);
+        });
+        renderWatchDebugger();
+      });
+      head.appendChild(title);
+      head.appendChild(removeBtn);
+      item.appendChild(head);
+
+      const currentRow = document.createElement("div");
+      currentRow.className = "watch-item-row";
+      currentRow.textContent = `${t("watch.current")}: ${formatWatchValue(node.computedValue, node.computedError)}`;
+      item.appendChild(currentRow);
+
+      const previousRow = document.createElement("div");
+      previousRow.className = "watch-item-row";
+      const previous = ui.watchPreviousSnapshot instanceof Map ? ui.watchPreviousSnapshot.get(name) : null;
+      previousRow.textContent = `${t("watch.previous")}: ${previous?.summary ?? "—"}`;
+      item.appendChild(previousRow);
+
+      if (isStateNode(node)) {
+        const nextRow = document.createElement("div");
+        nextRow.className = "watch-item-row";
+        nextRow.textContent = `${t("watch.next")}: ${formatWatchValue(node.pendingStateValue, node.pendingStateError)}`;
+        item.appendChild(nextRow);
+      }
+
+      watchDebuggerList.appendChild(item);
+    } catch (_err) {
+      const item = document.createElement("div");
+      item.className = "watch-item";
+      item.textContent = `${name}: <?>`;
+      watchDebuggerList.appendChild(item);
+    }
+  });
+}
+
+function openWatchDebugger() {
+  if (!watchDebuggerModal) {
+    return;
+  }
+  renderWatchDebugger();
+  watchDebuggerModal.classList.remove("hidden");
+}
+
+function closeWatchDebugger() {
+  if (!watchDebuggerModal) {
+    return;
+  }
+  watchDebuggerModal.classList.add("hidden");
 }
 
 function modelAnalysisCheckEntries() {
@@ -3246,6 +3951,16 @@ function expressionCatalogForEditor() {
     pushEntry(name, entry);
   });
 
+  localFunctionsForSemantics(graph).forEach((definition) => {
+    pushEntry(definition.name, {
+      kind: "local",
+      signature: localFunctionSignature(definition),
+      description: definition.description || t("localFunctions.editor.defaultDescription"),
+      insertText: `${definition.name}(${definition.params.join(", ")})`,
+      cursorOffset: `${definition.name}(${definition.params.join(", ")})`.length,
+    });
+  });
+
   if (node) {
     pushEntry("self", {
       kind: "variable",
@@ -3318,16 +4033,18 @@ function expressionEntryKindOrder(kind) {
       return 0;
     case "function":
       return 1;
-    case "array":
+    case "local":
       return 2;
-    case "probability":
+    case "array":
       return 3;
-    case "property":
+    case "probability":
       return 4;
-    case "math":
+    case "property":
       return 5;
-    case "node":
+    case "math":
       return 6;
+    case "node":
+      return 7;
     default:
       return 99;
   }
@@ -3919,7 +4636,9 @@ function evaluateInitialStatePreviewValue(node, globals, model = graph) {
   )
     ? String(expressionStateInitialInput.value ?? "")
     : String(node.initialStateExpression ?? "");
-  return semantics.evaluateValueExpression(source, context);
+  return semantics.evaluateValueExpression(source, context, {
+    localFunctions: localFunctionsForSemantics(model),
+  });
 }
 
 function resolveStatePreviewCurrentValue(node, previewState) {
@@ -3960,9 +4679,10 @@ function buildExpressionPreviewEvaluation() {
     const selfValue = currentValueResult.value;
     context.__self = selfValue;
     if (String(source).includes("integral(")) {
-      const derivativeList = semantics.evaluateIntegralDerivativeList(source, context, {
-        allowThisAlias: true,
-      });
+        const derivativeList = semantics.evaluateIntegralDerivativeList(source, context, {
+          allowThisAlias: true,
+          localFunctions: localFunctionsForSemantics(graph),
+        });
       if (!derivativeList.ok) {
         return {
           ...derivativeList,
@@ -3976,7 +4696,7 @@ function buildExpressionPreviewEvaluation() {
         source,
         context,
         integralValues,
-        { allowThisAlias: true },
+        { allowThisAlias: true, localFunctions: localFunctionsForSemantics(graph) },
       );
       return {
         ...nextValueResult,
@@ -3988,6 +4708,7 @@ function buildExpressionPreviewEvaluation() {
     const nextValueResult = semantics.evaluateValueExpression(source, context, {
       allowThisAlias: true,
       allowIntegral: true,
+      localFunctions: localFunctionsForSemantics(graph),
     });
     return {
       ...nextValueResult,
@@ -3996,7 +4717,9 @@ function buildExpressionPreviewEvaluation() {
       nextValue: nextValueResult.ok ? nextValueResult.value : null,
     };
   }
-  return semantics.evaluateValueExpression(source, context);
+  return semantics.evaluateValueExpression(source, context, {
+    localFunctions: localFunctionsForSemantics(graph),
+  });
 }
 
 function refreshExpressionPreviewNow() {
@@ -5755,6 +6478,12 @@ function exportGraphData() {
   return {
     version: 1,
     modelTitle: String(graph.modelTitle ?? ""),
+    localFunctions: sanitizeLocalFunctions(graph).map((definition) => ({
+      name: definition.name,
+      params: definition.params.slice(),
+      expression: definition.expression,
+      description: definition.description,
+    })),
     view: {
       zoom: clampZoom(Number(ui.zoom) || 1),
       showGrid: ui.showGrid !== false,
@@ -5762,6 +6491,11 @@ function exportGraphData() {
       gridSize: clamp(Number(ui.gridSize) || 20, 5, 100),
       scrollLeft: Math.max(0, Number(graphViewport?.scrollLeft) || 0),
       scrollTop: Math.max(0, Number(graphViewport?.scrollTop) || 0),
+    },
+    debug: {
+      watches: sanitizeDebugConfig(graph).watches.slice(),
+      breakpointEnabled: Boolean(ensureDebugConfig(graph).breakpointEnabled),
+      breakpointExpression: String(ensureDebugConfig(graph).breakpointExpression ?? ""),
     },
     modelProperties: graph.properties.map((p) => ({ key: String(p.key), value: String(p.value) })),
     nodeCounter,
@@ -5978,12 +6712,21 @@ function applyGraphData(data) {
   stopTimedExecution(false);
   clearRuntimeSubmodelState();
   ui.submodelsPrepared = false;
+  ui.localFunctionsEditor = null;
   const execCfg = normalizeExecutionConfig(data.execution);
   const savedView = data?.view && typeof data.view === "object" ? data.view : null;
   graph.modelTitle = String(data?.modelTitle ?? "");
   graph.properties = Array.isArray(data?.modelProperties)
     ? data.modelProperties.map((p) => ({ key: String(p?.key ?? ""), value: String(p?.value ?? "") }))
     : [];
+  graph.localFunctions = Array.isArray(data?.localFunctions)
+    ? data.localFunctions.map((definition) => sanitizeLocalFunctionDefinition(definition))
+    : [];
+  graph.debug = {
+    watches: Array.isArray(data?.debug?.watches) ? data.debug.watches.map((name) => String(name ?? "")) : [],
+    breakpointEnabled: Boolean(data?.debug?.breakpointEnabled),
+    breakpointExpression: String(data?.debug?.breakpointExpression ?? ""),
+  };
   graph.execution = {
     t0: execCfg.t0,
     dt: execCfg.dt,
@@ -6156,6 +6899,11 @@ function applyGraphData(data) {
           })(),
       }))
     : [];
+  clearSimulationOutputHistory();
+  sanitizeDebugConfig(graph);
+  sanitizeLocalFunctions(graph);
+  ui.watchPreviousSnapshot = new Map();
+  ui.breakpointLastResult = null;
 
   nodeCounter = Number(data.nodeCounter) || 1;
   edgeCounter = Number(data.edgeCounter) || 1;
@@ -6296,6 +7044,9 @@ function isExecutionFrozen() {
 }
 
 function isEditingUiLocked() {
+  if (ui.timedRunHandle == null && ui.timedStepRunning) {
+    ui.timedStepRunning = false;
+  }
   return ui.timedRunHandle != null || ui.timedStepRunning;
 }
 
@@ -6332,6 +7083,16 @@ function setExplicitControlDisabled(control, disabled) {
   }
 }
 
+function releaseExecutionDisabledControls(root = document) {
+  if (!root || typeof root.querySelectorAll !== "function") {
+    return;
+  }
+  root.querySelectorAll("[data-execution-disabled='1']").forEach((control) => {
+    control.disabled = false;
+    delete control.dataset.executionDisabled;
+  });
+}
+
 function updateEditingLockUi() {
   const frozen = isEditingUiLocked();
   sidebar?.classList.toggle("execution-frozen", frozen);
@@ -6363,6 +7124,8 @@ function updateEditingLockUi() {
   setControlsDisabled(textPanel, frozen);
   setControlsDisabled(edgePanel, frozen);
   setControlsDisabled(widgetPanel, frozen);
+  setControlsDisabled(watchDebuggerModal, frozen, [watchDebuggerCloseBtn, watchDebuggerDismissBtn]);
+  setControlsDisabled(localFunctionsModal, frozen, [localFunctionsCloseBtn, localFunctionsCancelBtn, localFunctionsApplyBtn]);
   setControlsDisabled(textEditorModal, frozen, [textEditorCloseBtn, textEditorDismissBtn]);
 
   [
@@ -6413,6 +7176,9 @@ function updateEditingLockUi() {
   }
   if (runStrictDefinitionsInput) {
     runStrictDefinitionsInput.disabled = frozen;
+  }
+  if (!frozen) {
+    releaseExecutionDisabledControls(document);
   }
 }
 
@@ -7995,6 +8761,7 @@ function render() {
     applyWidgetDrivenNodeValues();
   }
   refreshSidebar();
+  renderWatchDebugger();
   updateHistoryButtons();
   updateEditingLockUi();
 }
@@ -8208,6 +8975,9 @@ function importGraphData(data) {
   applyGraphData({
     version: 1,
     modelTitle: String(data.modelTitle ?? ""),
+    localFunctions: Array.isArray(data?.localFunctions)
+      ? data.localFunctions.map((definition) => sanitizeLocalFunctionDefinition(definition))
+      : [],
     view: data?.view && typeof data.view === "object"
       ? {
         zoom: clampZoom(Number(data.view.zoom) || 1),
@@ -8221,6 +8991,11 @@ function importGraphData(data) {
     modelProperties: Array.isArray(data.modelProperties)
       ? data.modelProperties.map((p) => ({ key: String(p?.key ?? ""), value: String(p?.value ?? "") }))
       : [],
+    debug: {
+      watches: Array.isArray(data?.debug?.watches) ? data.debug.watches.map((name) => String(name ?? "")) : [],
+      breakpointEnabled: Boolean(data?.debug?.breakpointEnabled),
+      breakpointExpression: String(data?.debug?.breakpointExpression ?? ""),
+    },
     nodeCounter: Math.max(Number(data.nodeCounter) || 0, maxNodeId) + 1,
     edgeCounter: Math.max(Number(data.edgeCounter) || 0, maxEdgeId) + 1,
     widgetCounter: Math.max(Number(data.widgetCounter) || 0, maxWidgetId) + 1,
@@ -8565,6 +9340,16 @@ function downloadJsonFile(filename, json) {
   const a = document.createElement("a");
   a.href = url;
   a.download = normalizeJsonFilename(filename);
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadTextFile(filename, text, mimeType = "text/plain;charset=utf-8") {
+  const blob = new Blob([text], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -9314,6 +10099,20 @@ async function writeJsonToFileHandle(fileHandle, json) {
   }
 }
 
+async function writeTextToFileHandle(fileHandle, text) {
+  if (!fileHandle) {
+    return false;
+  }
+  try {
+    const writable = await fileHandle.createWritable();
+    await writable.write(text);
+    await writable.close();
+    return true;
+  } catch (_err) {
+    return false;
+  }
+}
+
 async function pickSaveAsHandle(suggestedName) {
   if (supportsSaveFilePicker()) {
     return showSaveFilePickerCompat({
@@ -9328,6 +10127,72 @@ async function pickSaveAsHandle(suggestedName) {
   }
 
   return null;
+}
+
+async function pickSaveCsvHandle(suggestedName) {
+  if (supportsSaveFilePicker()) {
+    return showSaveFilePickerCompat({
+      suggestedName: normalizeCsvFilename(suggestedName),
+      types: [
+        {
+          description: "CSV",
+          accept: { "text/csv": [".csv"] },
+        },
+      ],
+    });
+  }
+  return null;
+}
+
+async function exportSimulationCsv() {
+  let csv;
+  try {
+    csv = buildSimulationCsvText();
+  } catch (err) {
+    const message = String(err?.message || t("error.csvExportFailed"));
+    setStatus(message, true);
+    window.alert(message);
+    return false;
+  }
+
+  let filename = suggestedCsvFilename();
+  const hasNativeSavePicker = supportsSaveFilePicker();
+  try {
+    const fileHandle = await pickSaveCsvHandle(filename);
+    if (fileHandle) {
+      const ok = await writeTextToFileHandle(fileHandle, csv);
+      if (!ok) {
+        setStatusKey("error.csvExportFailed");
+        window.alert(t("error.csvExportFailed"));
+        return false;
+      }
+      setStatusKey("status.csvExported");
+      return true;
+    }
+  } catch (err) {
+    if (err && err.name === "AbortError") {
+      setStatusKey("status.csvExportCanceled");
+      return false;
+    }
+    if (hasNativeSavePicker) {
+      setStatusKey("error.csvExportFailed");
+      window.alert(t("error.csvExportFailed"));
+      return false;
+    }
+  }
+
+  if (isFirefoxBrowser()) {
+    const proposed = window.prompt(t("prompt.saveCsv"), filename);
+    if (proposed == null) {
+      setStatusKey("status.csvExportCanceled");
+      return false;
+    }
+    filename = normalizeCsvFilename(proposed);
+  }
+
+  downloadTextFile(filename, csv, "text/csv;charset=utf-8");
+  setStatusKey("status.csvExported");
+  return true;
 }
 
 async function saveGraphJson(forceSaveAs = false) {
@@ -9537,12 +10402,19 @@ async function createNewGraph() {
 
   graph.modelTitle = "";
   graph.properties = [];
+  graph.localFunctions = [];
   graph.nodes = [];
   graph.edges = [];
   graph.textItems = [];
   graph.widgets = [];
+  graph.debug = {
+    watches: [],
+    breakpointEnabled: false,
+    breakpointExpression: "",
+  };
   graph.__directoryPath = "";
   graph.__readDataCache = Object.create(null);
+  clearSimulationOutputHistory();
   invalidateExecutionPlan();
   stopTimedExecution(false);
   graph.execution = {
@@ -9570,6 +10442,9 @@ async function createNewGraph() {
   submodelFileHandleCache.clear();
   submodelSourceCache.clear();
   ui.submodelsPrepared = false;
+  ui.watchPreviousSnapshot = new Map();
+  ui.breakpointLastResult = null;
+  ui.localFunctionsEditor = null;
   setStatusKey("status.newGraph");
   render();
   window.requestAnimationFrame(() => {
@@ -9580,10 +10455,14 @@ async function createNewGraph() {
 }
 
 function stopTimedExecution(updateStatus = true) {
-  if (ui.timedRunHandle != null) {
+  const hadHandle = ui.timedRunHandle != null;
+  const wasRunningStep = ui.timedStepRunning === true;
+  if (hadHandle) {
     window.clearInterval(ui.timedRunHandle);
-    ui.timedRunHandle = null;
-    ui.timedStepRunning = false;
+  }
+  ui.timedRunHandle = null;
+  ui.timedStepRunning = false;
+  if (hadHandle || wasRunningStep) {
     updateEditingLockUi();
     if (updateStatus) {
       setStatusKey("status.timedStopped");
@@ -9782,6 +10661,14 @@ function buildRuntimeModelFromData(data, options = {}) {
     properties: Array.isArray(data?.modelProperties)
       ? data.modelProperties.map((p) => ({ key: String(p?.key ?? ""), value: String(p?.value ?? "") }))
       : [],
+    localFunctions: Array.isArray(data?.localFunctions)
+      ? data.localFunctions.map((definition) => sanitizeLocalFunctionDefinition(definition))
+      : [],
+    debug: {
+      watches: Array.isArray(data?.debug?.watches) ? data.debug.watches.map((name) => String(name ?? "")) : [],
+      breakpointEnabled: Boolean(data?.debug?.breakpointEnabled),
+      breakpointExpression: String(data?.debug?.breakpointExpression ?? ""),
+    },
     nodes: nodesWithValidNames,
     edges,
     widgets: [],
@@ -9837,6 +10724,213 @@ function readDataFromModelCache(model, relativePath) {
     throw new Error(`readData file is unavailable: ${normalizedPath}`);
   }
   return cache[normalizedPath];
+}
+
+function clearSimulationOutputHistory() {
+  graph.__simulationHistory = [];
+}
+
+function cloneSimulationOutputValue(value) {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  try {
+    if (typeof structuredClone === "function") {
+      return structuredClone(value);
+    }
+  } catch (_err) {
+    // Fall through.
+  }
+  try {
+    return deepClone(value);
+  } catch (_err) {
+    return value;
+  }
+}
+
+function recordSimulationOutputSnapshot(timeValue) {
+  const outputNodes = graph.nodes.filter((node) => node.output);
+  if (!outputNodes.length) {
+    return;
+  }
+  if (!Array.isArray(graph.__simulationHistory)) {
+    graph.__simulationHistory = [];
+  }
+  graph.__simulationHistory.push({
+    time: Number(timeValue),
+    values: Object.fromEntries(outputNodes.map((node) => [
+      node.name,
+      {
+        value: cloneSimulationOutputValue(node.computedValue),
+        error: String(node.computedError || ""),
+      },
+    ])),
+  });
+}
+
+function normalizeCsvFilename(name) {
+  const trimmed = String(name || "").trim();
+  if (!trimmed) {
+    return "simulation-output.csv";
+  }
+  return trimmed.toLowerCase().endsWith(".csv") ? trimmed : `${trimmed}.csv`;
+}
+
+function suggestedCsvFilename() {
+  const base = String(currentFileName || graph.modelTitle || "simulation-output")
+    .replace(/\.json$/i, "")
+    .trim();
+  return normalizeCsvFilename(base ? `${base}-output` : "simulation-output");
+}
+
+function csvEscapeCell(value) {
+  const text = value == null ? "" : String(value);
+  if (!/[",\n\r]/.test(text)) {
+    return text;
+  }
+  return `"${text.replace(/"/g, "\"\"")}"`;
+}
+
+function inferCsvValueSchema(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") {
+    return { kind: "scalar" };
+  }
+  if (!Array.isArray(value)) {
+    return { kind: "serialized" };
+  }
+  if (value.every((item) => !Array.isArray(item))) {
+    return { kind: "vector", size: value.length };
+  }
+  const isRectangularMatrix =
+    value.length > 0
+    && value.every((row) => Array.isArray(row))
+    && value.every((row) => row.length === value[0].length)
+    && value.every((row) => row.every((cell) => !Array.isArray(cell)));
+  if (isRectangularMatrix) {
+    return { kind: "matrix", rows: value.length, cols: value[0].length };
+  }
+  return { kind: "serialized" };
+}
+
+function csvSchemaMatches(schema, candidate) {
+  if (!schema || !candidate) {
+    return true;
+  }
+  if (schema.kind !== candidate.kind) {
+    return false;
+  }
+  if (schema.kind === "vector") {
+    return schema.size === candidate.size;
+  }
+  if (schema.kind === "matrix") {
+    return schema.rows === candidate.rows && schema.cols === candidate.cols;
+  }
+  return true;
+}
+
+function csvNodeColumnNames(nodeName, schema) {
+  if (!schema || schema.kind === "scalar" || schema.kind === "serialized") {
+    return [nodeName];
+  }
+  if (schema.kind === "vector") {
+    return Array.from({ length: schema.size }, (_unused, idx) => `${nodeName}[${idx}]`);
+  }
+  if (schema.kind === "matrix") {
+    const columns = [];
+    for (let row = 0; row < schema.rows; row += 1) {
+      for (let col = 0; col < schema.cols; col += 1) {
+        columns.push(`${nodeName}[${row},${col}]`);
+      }
+    }
+    return columns;
+  }
+  return [nodeName];
+}
+
+function csvValueCellsForSchema(value, schema) {
+  if (value === null || value === undefined) {
+    return new Array(csvNodeColumnNames("", schema).length).fill("");
+  }
+  if (!schema || schema.kind === "scalar") {
+    return [String(value)];
+  }
+  if (schema.kind === "serialized") {
+    try {
+      return [JSON.stringify(value)];
+    } catch (_err) {
+      return [String(value)];
+    }
+  }
+  if (schema.kind === "vector") {
+    return Array.from({ length: schema.size }, (_unused, idx) => value[idx] == null ? "" : String(value[idx]));
+  }
+  if (schema.kind === "matrix") {
+    const cells = [];
+    for (let row = 0; row < schema.rows; row += 1) {
+      for (let col = 0; col < schema.cols; col += 1) {
+        cells.push(value[row]?.[col] == null ? "" : String(value[row][col]));
+      }
+    }
+    return cells;
+  }
+  return [String(value)];
+}
+
+function buildSimulationCsvText() {
+  const history = Array.isArray(graph.__simulationHistory) ? graph.__simulationHistory : [];
+  if (!history.length) {
+    throw new Error(t("error.csvNoData"));
+  }
+  const outputNames = graph.nodes.filter((node) => node.output).map((node) => node.name);
+  if (!outputNames.length) {
+    throw new Error(t("error.csvNoOutputs"));
+  }
+
+  const schemas = new Map();
+  outputNames.forEach((name) => {
+    let schema = null;
+    for (const entry of history) {
+      const sample = entry?.values?.[name];
+      if (!sample || sample.error || sample.value == null) {
+        continue;
+      }
+      const candidate = inferCsvValueSchema(sample.value);
+      if (!schema) {
+        schema = candidate;
+      } else if (!csvSchemaMatches(schema, candidate)) {
+        throw new Error(t("error.csvShapeChanged", { name }));
+      }
+    }
+    schemas.set(name, schema || { kind: "scalar" });
+  });
+
+  const header = ["time"];
+  outputNames.forEach((name) => {
+    csvNodeColumnNames(name, schemas.get(name)).forEach((columnName) => header.push(columnName));
+  });
+
+  const lines = [header.map(csvEscapeCell).join(",")];
+  history.forEach((entry) => {
+    const row = [csvEscapeCell(entry.time)];
+    outputNames.forEach((name) => {
+      const schema = schemas.get(name);
+      const sample = entry?.values?.[name];
+      if (!sample || sample.error || sample.value == null) {
+        csvNodeColumnNames(name, schema).forEach(() => row.push(""));
+        return;
+      }
+      const candidate = inferCsvValueSchema(sample.value);
+      if (!csvSchemaMatches(schema, candidate)) {
+        throw new Error(t("error.csvShapeChanged", { name }));
+      }
+      csvValueCellsForSchema(sample.value, schema).forEach((cell) => row.push(csvEscapeCell(cell)));
+    });
+    lines.push(row.join(","));
+  });
+  return lines.join("\n");
 }
 
 function buildExecutionGlobals(timeValue) {
@@ -9951,7 +11045,9 @@ function evaluateParameterNodesForModel(model, timeValue, rootExecution) {
       }
 
       const expr = String(node.valueExpression ?? "0");
-      const result = semantics.evaluateValueExpression(expr, context);
+      const result = semantics.evaluateValueExpression(expr, context, {
+        localFunctions: localFunctionsForSemantics(model),
+      });
       if (result.ok) {
         node.computedValue = result.value;
         node.computedError = "";
@@ -10018,6 +11114,7 @@ function initializeStateNodesForModel(model, timeValue, rootExecution) {
     const initResult = semantics.evaluateValueExpression(
       initExpr,
       buildInitialStateContextForModel(model, node, timeValue, rootExecution),
+      { localFunctions: localFunctionsForSemantics(model) },
     );
     if (initResult.ok) {
       node.computedValue = initResult.value;
@@ -10105,7 +11202,9 @@ function buildSubmodelInputOverrides(model, node, parentContext) {
     if (!name || assignedPorts.has(name)) {
       return;
     }
-    const result = semantics.evaluateValueExpression(String(expr ?? ""), parentContext);
+    const result = semantics.evaluateValueExpression(String(expr ?? ""), parentContext, {
+      localFunctions: localFunctionsForSemantics(model),
+    });
     if (!result.ok) {
       throw new Error(result.message || result.reason || "runtime");
     }
@@ -10130,6 +11229,7 @@ function evaluateModelAtTimeRecursive(model, timeValue, env, options = {}) {
     executionPlan,
     {
       stateValueOverrides: stateValueOverrides || undefined,
+      localFunctions: localFunctionsForSemantics(model),
       derivativeStateNodeIds: integralStateNodeIds.size > 0 ? integralStateNodeIds : undefined,
       customNodeEvaluator: createSubmodelNodeEvaluator(model, timeValue, env, {
         applyResults: options.applyResults !== false,
@@ -10167,6 +11267,7 @@ function evaluateModelAtTimeRecursive(model, timeValue, env, options = {}) {
         {
           derivativeStateNodeIds: integralStateNodeIds,
           stateValueOverrides: stage2StateOverrides,
+          localFunctions: localFunctionsForSemantics(model),
           customNodeEvaluator: createSubmodelNodeEvaluator(model, timeValue + dt / 2, env, { applyResults: false }),
         },
       );
@@ -10196,6 +11297,7 @@ function evaluateModelAtTimeRecursive(model, timeValue, env, options = {}) {
           {
             derivativeStateNodeIds: integralStateNodeIds,
             stateValueOverrides: stage3StateOverrides,
+            localFunctions: localFunctionsForSemantics(model),
             customNodeEvaluator: createSubmodelNodeEvaluator(model, timeValue + dt / 2, env, { applyResults: false }),
           },
         );
@@ -10225,6 +11327,7 @@ function evaluateModelAtTimeRecursive(model, timeValue, env, options = {}) {
             {
               derivativeStateNodeIds: integralStateNodeIds,
               stateValueOverrides: stage4StateOverrides,
+              localFunctions: localFunctionsForSemantics(model),
               customNodeEvaluator: createSubmodelNodeEvaluator(model, timeValue + dt, env, { applyResults: false }),
             },
           );
@@ -10632,7 +11735,7 @@ function evaluateTransitionResultsWithIntegralValuesForModel(
         node.valueExpression,
         context,
         integralValuesMap.get(node.id) || [],
-        { allowThisAlias: true },
+        { allowThisAlias: true, localFunctions: localFunctionsForSemantics(model) },
       ),
     );
   });
@@ -10701,7 +11804,7 @@ function evaluateTransitionResultsWithIntegralValues(timeValue, integralStateIds
         node.valueExpression,
         { ...context, ...access },
         integralValuesMap.get(node.id) || [],
-        { allowThisAlias: true },
+        { allowThisAlias: true, localFunctions: localFunctionsForSemantics(graph) },
       ),
     );
   });
@@ -10724,6 +11827,7 @@ function initializeStateNodes(timeValue) {
     const initResult = semantics.evaluateValueExpression(
       initExpr,
       buildInitialStateContextForModel(graph, node, timeValue, graph.execution),
+      { localFunctions: localFunctionsForSemantics(graph) },
     );
     if (initResult.ok) {
       node.computedValue = initResult.value;
@@ -10759,6 +11863,7 @@ function promotePendingStateNodes() {
 }
 
 function evaluateAtTime(timeValue) {
+  captureWatchSnapshot();
   applyWidgetDrivenNodeValues();
   const result = evaluateModelAtTimeRecursive(graph, timeValue, {
     rootExecution: graph.execution,
@@ -10767,6 +11872,7 @@ function evaluateAtTime(timeValue) {
   const nodeMap = buildNodeNameMap();
   updateTableWidgetsFromComputedValues(timeValue, nodeMap);
   updateXYWidgetsFromComputedValues(timeValue, nodeMap);
+  recordSimulationOutputSnapshot(timeValue);
   return result;
 }
 
@@ -10820,6 +11926,9 @@ async function executeOneStep(restartIfEnded = true) {
   if (!enforceStrictDefinitionsIfNeeded()) {
     return false;
   }
+  if (!ensureBreakpointReadyForExecution()) {
+    return false;
+  }
   if (!(await prepareSubmodelsForExecution())) {
     return false;
   }
@@ -10847,9 +11956,13 @@ async function executeOneStep(restartIfEnded = true) {
   const nextTime = graph.execution.currentTime == null ? cfg.t0 : graph.execution.currentTime + cfg.dt;
 
   let stepResult = null;
+  const startingFresh = graph.execution.currentTime == null;
   if (restarted) {
     clearAllXYChartPoints();
     clearAllTableWidgetRows();
+    clearSimulationOutputHistory();
+  } else if (startingFresh) {
+    clearSimulationOutputHistory();
   }
   if (graph.execution.currentTime == null) {
     clearRuntimeSubmodelState();
@@ -10859,7 +11972,23 @@ async function executeOneStep(restartIfEnded = true) {
   }
   stepResult = evaluateAtTime(nextTime);
   graph.execution.currentTime = nextTime;
+  const breakpointResult = evaluateBreakpointConditionAtTime(nextTime);
+  ui.breakpointLastResult = breakpointResult.hit ? { ...breakpointResult, time: nextTime } : breakpointResult;
   refreshRuntimeView();
+
+  if (breakpointResult.invalid) {
+    setStatus(t("error.breakpointInvalid", { reason: breakpointResult.message || t("error.evalReason.runtime") }), true);
+    openWatchDebugger();
+    return { ok: false, breakpointHit: false };
+  }
+
+  if (breakpointResult.hit) {
+    setStatusKey("status.breakpointHit", {
+      time: formatNumberValue(Number(nextTime)),
+    });
+    openWatchDebugger();
+    return { ok: true, breakpointHit: true };
+  }
 
   if (restarted && stepResult.errorCount === 0) {
     setStatusKey("status.executionRestarted", {
@@ -10878,11 +12007,14 @@ async function executeOneStep(restartIfEnded = true) {
       time: formatNumberValue(Number(nextTime)),
     });
   }
-  return true;
+  return { ok: true, breakpointHit: false };
 }
 
 async function executeNodeExpressions() {
   if (!enforceStrictDefinitionsIfNeeded()) {
+    return;
+  }
+  if (!ensureBreakpointReadyForExecution()) {
     return;
   }
   if (!(await prepareSubmodelsForExecution())) {
@@ -10903,6 +12035,7 @@ async function executeNodeExpressions() {
     graph.execution.currentTime = null;
     clearAllXYChartPoints();
     clearAllTableWidgetRows();
+    clearSimulationOutputHistory();
     clearRuntimeSubmodelState();
     initializeStateNodes(cfg.t0);
     refreshRuntimeView();
@@ -10938,8 +12071,10 @@ async function executeNodeExpressions() {
   let firstErrorReason = null;
   let firstErrorTime = null;
   let lastTime = timeValues[timeValues.length - 1];
+  let breakpointHit = false;
 
-  timeValues.forEach((timeValue, idx) => {
+  for (let idx = 0; idx < timeValues.length; idx += 1) {
+    const timeValue = timeValues[idx];
     if (continuing || idx > 0) {
       promotePendingStateNodes();
     }
@@ -10952,11 +12087,29 @@ async function executeNodeExpressions() {
       firstErrorReason = stepResult.firstErrorReason;
       firstErrorTime = timeValue;
     }
-  });
+    lastTime = timeValue;
+    const breakpointResult = evaluateBreakpointConditionAtTime(timeValue);
+    ui.breakpointLastResult = breakpointResult.hit ? { ...breakpointResult, time: timeValue } : breakpointResult;
+    if (breakpointResult.invalid) {
+      refreshRuntimeView();
+      setStatus(t("error.breakpointInvalid", { reason: breakpointResult.message || t("error.evalReason.runtime") }), true);
+      openWatchDebugger();
+      return;
+    }
+    if (breakpointResult.hit) {
+      breakpointHit = true;
+      break;
+    }
+  }
   graph.execution.currentTime = lastTime;
   refreshRuntimeView();
 
-  if (firstErrorNode) {
+  if (breakpointHit) {
+    setStatusKey("status.breakpointHit", {
+      time: formatNumberValue(Number(lastTime)),
+    });
+    openWatchDebugger();
+  } else if (firstErrorNode) {
     setStatusKey("error.evalFailedDetailedTime", {
       node: firstErrorNode,
       count: totalErrorCount,
@@ -10993,6 +12146,7 @@ async function resetExecution() {
   graph.execution.currentTime = null;
   clearAllXYChartPoints();
   clearAllTableWidgetRows();
+  clearSimulationOutputHistory();
   clearRuntimeSubmodelState();
   initializeStateNodes(cfg.t0);
   refreshRuntimeView();
@@ -11006,6 +12160,9 @@ async function toggleTimedExecution() {
   }
 
   if (!enforceStrictDefinitionsIfNeeded()) {
+    return;
+  }
+  if (!ensureBreakpointReadyForExecution()) {
     return;
   }
   if (!(await prepareSubmodelsForExecution())) {
@@ -11041,12 +12198,18 @@ async function toggleTimedExecution() {
     ui.timedStepRunning = true;
     updateEditingLockUi();
     try {
-      const ok = await executeOneStep(false);
-      if (!ok) {
+      const outcome = await executeOneStep(false);
+      if (!outcome || !outcome.ok) {
         stopTimedExecution(false);
         if (!(graph.execution.strictDefinitions && invalidDefinedNodes().length > 0)) {
           setStatusKey("status.timedStopped");
         }
+      } else if (outcome.breakpointHit) {
+        stopTimedExecution(false);
+        setStatusKey("status.breakpointHit", {
+          time: formatNumberValue(Number(graph.execution.currentTime)),
+        });
+        openWatchDebugger();
       }
     } catch (err) {
       stopTimedExecution(false);
@@ -11665,6 +12828,12 @@ newGraphBtn.addEventListener("click", () => {
 });
 saveJsonBtn.addEventListener("click", () => saveGraphJson(false));
 saveAsJsonBtn.addEventListener("click", () => saveGraphJson(true));
+if (exportCsvBtn) {
+  exportCsvBtn.addEventListener("click", () => {
+    closeTopMenus();
+    void exportSimulationCsv();
+  });
+}
 loadJsonBtn.addEventListener("click", openGraphJson);
 
 if (exitSubmodelBtn) {
@@ -11718,6 +12887,7 @@ function commitExecutionInput(inputEl, key) {
     return;
   }
   graph.execution[key] = parsed;
+  scheduleFileStatusRefresh();
   setStatusKey("status.timeConfigUpdated");
 }
 
@@ -11732,6 +12902,7 @@ timeDelayInput.addEventListener("change", () => {
     return;
   }
   graph.execution.delayMs = Math.round(parsed);
+  scheduleFileStatusRefresh();
   setStatusKey("status.timeDelayUpdated", { delay: graph.execution.delayMs });
 });
 
@@ -11745,6 +12916,7 @@ if (decimalDigitsInput) {
     }
     graph.execution.decimals = clampDisplayDecimals(parsed);
     decimalDigitsInput.value = String(graph.execution.decimals);
+    scheduleFileStatusRefresh();
     setStatusKey("status.timeConfigUpdated");
     render();
   });
@@ -12538,6 +13710,48 @@ if (modelAnalysisModal) {
     });
   }
 }
+if (watchDebuggerModal) {
+  const modalHead = watchDebuggerModal.querySelector(".modal-head");
+  const modalCard = watchDebuggerModal.querySelector(".watch-debugger-card");
+  if (modalHead && modalCard) {
+    modalHead.addEventListener("pointerdown", (evt) => {
+      if (evt.target.closest("button")) {
+        return;
+      }
+      const rect = modalCard.getBoundingClientRect();
+      modalCard.style.transform = "none";
+      modalCard.style.left = `${rect.left}px`;
+      modalCard.style.top = `${rect.top}px`;
+      ui.modalDrag = {
+        pointerId: evt.pointerId,
+        offsetX: evt.clientX - rect.left,
+        offsetY: evt.clientY - rect.top,
+        card: modalCard,
+      };
+    });
+  }
+}
+if (localFunctionsModal) {
+  const modalHead = localFunctionsModal.querySelector(".modal-head");
+  const modalCard = localFunctionsModal.querySelector(".local-functions-card");
+  if (modalHead && modalCard) {
+    modalHead.addEventListener("pointerdown", (evt) => {
+      if (evt.target.closest("button")) {
+        return;
+      }
+      const rect = modalCard.getBoundingClientRect();
+      modalCard.style.transform = "none";
+      modalCard.style.left = `${rect.left}px`;
+      modalCard.style.top = `${rect.top}px`;
+      ui.modalDrag = {
+        pointerId: evt.pointerId,
+        offsetX: evt.clientX - rect.left,
+        offsetY: evt.clientY - rect.top,
+        card: modalCard,
+      };
+    });
+  }
+}
 if (textEditorModal) {
   const modalHead = textEditorModal.querySelector(".modal-head");
   if (modalHead && textEditorCard) {
@@ -12576,6 +13790,12 @@ if (analyzeModelBtn) {
     openModelAnalysis();
   });
 }
+if (watchDebuggerBtn) {
+  watchDebuggerBtn.addEventListener("click", () => {
+    closeTopMenus();
+    openWatchDebugger();
+  });
+}
 if (functionsHelpCloseBtn) {
   functionsHelpCloseBtn.addEventListener("click", closeFunctionsHelp);
 }
@@ -12602,6 +13822,68 @@ if (modelAnalysisChecksCloseBtn) {
 }
 if (modelAnalysisChecksDismissBtn) {
   modelAnalysisChecksDismissBtn.addEventListener("click", closeModelAnalysisChecksHelp);
+}
+if (watchDebuggerCloseBtn) {
+  watchDebuggerCloseBtn.addEventListener("click", closeWatchDebugger);
+}
+if (watchDebuggerDismissBtn) {
+  watchDebuggerDismissBtn.addEventListener("click", closeWatchDebugger);
+}
+if (watchDebuggerModal) {
+  watchDebuggerModal.addEventListener("pointerdown", (evt) => {
+    if (evt.target === watchDebuggerModal) {
+      closeWatchDebugger();
+    }
+  });
+}
+if (watchAddSelectedBtn) {
+  watchAddSelectedBtn.addEventListener("click", () => {
+    const node = selectedWatchableNode();
+    if (!node || isEditingUiLocked()) {
+      return;
+    }
+    commitDebugConfigChange(() => {
+      const debug = ensureDebugConfig(graph);
+      if (!debug.watches.includes(node.name)) {
+        debug.watches.push(node.name);
+      }
+      sanitizeDebugConfig(graph);
+    });
+    renderWatchDebugger();
+  });
+}
+if (watchBreakpointEnabledInput) {
+  watchBreakpointEnabledInput.addEventListener("change", () => {
+    commitDebugConfigChange(() => {
+      ensureDebugConfig(graph).breakpointEnabled = Boolean(watchBreakpointEnabledInput.checked);
+      if (!watchBreakpointEnabledInput.checked) {
+        ui.breakpointLastResult = null;
+      }
+    });
+    renderWatchDebugger();
+  });
+}
+if (watchBreakpointInput) {
+  const commitWatchBreakpointExpression = () => {
+    commitDebugConfigChange(() => {
+      ensureDebugConfig(graph).breakpointExpression = String(watchBreakpointInput.value ?? "");
+      ui.breakpointLastResult = null;
+    });
+    renderWatchDebugger();
+  };
+  watchBreakpointInput.addEventListener("input", () => {
+    ui.breakpointLastResult = null;
+    renderWatchDebugger();
+  });
+  watchBreakpointInput.addEventListener("change", commitWatchBreakpointExpression);
+  watchBreakpointInput.addEventListener("blur", commitWatchBreakpointExpression);
+  watchBreakpointInput.addEventListener("keydown", (evt) => {
+    if (evt.key === "Enter") {
+      evt.preventDefault();
+      commitWatchBreakpointExpression();
+      watchBreakpointInput.blur();
+    }
+  });
 }
 if (expressionEditorSwitchCloseBtn) {
   expressionEditorSwitchCloseBtn.addEventListener("click", closeExpressionEditorSwitchModal);
@@ -12638,6 +13920,13 @@ if (modelAnalysisChecksModal) {
   modelAnalysisChecksModal.addEventListener("pointerdown", (evt) => {
     if (evt.target === modelAnalysisChecksModal) {
       closeModelAnalysisChecksHelp();
+    }
+  });
+}
+if (localFunctionsModal) {
+  localFunctionsModal.addEventListener("pointerdown", (evt) => {
+    if (evt.target === localFunctionsModal) {
+      closeLocalFunctionsEditor();
     }
   });
 }
@@ -12707,6 +13996,25 @@ addModelPropBtn.addEventListener("click", () => {
     graph.properties.push({ key: "", value: "" });
   });
 });
+if (editLocalFunctionsBtn) {
+  editLocalFunctionsBtn.addEventListener("click", openLocalFunctionsEditor);
+}
+if (localFunctionsAddBtn) {
+  localFunctionsAddBtn.addEventListener("click", () => {
+    localFunctionsDraft().push({ name: "", params: [], expression: "", description: "" });
+    renderLocalFunctionsEditor();
+    showLocalFunctionsStatus();
+  });
+}
+if (localFunctionsApplyBtn) {
+  localFunctionsApplyBtn.addEventListener("click", commitLocalFunctionsEditor);
+}
+if (localFunctionsCancelBtn) {
+  localFunctionsCancelBtn.addEventListener("click", closeLocalFunctionsEditor);
+}
+if (localFunctionsCloseBtn) {
+  localFunctionsCloseBtn.addEventListener("click", closeLocalFunctionsEditor);
+}
 
 addPropBtn.addEventListener("click", () => {
   if (ui.selectedNodes.size !== 1) {
@@ -12754,6 +14062,27 @@ document.addEventListener("keydown", (evt) => {
       }
     }
     return;
+  }
+
+  if (!watchDebuggerModal?.classList.contains("hidden")) {
+    if (evt.key === "Escape") {
+      evt.preventDefault();
+      closeWatchDebugger();
+      return;
+    }
+  }
+
+  if (!localFunctionsModal?.classList.contains("hidden")) {
+    if (evt.key === "Escape") {
+      evt.preventDefault();
+      closeLocalFunctionsEditor();
+      return;
+    }
+    if ((evt.ctrlKey || evt.metaKey) && evt.key === "Enter") {
+      evt.preventDefault();
+      commitLocalFunctionsEditor();
+      return;
+    }
   }
 
   const expressionEditorActive =

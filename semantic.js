@@ -82,6 +82,29 @@
     Object.keys(MATH_SCOPE).filter((name) => typeof MATH_SCOPE[name] === "function"),
   );
 
+  function normalizeLocalFunctionDefinitions(definitions = []) {
+    if (!Array.isArray(definitions)) {
+      return new Map();
+    }
+    const out = new Map();
+    definitions.forEach((definition) => {
+      const name = normalizeName(definition?.name);
+      if (!name || out.has(name)) {
+        return;
+      }
+      const params = Array.isArray(definition?.params)
+        ? definition.params.map((param) => normalizeName(param)).filter(Boolean)
+        : [];
+      out.set(name, {
+        name,
+        params,
+        expression: String(definition?.expression ?? ""),
+        description: String(definition?.description ?? ""),
+      });
+    });
+    return out;
+  }
+
   function normalizeName(name) {
     return String(name ?? "").trim();
   }
@@ -1645,6 +1668,33 @@
           const mask = buildPredicateMask(target, node.args[0], scope, hooks);
           return indicesWhereValues(mask);
         }
+        const localFunctions = hooks?.localFunctions instanceof Map
+          ? hooks.localFunctions
+          : normalizeLocalFunctionDefinitions(hooks?.localFunctions || []);
+        const localFunction = localFunctions.get(node.name) || null;
+        if (localFunction) {
+          const stack = Array.isArray(hooks?.localFunctionStack) ? hooks.localFunctionStack : [];
+          if (stack.includes(node.name)) {
+            throw new Error(`local function recursion is not allowed: ${node.name}`);
+          }
+          if (node.args.length !== localFunction.params.length) {
+            throw new Error(`${node.name} expects exactly ${localFunction.params.length} arguments`);
+          }
+          const args = node.args.map((arg) => evaluateAstNode(arg, scope, hooks));
+          const fnScope = { ...scope };
+          localFunction.params.forEach((paramName, index) => {
+            fnScope[paramName] = args[index];
+          });
+          const compiled = getCompiledExpression(String(localFunction.expression ?? ""));
+          if (compiled.syntaxErrorMessage) {
+            throw new SyntaxError(compiled.syntaxErrorMessage);
+          }
+          return evaluateAstNode(compiled.ast, fnScope, {
+            ...(hooks || {}),
+            localFunctions,
+            localFunctionStack: [...stack, node.name],
+          });
+        }
         if (!Object.prototype.hasOwnProperty.call(scope, node.name)) {
           throw new ReferenceError(`${node.name} is not defined`);
         }
@@ -1734,7 +1784,11 @@
       raw = evaluateAstWithLocalSelf(
         compiled,
         { ...MATH_SCOPE, ...context },
-        options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
+        {
+          ...(options?.hooks && typeof options.hooks === "object" ? options.hooks : {}),
+          localFunctions: normalizeLocalFunctionDefinitions(options?.localFunctions || []),
+          localFunctionStack: [],
+        },
       );
     } catch (err) {
       if (err && err.name === "ReferenceError") {
@@ -1800,7 +1854,11 @@
       raw = evaluateAstWithLocalSelf(
         { ...compiled, ast: derivativeAst },
         { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
-        options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
+        {
+          ...(options?.hooks && typeof options.hooks === "object" ? options.hooks : {}),
+          localFunctions: normalizeLocalFunctionDefinitions(options?.localFunctions || []),
+          localFunctionStack: [],
+        },
       );
     } catch (err) {
       if (err && err.name === "ReferenceError") {
@@ -1839,7 +1897,11 @@
         const raw = evaluateAstWithLocalSelf(
           { ...compiled, ast: derivativeAst },
           { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
-          options?.hooks && typeof options.hooks === "object" ? options.hooks : null,
+          {
+            ...(options?.hooks && typeof options.hooks === "object" ? options.hooks : {}),
+            localFunctions: normalizeLocalFunctionDefinitions(options?.localFunctions || []),
+            localFunctionStack: [],
+          },
         );
         const normalized = coerceBooleanToNumber(raw);
         const validated = validateComputedValue(normalized);
@@ -1882,6 +1944,8 @@
         { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
         {
           ...(baseHooks || {}),
+          localFunctions: normalizeLocalFunctionDefinitions(options?.localFunctions || []),
+          localFunctionStack: [],
           onIntegralCall(callNode) {
             if (callNode.args.length !== 1) {
               throw new Error("integral expects exactly 1 argument");
@@ -1927,6 +1991,7 @@
     }
     const scopeNames = [
       ...Object.keys(MATH_SCOPE),
+      ...Array.from(normalizeLocalFunctionDefinitions(options?.localFunctions || []).keys()),
       ...extraNames.map((name) => String(name ?? "").trim()).filter(Boolean),
       "__self",
       "self",
@@ -2027,7 +2092,7 @@
     return out;
   }
 
-  function evaluateGraphExpressions(nodes, edges, globals = {}) {
+  function evaluateGraphExpressions(nodes, edges, globals = {}, options = {}) {
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
     const incoming = new Map();
     nodes.forEach((node) => incoming.set(node.id, []));
@@ -2092,7 +2157,9 @@
           continue;
         }
 
-        const result = evaluateValueExpression(node.valueExpression, context);
+        const result = evaluateValueExpression(node.valueExpression, context, {
+          localFunctions: options?.localFunctions || [],
+        });
         results.set(nodeId, result);
         pending.delete(nodeId);
         progressed = true;
@@ -2227,7 +2294,9 @@
         if (!dependenciesReady) {
           continue;
         }
-        parameterResults.set(node.id, evaluateValueExpression(node.valueExpression, context));
+        parameterResults.set(node.id, evaluateValueExpression(node.valueExpression, context, {
+          localFunctions: options?.localFunctions || [],
+        }));
         pendingParameters.delete(nodeId);
         parameterProgressed = true;
       }
@@ -2314,7 +2383,9 @@
         const customResult = customNodeEvaluator
           ? customNodeEvaluator(node, context, { globals, runtimePlan, predecessors })
           : null;
-        const result = customResult || evaluateValueExpression(node.valueExpression, context);
+        const result = customResult || evaluateValueExpression(node.valueExpression, context, {
+          localFunctions: options?.localFunctions || [],
+        });
         algebraicResults.set(nodeId, result);
         pending.delete(nodeId);
         progressed = true;
@@ -2385,12 +2456,14 @@
       if (derivativeStateNodeIds && derivativeStateNodeIds.has(node.id)) {
         stateTransitionResults.set(node.id, evaluateIntegralDerivativeList(node.valueExpression, context, {
           allowThisAlias: true,
+          localFunctions: options?.localFunctions || [],
         }));
         return;
       }
       stateTransitionResults.set(node.id, evaluateValueExpression(node.valueExpression, context, {
         allowThisAlias: true,
         allowIntegral: true,
+        localFunctions: options?.localFunctions || [],
       }));
     });
 
@@ -2437,5 +2510,6 @@
     evaluateGraphExpressions,
     prepareStatefulExecutionPlan,
     evaluateStatefulGraphStep,
+    normalizeLocalFunctionDefinitions,
   };
 })(window);

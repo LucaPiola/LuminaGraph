@@ -1549,6 +1549,154 @@ button:disabled {
   overflow: hidden;
 }
 
+#watchDebuggerModal.modal-modeless {
+  z-index: 1492;
+}
+
+#localFunctionsModal.modal-modeless {
+  z-index: 1491;
+}
+
+.watch-debugger-card {
+  width: min(760px, calc(100vw - 40px));
+  max-width: calc(100vw - 20px);
+  max-height: calc(100vh - 20px);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+}
+
+.local-functions-card {
+  width: min(980px, calc(100vw - 40px));
+  height: min(78vh, 760px);
+  min-width: 720px;
+  min-height: 420px;
+  max-width: calc(100vw - 20px);
+  max-height: calc(100vh - 20px);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+}
+
+.local-functions-toolbar {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.local-functions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.local-function-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #dbe4ec;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.local-function-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.local-function-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.local-function-fields textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.local-function-fields input,
+.local-function-fields textarea {
+  width: 100%;
+}
+
+.local-function-row {
+  display: grid;
+  gap: 4px;
+}
+
+.local-function-empty {
+  padding: 16px 14px;
+  border: 1px dashed #c7d4df;
+  border-radius: 10px;
+  background: #f7fafc;
+  color: #445b6d;
+}
+
+.watch-debugger-body {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+}
+
+.watch-debugger-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.watch-debugger-summary {
+  color: #4e6072;
+  font-size: 0.9rem;
+}
+
+.watch-breakpoint-section {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #dbe4ec;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.watch-debugger-list {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  max-height: 46vh;
+  overflow: auto;
+}
+
+.watch-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #dbe4ec;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.watch-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.watch-item-row {
+  color: #284051;
+  font-size: 0.92rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 #modelAnalysisModal.modal-modeless {
   z-index: 1490;
 }

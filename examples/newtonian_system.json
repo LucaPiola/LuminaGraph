@@ -1,22 +1,39 @@
 {
   "version": 1,
   "modelTitle": "Sistema gravitazionale newtoniano: sole mobile, due pianeti e un satellite",
+  "localFunctions": [
+    {
+      "name": "dist",
+      "params": [
+        "a",
+        "b",
+        "eps"
+      ],
+      "expression": "sqrt(sum((a - b)^2) + eps^2)",
+      "description": "Distanza tra due corpi"
+    }
+  ],
   "view": {
-    "zoom": 0.65,
+    "zoom": 0.75,
     "showGrid": true,
     "highlightNodeEdges": true,
     "gridSize": 20,
-    "scrollLeft": 186,
-    "scrollTop": 124
+    "scrollLeft": 0,
+    "scrollTop": 140
+  },
+  "debug": {
+    "watches": [],
+    "breakpointEnabled": false,
+    "breakpointExpression": ""
   },
   "modelProperties": [],
-  "nodeCounter": 42,
-  "edgeCounter": 101,
-  "widgetCounter": 16,
-  "textItemCounter": 9,
+  "nodeCounter": 45,
+  "edgeCounter": 104,
+  "widgetCounter": 19,
+  "textItemCounter": 12,
   "execution": {
     "t0": 0,
-    "dt": 0.005,
+    "dt": 0.1,
     "t1": 25,
     "delayMs": 1,
     "decimals": 4,
@@ -173,11 +190,11 @@
       "name": "frameBody",
       "output": false,
       "global": false,
-      "type": "algebraic",
+      "type": "parameter",
       "x": 220,
       "y": 80,
-      "width": 170,
-      "height": 76,
+      "width": 140,
+      "height": 80,
       "fillColor": "",
       "strokeColor": "",
       "properties": [
@@ -190,7 +207,6 @@
           "value": "Indice del corpo di riferimento per il grafico x-y"
         }
       ],
-      "input": true,
       "valueExpression": "0"
     },
     {
@@ -416,7 +432,7 @@
         }
       ],
       "input": false,
-      "valueExpression": "sqrt(sum((r1 - rs) * (r1 - rs)) + eps^2)"
+      "valueExpression": "dist(r1, rs, eps)"
     },
     {
       "id": 17,
@@ -441,7 +457,7 @@
         }
       ],
       "input": false,
-      "valueExpression": "sqrt(sum((r2 - rs) * (r2 - rs)) + eps^2)"
+      "valueExpression": "dist(r2, rs, eps)"
     },
     {
       "id": 18,
@@ -466,7 +482,7 @@
         }
       ],
       "input": false,
-      "valueExpression": "sqrt(sum((rm - rs) * (rm - rs)) + eps^2)"
+      "valueExpression": "dist(rm, rs, eps)"
     },
     {
       "id": 19,
@@ -491,7 +507,7 @@
         }
       ],
       "input": false,
-      "valueExpression": "sqrt(sum((r2 - r1) * (r2 - r1)) + eps^2)"
+      "valueExpression": "dist(r1, r2, eps)"
     },
     {
       "id": 20,
@@ -516,7 +532,7 @@
         }
       ],
       "input": false,
-      "valueExpression": "sqrt(sum((rm - r1) * (rm - r1)) + eps^2)"
+      "valueExpression": "dist(r1, rm, eps)"
     },
     {
       "id": 21,
@@ -541,7 +557,7 @@
         }
       ],
       "input": false,
-      "valueExpression": "sqrt(sum((rm - r2) * (rm - r2)) + eps^2)"
+      "valueExpression": "dist(r2, rm, eps)"
     },
     {
       "id": 22,
@@ -1809,7 +1825,7 @@
       "min": 0,
       "max": 3,
       "step": 1,
-      "value": 0,
+      "value": 2,
       "options": [
         {
           "label": "Sole",
