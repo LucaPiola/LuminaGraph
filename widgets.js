@@ -4118,6 +4118,7 @@ globalThis.Widgets = {
   clearAllTableWidgetRows,
   renderWidgets,
   refreshWidgetConfigPanel,
+  copyTextToClipboard,
 };
 
 })();

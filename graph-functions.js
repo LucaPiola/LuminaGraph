@@ -697,19 +697,42 @@
     return value.map((row) => stdevOfVector(row));
   }
 
-  function gridFromCoordinates(rowValues, colValues, collisionMode = "error", typeValues = 1) {
-    const mode = normalizeGridCollisionMode(collisionMode);
+  function normalizeGridDimensions(sizeValue) {
+    const dims = ensureVectorLike(sizeValue, "grid");
+    if (dims.length !== 2) {
+      throw new Error("grid explicit size expects [rows, cols]");
+    }
+    const rowCount = Number(dims[0]);
+    const colCount = Number(dims[1]);
+    if (!Number.isInteger(rowCount) || rowCount < 0 || !Number.isInteger(colCount) || colCount < 0) {
+      throw new Error("grid explicit size expects non-negative integer dimensions");
+    }
+    return { rowCount, colCount };
+  }
+
+  function gridFromCoordinates(rowValues, colValues, arg3 = "error", arg4 = undefined, arg5 = undefined) {
     const rows = ensureVectorLike(rowValues, "grid");
     const cols = ensureVectorLike(colValues, "grid");
     if (rows.length !== cols.length) {
       throw new Error("grid expects row and column vectors with the same length");
     }
+    const explicitSize = Array.isArray(arg3) ? normalizeGridDimensions(arg3) : null;
+    const collisionMode = explicitSize
+      ? (arg4 === undefined ? "error" : arg4)
+      : arg3;
+    const typeValues = explicitSize
+      ? (arg5 === undefined ? 1 : arg5)
+      : (arg4 === undefined ? 1 : arg4);
+    const mode = normalizeGridCollisionMode(collisionMode);
     const hasTypeVector = Array.isArray(typeValues);
     const types = hasTypeVector ? ensureVectorLike(typeValues, "grid") : null;
     if (types && types.length !== rows.length) {
       throw new Error("grid expects type vector with the same length as row and column vectors");
     }
     if (!rows.length) {
+      if (explicitSize) {
+        return Array.from({ length: explicitSize.rowCount }, () => Array(explicitSize.colCount).fill(0));
+      }
       return [];
     }
 
@@ -722,8 +745,13 @@
       return { row, col };
     });
 
-    const rowCount = coords.reduce((max, coord) => Math.max(max, coord.row), 0) + 1;
-    const colCount = coords.reduce((max, coord) => Math.max(max, coord.col), 0) + 1;
+    const inferredRowCount = coords.reduce((max, coord) => Math.max(max, coord.row), 0) + 1;
+    const inferredColCount = coords.reduce((max, coord) => Math.max(max, coord.col), 0) + 1;
+    const rowCount = explicitSize ? explicitSize.rowCount : inferredRowCount;
+    const colCount = explicitSize ? explicitSize.colCount : inferredColCount;
+    if (explicitSize && (inferredRowCount > rowCount || inferredColCount > colCount)) {
+      throw new Error("grid coordinates exceed explicit matrix size");
+    }
     const matrix = Array.from({ length: rowCount }, () => Array(colCount).fill(0));
     const occupied = new Set();
 
@@ -1059,7 +1087,7 @@
       indicesWhere: { kind: "array", signature: "indicesWhere(array) | indicesWhere(cond, array)", descriptionKey: "expr.help.indicesWhere", insertText: "indicesWhere()", cursorOffset: 13 },
       setAt: { kind: "array", signature: "setAt(vector, index, value) | setAt(matrix, [row,col], value) | setAt(matrix, row, rowVector)", descriptionKey: "expr.help.setAt", insertText: "setAt()", cursorOffset: 6 },
       removeAt: { kind: "array", signature: "removeAt(vector, index) | removeAt(matrix, index[, axis])", descriptionKey: "expr.help.removeAt", insertText: "removeAt()", cursorOffset: 9 },
-      grid: { kind: "array", signature: "grid(rows, cols[, collisions[, value]])", descriptionKey: "expr.help.grid", insertText: "grid()", cursorOffset: 5 },
+      grid: { kind: "array", signature: "grid(rows, cols[, [nRows, nCols][, collisions[, value]]])", descriptionKey: "expr.help.grid", insertText: "grid()", cursorOffset: 5 },
       coords: { kind: "array", signature: "coords(matrix[, value])", descriptionKey: "expr.help.coords", insertText: "coords()", cursorOffset: 7 },
       neighbors: { kind: "array", signature: "neighbors(matrix, row, col[, diagonals[, toroidal]])", descriptionKey: "expr.help.neighbors", insertText: "neighbors()", cursorOffset: 10 },
       choice: { kind: "probability", signature: "choice(vector|matrix)", descriptionKey: "expr.help.choice", insertText: "choice()", cursorOffset: 7 },

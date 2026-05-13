@@ -1,0 +1,345 @@
+{
+  "version": 1,
+  "modelTitle": "",
+  "localFunctions": [],
+  "view": {
+    "zoom": 1,
+    "showGrid": true,
+    "highlightNodeEdges": false,
+    "gridSize": 20,
+    "scrollLeft": 134,
+    "scrollTop": 136
+  },
+  "debug": {
+    "watches": [],
+    "breakpointEnabled": false,
+    "breakpointExpression": ""
+  },
+  "modelProperties": [],
+  "nodeCounter": 18,
+  "edgeCounter": 21,
+  "widgetCounter": 8,
+  "textItemCounter": 6,
+  "execution": {
+    "t0": 0,
+    "dt": 1,
+    "t1": 100,
+    "delayMs": 1,
+    "decimals": 3,
+    "integrator": "euler",
+    "strictDefinitions": false
+  },
+  "nodes": [
+    {
+      "id": 2,
+      "name": "agenti",
+      "output": false,
+      "global": false,
+      "type": "state",
+      "x": 180,
+      "y": 260,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "stateTransition": "setAt(setAt(this,0,nuove_righe),1,nuove_colonne)",
+      "initialState": "array([4,num_agenti],if($0<2,randInt(0,dim_spazio-1),randInt(-1,1)))"
+    },
+    {
+      "id": 3,
+      "name": "dim_spazio",
+      "output": false,
+      "global": true,
+      "type": "parameter",
+      "x": 200,
+      "y": 140,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "valueExpression": "50"
+    },
+    {
+      "id": 4,
+      "name": "spazio",
+      "output": true,
+      "global": false,
+      "type": "algebraic",
+      "x": 480,
+      "y": 260,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "input": false,
+      "valueExpression": "grid(righe, colonne, [dim_spazio, dim_spazio],\"first\")"
+    },
+    {
+      "id": 5,
+      "name": "righe",
+      "output": false,
+      "global": false,
+      "type": "algebraic",
+      "x": 360,
+      "y": 180,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "input": false,
+      "valueExpression": "agenti[0]"
+    },
+    {
+      "id": 6,
+      "name": "colonne",
+      "output": false,
+      "global": false,
+      "type": "algebraic",
+      "x": 360,
+      "y": 340,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "input": false,
+      "valueExpression": "agenti[1]"
+    },
+    {
+      "id": 12,
+      "name": "nuove_righe",
+      "output": false,
+      "global": false,
+      "type": "algebraic",
+      "x": 100,
+      "y": 380,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "input": false,
+      "valueExpression": "(agenti[0]+agenti[2])%dim_spazio"
+    },
+    {
+      "id": 16,
+      "name": "nuove_colonne",
+      "output": false,
+      "global": false,
+      "type": "algebraic",
+      "x": 240,
+      "y": 380,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "input": false,
+      "valueExpression": "(agenti[1]+agenti[3])%dim_spazio"
+    },
+    {
+      "id": 17,
+      "name": "num_agenti",
+      "output": false,
+      "global": false,
+      "type": "parameter",
+      "x": 60,
+      "y": 180,
+      "width": 120,
+      "height": 70,
+      "fillColor": "",
+      "strokeColor": "",
+      "properties": [
+        {
+          "key": "note formula",
+          "value": ""
+        },
+        {
+          "key": "descrizione",
+          "value": ""
+        }
+      ],
+      "valueExpression": "100"
+    }
+  ],
+  "edges": [
+    {
+      "id": 4,
+      "from": 2,
+      "to": 5,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 5,
+      "from": 2,
+      "to": 6,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 6,
+      "from": 5,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 7,
+      "from": 6,
+      "to": 4,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 15,
+      "from": 2,
+      "to": 12,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 17,
+      "from": 2,
+      "to": 16,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 18,
+      "from": 12,
+      "to": 2,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 19,
+      "from": 16,
+      "to": 2,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    },
+    {
+      "id": 20,
+      "from": 17,
+      "to": 2,
+      "sourcePort": "",
+      "targetPort": "",
+      "controlPoints": []
+    }
+  ],
+  "textItems": [],
+  "widgets": [
+    {
+      "id": 1,
+      "type": "matrix",
+      "customTitle": "",
+      "x": 640,
+      "y": 60,
+      "width": 540,
+      "height": 560,
+      "minimized": false,
+      "outputOnly": true,
+      "showHistory": false,
+      "xMin": "auto",
+      "xMax": "auto",
+      "yMin": "auto",
+      "yMax": "auto",
+      "showGrid": true,
+      "legendPosition": "top-right",
+      "source": "spazio",
+      "showNumericValues": false,
+      "showIndices": false,
+      "autoFitCells": true,
+      "cellSize": 28,
+      "valueMin": "auto",
+      "valueMax": "auto",
+      "displayRows": null,
+      "displayCols": null,
+      "colorScheme": "blue",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "options": [],
+      "mappings": [],
+      "columns": [],
+      "xyPairs": []
+    }
+  ]
+}

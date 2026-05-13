@@ -841,6 +841,15 @@
     return idx;
   }
 
+  function euclideanModulo(left, right) {
+    const divisor = Number(right);
+    if (!Number.isFinite(divisor) || divisor === 0) {
+      return Number(left) % divisor;
+    }
+    const remainder = Number(left) % divisor;
+    return ((remainder + divisor) % divisor);
+  }
+
   function scalarBinaryOperation(op, left, right) {
     switch (op) {
       case "+":
@@ -852,7 +861,7 @@
       case "/":
         return left / right;
       case "%":
-        return left % right;
+        return euclideanModulo(left, right);
       case "**":
         return left ** right;
       case "<":
@@ -1731,7 +1740,7 @@
           case "/":
             return vectorizedBinaryOperation(left, right, (a, b) => a / b);
           case "%":
-            return vectorizedBinaryOperation(left, right, (a, b) => a % b);
+            return vectorizedBinaryOperation(left, right, (a, b) => euclideanModulo(a, b));
           case "**":
             return vectorizedBinaryOperation(left, right, (a, b) => a ** b);
           case "<":

@@ -161,6 +161,7 @@ const expressionEditorMain = expressionEditorModal?.querySelector(".expression-e
 const expressionSymbolsFilter = document.getElementById("expressionSymbolsFilter");
 const expressionSidebar = document.getElementById("expressionSidebar");
 const expressionHelp = document.getElementById("expressionHelp");
+const expressionHelpCopyBtn = document.getElementById("expressionHelpCopyBtn");
 const expressionPreviewBox = document.getElementById("expressionPreviewBox");
 const expressionPreviewValue = document.getElementById("expressionPreviewValue");
 const expressionDescriptionBox = document.getElementById("expressionDescriptionBox");
@@ -170,6 +171,7 @@ const expressionFormulaNotesInput = document.getElementById("expressionFormulaNo
 const expressionLibrary = document.getElementById("expressionLibrary");
 const expressionEditorHint = document.getElementById("expressionEditorHint");
 const expressionEditorStatus = document.getElementById("expressionEditorStatus");
+const expressionStatusCopyBtn = document.getElementById("expressionStatusCopyBtn");
 const expressionEditorCloseBtn = document.getElementById("expressionEditorCloseBtn");
 const expressionEditorCancelBtn = document.getElementById("expressionEditorCancelBtn");
 const expressionEditorApplyBtn = document.getElementById("expressionEditorApplyBtn");
@@ -268,6 +270,7 @@ const {
   renderPropertiesEditor,
   renderWidgets,
   refreshWidgetConfigPanel,
+  copyTextToClipboard,
 } = globalThis.Widgets || {};
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -737,6 +740,8 @@ const ui = {
   nodeNameEditStart: null,
   timedRunHandle: null,
   timedStepRunning: false,
+  timedRunStartedAt: 0,
+  timedStepLastActivityAt: 0,
   submodelsPrepared: false,
   widgetDrag: null,
   widgetResize: null,
@@ -1324,6 +1329,9 @@ function hideExpressionStatus(statusEl) {
   statusEl.textContent = "";
   statusEl.classList.add("hidden");
   statusEl.classList.remove("ok", "error");
+  if (statusEl === expressionEditorStatus && expressionStatusCopyBtn) {
+    expressionStatusCopyBtn.classList.add("hidden");
+  }
 }
 
 function showExpressionStatus(statusEl, syntaxResult, showOk = true) {
@@ -1342,12 +1350,18 @@ function showExpressionStatus(statusEl, syntaxResult, showOk = true) {
     }
     statusEl.classList.add("ok");
     statusEl.textContent = t("expr.syntaxOk");
+    if (statusEl === expressionEditorStatus && expressionStatusCopyBtn) {
+      expressionStatusCopyBtn.classList.remove("hidden");
+    }
     return;
   }
   statusEl.classList.add("error");
   statusEl.textContent = t("expr.syntaxError", {
     message: localizeExpressionErrorMessage(syntaxResult.message || t("error.evalReason.syntax")),
   });
+  if (statusEl === expressionEditorStatus && expressionStatusCopyBtn) {
+    expressionStatusCopyBtn.classList.remove("hidden");
+  }
 }
 
 function localizeExpressionErrorMessage(message) {
@@ -1693,6 +1707,15 @@ function localizeExpressionErrorMessage(message) {
   }
   if (lower === "grid collision mode must be 'error', 'first', or 'sum'") {
     return t("expr.error.gridCollisionMode");
+  }
+  if (lower === "grid explicit size expects [rows, cols]") {
+    return t("expr.error.gridExplicitSizePair");
+  }
+  if (lower === "grid explicit size expects non-negative integer dimensions") {
+    return t("expr.error.gridExplicitSizeNonNegative");
+  }
+  if (lower === "grid coordinates exceed explicit matrix size") {
+    return t("expr.error.gridExplicitSizeTooSmall");
   }
   if (lower === "grid expects row and column vectors with the same length") {
     return t("expr.error.gridRowColSameLength");
@@ -4270,6 +4293,7 @@ function setExpressionHelp(entry = null) {
   }
   if (!entry) {
     expressionHelp.textContent = t("expr.help.empty");
+    expressionHelpCopyBtn?.classList.add("hidden");
     return;
   }
   const kindKey = `expr.help.kind.${entry.kind || "function"}`;
@@ -4280,6 +4304,7 @@ function setExpressionHelp(entry = null) {
     entry.description || "",
   ].filter(Boolean);
   expressionHelp.textContent = lines.join("\n");
+  expressionHelpCopyBtn?.classList.remove("hidden");
   const preview = expressionValuePreviewForEntry(entry);
   if (!preview) {
     return;
@@ -4294,6 +4319,20 @@ function setExpressionHelp(entry = null) {
     typeEl.textContent = `${t("expr.preview.type")}: ${preview.typeLabel}`;
     expressionHelp.appendChild(typeEl);
   }
+}
+
+async function copyExpressionAuxText(sourceEl, emptyKey = "expr.copy.empty") {
+  const content = String(sourceEl?.innerText || sourceEl?.textContent || "").trim();
+  if (!content) {
+    setStatusKey(emptyKey);
+    return;
+  }
+  const ok = await copyTextToClipboard(content);
+  if (ok) {
+    setStatusKey("status.clipboardTextCopied");
+    return;
+  }
+  setStatusKey("error.clipboardTextCopyFailed");
 }
 
 function expressionValuePreviewForEntry(entry) {
@@ -7043,9 +7082,51 @@ function isExecutionFrozen() {
   return !isExecutionEnded({ t0, dt, t1 });
 }
 
+function clearTimedExecutionStateSilently() {
+  if (ui.timedRunHandle != null) {
+    window.clearInterval(ui.timedRunHandle);
+  }
+  ui.timedRunHandle = null;
+  ui.timedStepRunning = false;
+  ui.timedRunStartedAt = 0;
+  ui.timedStepLastActivityAt = 0;
+}
+
+function staleTimedExecutionThresholdMs() {
+  const delayMs = Number(graph.execution.delayMs);
+  if (Number.isFinite(delayMs) && delayMs > 0) {
+    return Math.max(4000, delayMs * 3);
+  }
+  return 4000;
+}
+
+function hasStaleTimedExecutionLock(now = Date.now()) {
+  if (ui.timedRunHandle == null || ui.timedStepRunning) {
+    return false;
+  }
+  const lastActivity = Math.max(Number(ui.timedStepLastActivityAt) || 0, Number(ui.timedRunStartedAt) || 0);
+  if (lastActivity <= 0) {
+    return false;
+  }
+  return now - lastActivity > staleTimedExecutionThresholdMs();
+}
+
+function ensureEditingUiUnlockedIfIdle() {
+  if (!hasStaleTimedExecutionLock()) {
+    return false;
+  }
+  clearTimedExecutionStateSilently();
+  updateEditingLockUi();
+  render();
+  return true;
+}
+
 function isEditingUiLocked() {
   if (ui.timedRunHandle == null && ui.timedStepRunning) {
     ui.timedStepRunning = false;
+  }
+  if (hasStaleTimedExecutionLock()) {
+    clearTimedExecutionStateSilently();
   }
   return ui.timedRunHandle != null || ui.timedStepRunning;
 }
@@ -7729,6 +7810,19 @@ function refreshSidebar() {
     widgetPanel.classList.add("hidden");
     nodePanel.classList.remove("hidden");
     edgePanel.classList.add("hidden");
+
+    nodeIdentitySection?.classList.remove("hidden");
+    nodeFormulaSection?.classList.remove("hidden");
+    nodeValueSection?.classList.remove("hidden");
+    nodeColorSection?.classList.remove("hidden");
+    nodePropsSection?.classList.remove("hidden");
+    nodeNameLabel?.classList.remove("hidden");
+    nodeValueOutputLabel?.classList.remove("hidden");
+    nodeNameInput?.classList.remove("hidden");
+    nodeShapeInput?.classList.remove("hidden");
+    propsList?.classList.remove("hidden");
+    nodePropsTitle?.classList.remove("hidden");
+    addPropBtn?.classList.remove("hidden");
 
     const sameSidebarNode = ui.sidebarNodeId === node.id;
 
@@ -10457,11 +10551,7 @@ async function createNewGraph() {
 function stopTimedExecution(updateStatus = true) {
   const hadHandle = ui.timedRunHandle != null;
   const wasRunningStep = ui.timedStepRunning === true;
-  if (hadHandle) {
-    window.clearInterval(ui.timedRunHandle);
-  }
-  ui.timedRunHandle = null;
-  ui.timedStepRunning = false;
+  clearTimedExecutionStateSilently();
   if (hadHandle || wasRunningStep) {
     updateEditingLockUi();
     if (updateStatus) {
@@ -12190,12 +12280,15 @@ async function toggleTimedExecution() {
   }
 
   ui.timedStepRunning = false;
+  ui.timedRunStartedAt = Date.now();
+  ui.timedStepLastActivityAt = ui.timedRunStartedAt;
   updateEditingLockUi();
   ui.timedRunHandle = window.setInterval(async () => {
     if (ui.timedStepRunning) {
       return;
     }
     ui.timedStepRunning = true;
+    ui.timedStepLastActivityAt = Date.now();
     updateEditingLockUi();
     try {
       const outcome = await executeOneStep(false);
@@ -12216,6 +12309,7 @@ async function toggleTimedExecution() {
       setStatus(err?.message || t("error.evalReason.runtime"), true);
     } finally {
       ui.timedStepRunning = false;
+      ui.timedStepLastActivityAt = Date.now();
       updateEditingLockUi();
     }
   }, delayMs);
@@ -13578,6 +13672,16 @@ if (expressionEditorCancelBtn) {
 if (expressionEditorApplyBtn) {
   expressionEditorApplyBtn.addEventListener("click", applyExpressionEditor);
 }
+if (expressionHelpCopyBtn) {
+  expressionHelpCopyBtn.addEventListener("click", () => {
+    copyExpressionAuxText(expressionHelp);
+  });
+}
+if (expressionStatusCopyBtn) {
+  expressionStatusCopyBtn.addEventListener("click", () => {
+    copyExpressionAuxText(expressionEditorStatus);
+  });
+}
 if (expressionSymbolsFilter) {
   expressionSymbolsFilter.addEventListener("input", () => {
     renderExpressionLibrary();
@@ -13969,7 +14073,14 @@ document.addEventListener("pointerout", (evt) => {
   }
 });
 
+document.addEventListener("pointerdown", () => {
+  ensureEditingUiUnlockedIfIdle();
+}, true);
+
 document.addEventListener("focusin", (evt) => {
+  if (isTypingTarget(evt.target)) {
+    ensureEditingUiUnlockedIfIdle();
+  }
   const target = activeTooltipTarget(evt.target);
   if (!target) {
     return;
