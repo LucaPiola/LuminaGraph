@@ -1,6 +1,6 @@
 # STGraphX: readme
 
-Luca Mari, versione 10 maggio 2026
+Luca Mari, versione 28 maggio 2026
 
 ## Contesto
 
@@ -10,7 +10,9 @@ STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
 
 (si può provare <a href="https://lmari.github.io/STGraphX" target="_blank" rel="noopener noreferrer">qui</a>)
 
-Ho guardato ma mai toccato il codice generato, che al momento è di circa 600 linee HTML (index.html), 3k linee CSS (styles.css), 22k linee JS (codice: app.js (14k), graph-functions.js (1k), semantic.js (2k), widgets.js (4k); testi it, en: i18n-inline.js (1k)).
+(come spiegato in README-ARCHITECTURE.md, dall'ambiente di sviluppo si può eseguire la versione Electron senza compilazione con `npm run start:desktop -- --lang=en`)
+
+Ho guardato ma mai toccato il codice generato, che al momento è di circa 600 linee HTML (index.html), 3k linee CSS (styles.css), 29k linee JS (runtime*: 3k; player*: 2k; app.js: 13k, graph-functions.js: 2k, i18n-inline.js: 2k, semantic.js: 3k, widgets.js: 4k).
 
 ## Stato del progetto
 
@@ -23,7 +25,7 @@ __Al momento implementati (senza librerie esterne):__
 
 * editor per grafi orientati, con nodi di forme e colori diversi e tooltip, frecce spline, testi, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard (anche condivisa tra instanze diverse dell'app), undo e redo, ...;
 * menu, menu contestuale e pannello di configurazione aggiornato dinamicamente, con tooltip;
-* gestione dei testi dell'interfaccia utente in italiano e inglese, con scelta via query string nella shell web (`?lang=it|en`) e via parametro `--lang=it|en` nella shell Electron;
+* gestione dei testi dell'interfaccia utente in italiano, inglese e portoghese, con scelta via query string nella shell web (`?lang=it|en|pt`) e via parametro `--lang=it|en|pt` nella shell Electron;
 * gestione dei nodi algebrici, di stato, parametri e sottomodelli, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale); controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo sullo stato iniziale: solo espressioni locali o riferimenti a parametri; controllo del numero di cifre decimali visualizzate;
 * variabili globali;
 * gestione di esecuzione completa, passo-passo, temporizzata, con modello in modalità read-only durante l'esecuzione;
@@ -50,13 +52,15 @@ __Al momento implementati (senza librerie esterne):__
 * menu di help;
 * nel menu File, gestione dei modelli aperti di recente;
 * una prima gestione di controllo di correttezza del modello;
-* un primo debugger, con gestione di watch e breakpoint
+* un primo debugger, con gestione di watch e breakpoint;
+* un player per esecuzione di modelli in pagine HTML;
+* un API JavaScript per esecuzione headless mediante script node.js;
 * ...
 
 __Al momento non implementati (rispetto a STGraph):__
 
 * altri widget e altre opzioni per i widget già presenti;
-* varie funzioni;
+* altre funzioni;
 * nodi di stato con output;
 * gestione di interrupt;
 * playmode e altre modalità di esecuzione;
@@ -83,3 +87,7 @@ __Al momento non implementati (rispetto a STGraph):__
 ## Documentazione aggiuntiva
 
 Per l'architettura tecnica e per le istruzioni su come sviluppare il progetto, si veda `README-ARCHITECTURE.md`.
+
+Per l'uso del player e dell'API JavaScript, si veda `README-PLAYER.md`.
+
+Per l'uso di funzioni nei modelli, si veda `README-USAGE.md`.

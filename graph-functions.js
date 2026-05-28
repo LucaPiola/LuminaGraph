@@ -1,4 +1,92 @@
 (function attachGraphFunctions(global) {
+  const AGENT_SCHEMA_KEY = "__stgraphxAgentSchema";
+  const AGENT_FIELD_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const AGENT_FIELD_RESERVED_NAMES = new Set([
+    "this",
+    "self",
+    "__self",
+    "time",
+    "t0",
+    "t1",
+    "dt",
+    "true",
+    "false",
+    "null",
+    "and",
+    "or",
+    "not",
+    "$i",
+    "$j",
+    "$value",
+  ]);
+
+  function cloneAgentSchema(fieldNames) {
+    return Array.isArray(fieldNames) ? fieldNames.slice() : null;
+  }
+
+  function attachAgentSchema(value, fieldNames) {
+    if (!Array.isArray(value) || !Array.isArray(fieldNames)) {
+      return value;
+    }
+    Object.defineProperty(value, AGENT_SCHEMA_KEY, {
+      value: cloneAgentSchema(fieldNames),
+      configurable: true,
+      enumerable: false,
+      writable: true,
+    });
+    return value;
+  }
+
+  function getAgentFieldNames(value) {
+    if (!Array.isArray(value) || !Array.isArray(value[AGENT_SCHEMA_KEY])) {
+      return null;
+    }
+    return cloneAgentSchema(value[AGENT_SCHEMA_KEY]);
+  }
+
+  function isAgentStructuredValue(value) {
+    return Array.isArray(getAgentFieldNames(value));
+  }
+
+  function cloneArrayPreservingAgentSchema(value) {
+    if (!Array.isArray(value)) {
+      return value;
+    }
+    const cloned = value.map((item) => (Array.isArray(item) ? item.slice() : item));
+    const fieldNames = getAgentFieldNames(value);
+    if (fieldNames) {
+      attachAgentSchema(cloned, fieldNames);
+    }
+    return cloned;
+  }
+
+  function collectAgentFieldAliasesFromContext(context) {
+    const out = {};
+    Object.values(context || {}).forEach((value) => {
+      const fieldNames = getAgentFieldNames(value);
+      if (!fieldNames) {
+        return;
+      }
+      fieldNames.forEach((name, index) => {
+        if (!Object.prototype.hasOwnProperty.call(out, name)) {
+          out[name] = index;
+        }
+      });
+    });
+    return out;
+  }
+
+  function normalizeNeighborhoodMode(value) {
+    const normalized = String(value ?? "moore").trim().toLowerCase();
+    if (!normalized || normalized === "moore") {
+      return "moore";
+    }
+    if (normalized === "vonneumann" || normalized === "vonneumann" || normalized === "von_neumann" || normalized === "von-neumann") {
+      return "vonNeumann";
+    }
+    throw new Error("agentSpace neighborhood must be 'moore' or 'vonNeumann'");
+  }
+
   function toFiniteNumber(value, label) {
     const out = Number(value);
     if (!Number.isFinite(out)) {
@@ -380,6 +468,364 @@
     throw new Error(`${fnName} expects a vector`);
   }
 
+  function normalizeAgentFieldNames(fieldNamesValue) {
+    const fieldNames = ensureFlatVector(fieldNamesValue, "agents").map((item) => String(item ?? "").trim());
+    if (!fieldNames.length) {
+      throw new Error("agents expects at least one field name");
+    }
+    const builtInNames = new Set(Object.keys(createMathScope()));
+    const seen = new Set();
+    fieldNames.forEach((name) => {
+      if (!AGENT_FIELD_NAME_RE.test(name)) {
+        throw new Error(`agents field name '${name}' is invalid`);
+      }
+      if (AGENT_FIELD_RESERVED_NAMES.has(name) || builtInNames.has(name)) {
+        throw new Error(`agents field name '${name}' is reserved`);
+      }
+      if (seen.has(name)) {
+        throw new Error(`agents field name '${name}' is duplicated`);
+      }
+      seen.add(name);
+    });
+    return fieldNames;
+  }
+
+  function validateAgentRows(rowsValue, fieldNames) {
+    if (rowsValue == null) {
+      return [];
+    }
+    if (typeof rowsValue === "number" && Number.isFinite(rowsValue)) {
+      const count = Number(rowsValue);
+      if (!Number.isInteger(count) || count < 0) {
+        throw new Error("agents row count must be a non-negative integer");
+      }
+      return Array.from({ length: count }, () => Array.from({ length: fieldNames.length }, () => 0));
+    }
+    if (!Array.isArray(rowsValue) || !rowsValue.every((row) => Array.isArray(row))) {
+      throw new Error("agents expects rows as a matrix");
+    }
+    const width = fieldNames.length;
+    if (!rowsValue.every((row) => row.length === width && row.every((item) => !Array.isArray(item)))) {
+      throw new Error("agents rows must match the number of field names");
+    }
+    return rowsValue.map((row) => row.slice());
+  }
+
+  function createAgentsMatrix(fieldNamesValue, rowsValue = undefined) {
+    const fieldNames = normalizeAgentFieldNames(fieldNamesValue);
+    const rows = validateAgentRows(rowsValue, fieldNames);
+    return attachAgentSchema(rows, fieldNames);
+  }
+
+  function ensureRectangularMatrix(value, fnName) {
+    if (!Array.isArray(value) || !value.every((row) => Array.isArray(row))) {
+      throw new Error(`${fnName} expects a matrix`);
+    }
+    const rowCount = value.length;
+    const fieldNames = getAgentFieldNames(value);
+    const colCount = rowCount > 0 ? value[0].length : (fieldNames ? fieldNames.length : 0);
+    if (!value.every((row) => row.length === colCount && row.every((item) => !Array.isArray(item)))) {
+      throw new Error(`${fnName} expects a rectangular matrix`);
+    }
+    return { rowCount, colCount, fieldNames };
+  }
+
+  function resolveMatrixColumnIndex(indexValue, fieldNames, colCount, fnName) {
+    if (typeof indexValue === "string" && fieldNames) {
+      const normalized = indexValue.trim();
+      const byName = fieldNames.indexOf(normalized);
+      if (byName >= 0) {
+        return byName;
+      }
+      throw new Error(`${fnName} field name '${normalized}' is unknown`);
+    }
+    return normalizeIndex(Number(indexValue), colCount, fnName);
+  }
+
+  function rowFromMatrix(matrixValue, rowIndexValue) {
+    const { rowCount, fieldNames } = ensureRectangularMatrix(matrixValue, "row");
+    const rowIndex = normalizeIndex(Number(rowIndexValue), rowCount, "row");
+    const out = matrixValue[rowIndex].slice();
+    if (fieldNames) {
+      attachAgentSchema(out, fieldNames);
+    }
+    return out;
+  }
+
+  function colFromMatrix(matrixValue, colIndexValue) {
+    const { rowCount, colCount, fieldNames } = ensureRectangularMatrix(matrixValue, "col");
+    const colIndex = resolveMatrixColumnIndex(colIndexValue, fieldNames, colCount, "col");
+    return Array.from({ length: rowCount }, (_, rowIdx) => matrixValue[rowIdx][colIndex]);
+  }
+
+  function nrowsOfMatrix(matrixValue) {
+    return ensureRectangularMatrix(matrixValue, "nrows").rowCount;
+  }
+
+  function ncolsOfMatrix(matrixValue) {
+    return ensureRectangularMatrix(matrixValue, "ncols").colCount;
+  }
+
+  function setMatrixRow(matrixValue, rowIndexValue, nextRowValue) {
+    const { rowCount, colCount, fieldNames } = ensureRectangularMatrix(matrixValue, "setRow");
+    const rowIndex = normalizeIndex(Number(rowIndexValue), rowCount, "setRow");
+    const nextRow = ensureFlatVector(nextRowValue, "setRow");
+    if (nextRow.length !== colCount) {
+      throw new Error("setRow expects a row vector with matching length");
+    }
+    const out = matrixValue.map((row) => row.slice());
+    out[rowIndex] = nextRow.slice();
+    if (fieldNames) {
+      attachAgentSchema(out, fieldNames);
+    }
+    return out;
+  }
+
+  function appendMatrixRow(matrixValue, nextRowValue) {
+    const { colCount, fieldNames } = ensureRectangularMatrix(matrixValue, "appendRow");
+    const nextRow = ensureFlatVector(nextRowValue, "appendRow");
+    if (nextRow.length !== colCount) {
+      throw new Error("appendRow expects a row vector with matching length");
+    }
+    const out = matrixValue.map((row) => row.slice());
+    out.push(nextRow.slice());
+    if (fieldNames) {
+      attachAgentSchema(out, fieldNames);
+    }
+    return out;
+  }
+
+  function removeMatrixRow(matrixValue, rowIndexValue) {
+    const { rowCount, fieldNames } = ensureRectangularMatrix(matrixValue, "removeRow");
+    const rowIndex = normalizeIndex(Number(rowIndexValue), rowCount, "removeRow");
+    const out = matrixValue.filter((_, idx) => idx !== rowIndex).map((row) => row.slice());
+    if (fieldNames) {
+      attachAgentSchema(out, fieldNames);
+    }
+    return out;
+  }
+
+  function setMatrixColumn(matrixValue, colIndexValue, nextColumnValue) {
+    const { rowCount, colCount, fieldNames } = ensureRectangularMatrix(matrixValue, "setCol");
+    const colIndex = resolveMatrixColumnIndex(colIndexValue, fieldNames, colCount, "setCol");
+    const nextColumn = ensureFlatVector(nextColumnValue, "setCol");
+    if (nextColumn.length !== rowCount) {
+      throw new Error("setCol expects a vector with one value per matrix row");
+    }
+    const out = matrixValue.map((row, rowIdx) => {
+      const nextRow = row.slice();
+      nextRow[colIndex] = nextColumn[rowIdx];
+      return nextRow;
+    });
+    if (fieldNames) {
+      attachAgentSchema(out, fieldNames);
+    }
+    return out;
+  }
+
+  function normalizeAgentSpaceDimensions(sizeValue) {
+    const dims = ensureVectorLike(sizeValue, "agentSpace");
+    if (dims.length !== 2) {
+      throw new Error("agentSpace explicit size expects [rows, cols]");
+    }
+    const rowCount = Number(dims[0]);
+    const colCount = Number(dims[1]);
+    if (!Number.isInteger(rowCount) || rowCount < 0 || !Number.isInteger(colCount) || colCount < 0) {
+      throw new Error("agentSpace explicit size expects non-negative integer dimensions");
+    }
+    return { rowCount, colCount };
+  }
+
+  function normalizeAgentSpaceBase(agentsValue, fnName = "agentSpace") {
+    const { rowCount, colCount, fieldNames } = ensureRectangularMatrix(agentsValue, fnName);
+    return { rowCount, colCount, fieldNames };
+  }
+
+  function isNeighborhoodArg(value) {
+    if (typeof value !== "string") {
+      return false;
+    }
+    const normalized = value.trim().toLowerCase();
+    return normalized === "moore"
+      || normalized === "vonneumann"
+      || normalized === "von_neumann"
+      || normalized === "von-neumann";
+  }
+
+  function parseAgentSpaceArgs(argsLike) {
+    const args = Array.from(argsLike);
+    if (args.length < 3 || args.length > 8) {
+      throw new Error("agentSpace expects 3 to 8 arguments");
+    }
+    const [agentsValue, xColValue, yColValue, ...restArgs] = args;
+    let rest = restArgs.slice();
+    let idColValue = null;
+    if (rest.length > 0 && !Array.isArray(rest[0]) && !isNeighborhoodArg(rest[0])) {
+      idColValue = rest.shift();
+    }
+    const explicitSize = Array.isArray(rest[0]) ? normalizeAgentSpaceDimensions(rest.shift()) : null;
+    const neighborhood = normalizeNeighborhoodMode(rest[0]);
+    const toroidal = parseBooleanOption(rest[1], false, "agentSpace", "toroidal");
+    const radiusRaw = rest[2];
+    const radius = radiusRaw == null ? 1 : Number(radiusRaw);
+    if (!Number.isInteger(radius) || radius < 1) {
+      throw new Error("agentSpace radius must be a positive integer");
+    }
+    return { agentsValue, xColValue, yColValue, idColValue, explicitSize, neighborhood, toroidal, radius };
+  }
+
+  function buildAgentSpace() {
+    const { agentsValue, xColValue, yColValue, idColValue, explicitSize, neighborhood, toroidal, radius } = parseAgentSpaceArgs(arguments);
+    const { rowCount: agentCount, colCount: fieldCount, fieldNames } = normalizeAgentSpaceBase(agentsValue, "agentSpace");
+    const xCol = resolveMatrixColumnIndex(xColValue, fieldNames, fieldCount, "agentSpace");
+    const yCol = resolveMatrixColumnIndex(yColValue, fieldNames, fieldCount, "agentSpace");
+    const idCol = idColValue == null ? null : resolveMatrixColumnIndex(idColValue, fieldNames, fieldCount, "agentSpace");
+    const coords = Array.from({ length: agentCount }, (_, index) => {
+      const row = Number(agentsValue[index][xCol]);
+      const col = Number(agentsValue[index][yCol]);
+      if (!Number.isInteger(row) || row < 0 || !Number.isInteger(col) || col < 0) {
+        throw new Error("agentSpace expects non-negative integer coordinates");
+      }
+      return [row, col];
+    });
+    const agentRefs = Array.from({ length: agentCount }, (_, index) => {
+      if (idCol == null) {
+        return index;
+      }
+      const raw = agentsValue[index][idCol];
+      if (raw == null || Array.isArray(raw) || typeof raw === "object") {
+        throw new Error("agentSpace identifier column expects scalar identifiers");
+      }
+      if (typeof raw === "number" && !Number.isFinite(raw)) {
+        throw new Error("agentSpace identifier column expects scalar identifiers");
+      }
+      return raw;
+    });
+    if (idCol != null && new Set(agentRefs).size !== agentRefs.length) {
+      throw new Error("agentSpace identifier values must be unique");
+    }
+    const inferredRowCount = coords.length ? coords.reduce((max, item) => Math.max(max, item[0]), 0) + 1 : 0;
+    const inferredColCount = coords.length ? coords.reduce((max, item) => Math.max(max, item[1]), 0) + 1 : 0;
+    const rowCount = explicitSize ? explicitSize.rowCount : inferredRowCount;
+    const colCount = explicitSize ? explicitSize.colCount : inferredColCount;
+    if (explicitSize && (inferredRowCount > rowCount || inferredColCount > colCount)) {
+      throw new Error("agentSpace coordinates exceed explicit matrix size");
+    }
+    const cells = Array.from({ length: rowCount }, () => Array.from({ length: colCount }, () => []));
+    coords.forEach(([row, col], agentIndex) => {
+      if (rowCount > 0 && colCount > 0) {
+        cells[row][col].push(agentRefs[agentIndex]);
+      }
+    });
+    return {
+      kind: "agentSpace",
+      rowCount,
+      colCount,
+      agentCount,
+      xCol,
+      yCol,
+      idCol,
+      neighborhood,
+      toroidal,
+      radius,
+      coords,
+      agentRefs,
+      cells,
+    };
+  }
+
+  function ensureStandaloneAgentSpace(spaceValue, fnName = "spaceMatrix") {
+    if (!spaceValue || typeof spaceValue !== "object" || spaceValue.kind !== "agentSpace" || !Array.isArray(spaceValue.cells)) {
+      throw new Error(`${fnName} expects an agentSpace`);
+    }
+    return spaceValue;
+  }
+
+  function agentSpaceToMatrix(spaceValue, fnName = "spaceMatrix") {
+    const space = ensureStandaloneAgentSpace(spaceValue, fnName);
+    return space.cells.map((row) => (
+      Array.isArray(row)
+        ? row.map((cell) => (Array.isArray(cell) ? cell.length : 0))
+        : []
+    ));
+  }
+
+  function ensureAgentSpace(spaceValue, agentsValue, fnName) {
+    if (!spaceValue || typeof spaceValue !== "object" || spaceValue.kind !== "agentSpace") {
+      throw new Error(`${fnName} expects an agentSpace`);
+    }
+    const { rowCount } = normalizeAgentSpaceBase(agentsValue, fnName);
+    if (rowCount !== Number(spaceValue.agentCount)) {
+      throw new Error(`${fnName} expects agents and space built from the same population`);
+    }
+    return spaceValue;
+  }
+
+  function neighboringCellCoords(space, baseRow, baseCol) {
+    const out = [];
+    const seen = new Set();
+    for (let dRow = -space.radius; dRow <= space.radius; dRow += 1) {
+      for (let dCol = -space.radius; dCol <= space.radius; dCol += 1) {
+        if (dRow === 0 && dCol === 0) {
+          continue;
+        }
+        if (space.neighborhood === "vonNeumann" && (Math.abs(dRow) + Math.abs(dCol) > space.radius)) {
+          continue;
+        }
+        let nextRow = baseRow + dRow;
+        let nextCol = baseCol + dCol;
+        if (space.toroidal) {
+          if (space.rowCount <= 0 || space.colCount <= 0) {
+            continue;
+          }
+          nextRow = ((nextRow % space.rowCount) + space.rowCount) % space.rowCount;
+          nextCol = ((nextCol % space.colCount) + space.colCount) % space.colCount;
+        } else if (nextRow < 0 || nextRow >= space.rowCount || nextCol < 0 || nextCol >= space.colCount) {
+          continue;
+        }
+        const key = `${nextRow}:${nextCol}`;
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        out.push([nextRow, nextCol]);
+      }
+    }
+    return out;
+  }
+
+  function neighborIndicesForAgent(space, agentIndex) {
+    const normalizedAgentIndex = normalizeIndex(Number(agentIndex), space.agentCount, "neighborsOf");
+    const [baseRow, baseCol] = space.coords[normalizedAgentIndex] || [];
+    const out = [];
+    const seen = new Set();
+    neighboringCellCoords(space, baseRow, baseCol).forEach(([row, col]) => {
+      (space.cells[row]?.[col] || []).forEach((otherIndex) => {
+        if (otherIndex === normalizedAgentIndex || seen.has(otherIndex)) {
+          return;
+        }
+        seen.add(otherIndex);
+        out.push(otherIndex);
+      });
+    });
+    return out;
+  }
+
+  function agentNeighborsOf(agentsValue, spaceValue, agentIndex) {
+    const space = ensureAgentSpace(spaceValue, agentsValue, "neighborsOf");
+    return neighborIndicesForAgent(space, agentIndex);
+  }
+
+  function agentNeighborCountOf(agentsValue, spaceValue, agentIndex) {
+    const space = ensureAgentSpace(spaceValue, agentsValue, "neighborCountOf");
+    return neighborIndicesForAgent(space, agentIndex).length;
+  }
+
+  function allAgentNeighborCounts(agentsValue, spaceValue) {
+    const space = ensureAgentSpace(spaceValue, agentsValue, "allNeighborCounts");
+    return Array.from({ length: space.agentCount }, (_, agentIndex) => neighborIndicesForAgent(space, agentIndex).length);
+  }
+
   function normalizeGridCollisionMode(modeValue) {
     const normalized = String(modeValue ?? "error").trim().toLowerCase();
     if (normalized === "" || normalized === "error") {
@@ -549,6 +995,7 @@
       throw new Error("setAt expects a rectangular matrix");
     }
     const matrix = target.map((row) => row.slice());
+    const fieldNames = getAgentFieldNames(target);
     if (Array.isArray(indexOrIndices)) {
       if (indexOrIndices.length !== 2) {
         throw new Error("setAt expects [row, col] for matrix cell replacement");
@@ -556,6 +1003,9 @@
       const rowIdx = normalizeIndex(Number(indexOrIndices[0]), rowCount, "setAt");
       const colIdx = normalizeIndex(Number(indexOrIndices[1]), colCount, "setAt");
       matrix[rowIdx][colIdx] = nextValue;
+      if (fieldNames) {
+        attachAgentSchema(matrix, fieldNames);
+      }
       return matrix;
     }
     const rowIdx = normalizeIndex(Number(indexOrIndices), rowCount, "setAt");
@@ -563,6 +1013,9 @@
       throw new Error("setAt expects a row vector with matching length");
     }
     matrix[rowIdx] = nextValue.slice();
+    if (fieldNames) {
+      attachAgentSchema(matrix, fieldNames);
+    }
     return matrix;
   }
 
@@ -591,10 +1044,21 @@
     }
     if (normalizedAxis === 0) {
       const rowIdx = normalizeIndex(Number(indexValue), rowCount, "removeAt");
-      return target.filter((_, idx) => idx !== rowIdx).map((row) => row.slice());
+      const out = target.filter((_, idx) => idx !== rowIdx).map((row) => row.slice());
+      const fieldNames = getAgentFieldNames(target);
+      if (fieldNames) {
+        attachAgentSchema(out, fieldNames);
+      }
+      return out;
     }
     const colIdx = normalizeIndex(Number(indexValue), colCount, "removeAt");
-    return target.map((row) => row.filter((_, idx) => idx !== colIdx));
+    const out = target.map((row) => row.filter((_, idx) => idx !== colIdx));
+    const fieldNames = getAgentFieldNames(target);
+    if (fieldNames) {
+      const nextFieldNames = fieldNames.filter((_, idx) => idx !== colIdx);
+      attachAgentSchema(out, nextFieldNames);
+    }
+    return out;
   }
 
   function sizeOfValue(value, axis = null) {
@@ -612,7 +1076,8 @@
       return value.length;
     }
     const rowCount = value.length;
-    const colCount = rowCount > 0 ? value[0].length : 0;
+    const fieldNames = getAgentFieldNames(value);
+    const colCount = rowCount > 0 ? value[0].length : (fieldNames ? fieldNames.length : 0);
     if (!value.every((row) => row.length === colCount)) {
       throw new Error("size expects a rectangular matrix");
     }
@@ -1017,6 +1482,9 @@
       filter: options.filter || unavailable("filter", "filter is a special expression form"),
       reduce: options.reduce || unavailable("reduce", "reduce is a special expression form"),
       append: options.append || unavailable("append", "append is a special expression form"),
+      agentIndicesWhere: options.agentIndicesWhere || unavailable("agentIndicesWhere", "agentIndicesWhere is a special expression form"),
+      filterAgents: options.filterAgents || unavailable("filterAgents", "filterAgents is a special expression form"),
+      mapAgents: options.mapAgents || unavailable("mapAgents", "mapAgents is a special expression form"),
       set: setArrayValues,
       union: unionArrayValues,
       intersection: intersectArrayValues,
@@ -1030,6 +1498,20 @@
       indicesWhere: indicesWhereValues,
       setAt: setAtValue,
       grid: gridFromCoordinates,
+      agents: createAgentsMatrix,
+      row: rowFromMatrix,
+      col: colFromMatrix,
+      nrows: nrowsOfMatrix,
+      ncols: ncolsOfMatrix,
+      setRow: setMatrixRow,
+      appendRow: appendMatrixRow,
+      removeRow: removeMatrixRow,
+      setCol: setMatrixColumn,
+      agentSpace: buildAgentSpace,
+      spaceMatrix: (spaceValue) => agentSpaceToMatrix(spaceValue, "spaceMatrix"),
+      neighborsOf: agentNeighborsOf,
+      neighborCountOf: agentNeighborCountOf,
+      allNeighborCounts: allAgentNeighborCounts,
       coords: coordsFromGrid,
       neighbors: neighborsOfCell,
       size: sizeOfValue,
@@ -1054,9 +1536,9 @@
   const expressionDocs = Object.freeze({
     variables: {
       this: { kind: "variable", signature: "this", descriptionKey: "expr.help.this" },
-      self: { kind: "variable", signature: "self", descriptionKey: "expr.help.self" },
-      $i: { kind: "variable", signature: "$i", descriptionKey: "expr.help.agentIndex" },
-      $j: { kind: "variable", signature: "$j", descriptionKey: "expr.help.agentColumnIndex" },
+      self: { kind: "variable", signature: "self", descriptionKey: "expr.help.self", helpSection: "agent" },
+      $i: { kind: "variable", signature: "$i", descriptionKey: "expr.help.agentIndex", helpSection: "agent" },
+      $j: { kind: "variable", signature: "$j", descriptionKey: "expr.help.agentColumnIndex", helpSection: "agent" },
       time: { kind: "variable", signature: "time", descriptionKey: "expr.help.time" },
       t0: { kind: "variable", signature: "t0", descriptionKey: "expr.help.t0" },
       t1: { kind: "variable", signature: "t1", descriptionKey: "expr.help.t1" },
@@ -1073,6 +1555,23 @@
       getModelProperty: { kind: "function", signature: "getModelProperty(name, fallback)", descriptionKey: "expr.help.getModelProperty", insertText: "getModelProperty()", cursorOffset: 17 },
       setModelProperty: { kind: "function", signature: "setModelProperty(name, value)", descriptionKey: "expr.help.setModelProperty", insertText: "setModelProperty()", cursorOffset: 17 },
       readData: { kind: "function", signature: "readData(path)", descriptionKey: "expr.help.readData", insertText: "readData()", cursorOffset: 9 },
+      agents: { kind: "agent", signature: "agents(fieldNames[, rowsOrCount])", descriptionKey: "expr.help.agents", insertText: "agents()", cursorOffset: 7, helpSection: "agent" },
+      row: { kind: "agent", signature: "row(matrix, i)", descriptionKey: "expr.help.row", insertText: "row()", cursorOffset: 4, helpSection: "agent" },
+      col: { kind: "agent", signature: "col(matrix, j)", descriptionKey: "expr.help.col", insertText: "col()", cursorOffset: 4, helpSection: "agent" },
+      nrows: { kind: "agent", signature: "nrows(matrix)", descriptionKey: "expr.help.nrows", insertText: "nrows()", cursorOffset: 6, helpSection: "agent" },
+      ncols: { kind: "agent", signature: "ncols(matrix)", descriptionKey: "expr.help.ncols", insertText: "ncols()", cursorOffset: 6, helpSection: "agent" },
+      setRow: { kind: "agent", signature: "setRow(matrix, i, row)", descriptionKey: "expr.help.setRow", insertText: "setRow()", cursorOffset: 7, helpSection: "agent" },
+      appendRow: { kind: "agent", signature: "appendRow(matrix, row)", descriptionKey: "expr.help.appendRow", insertText: "appendRow()", cursorOffset: 10, helpSection: "agent" },
+      removeRow: { kind: "agent", signature: "removeRow(matrix, i)", descriptionKey: "expr.help.removeRow", insertText: "removeRow()", cursorOffset: 10, helpSection: "agent" },
+      setCol: { kind: "agent", signature: "setCol(matrix, j, vector)", descriptionKey: "expr.help.setCol", insertText: "setCol()", cursorOffset: 7, helpSection: "agent" },
+      agentSpace: { kind: "agent", signature: "agentSpace(agents, xCol, yCol[, idCol][, [rows, cols][, neighborhood[, toroidal[, radius]]]])", descriptionKey: "expr.help.agentSpace", insertText: "agentSpace()", cursorOffset: 11, helpSection: "agent" },
+      spaceMatrix: { kind: "agent", signature: "spaceMatrix(space)", descriptionKey: "expr.help.spaceMatrix", insertText: "spaceMatrix()", cursorOffset: 12, helpSection: "agent" },
+      neighborsOf: { kind: "agent", signature: "neighborsOf(agents, space, i)", descriptionKey: "expr.help.neighborsOf", insertText: "neighborsOf()", cursorOffset: 12, helpSection: "agent" },
+      neighborCountOf: { kind: "agent", signature: "neighborCountOf(agents, space, i)", descriptionKey: "expr.help.neighborCountOf", insertText: "neighborCountOf()", cursorOffset: 16, helpSection: "agent" },
+      allNeighborCounts: { kind: "agent", signature: "allNeighborCounts(agents, space)", descriptionKey: "expr.help.allNeighborCounts", insertText: "allNeighborCounts()", cursorOffset: 18, helpSection: "agent" },
+      agentIndicesWhere: { kind: "agent", signature: "agentIndicesWhere(cond, agents)", descriptionKey: "expr.help.agentIndicesWhere", insertText: "agentIndicesWhere()", cursorOffset: 18, helpSection: "agent" },
+      filterAgents: { kind: "agent", signature: "filterAgents(cond, agents)", descriptionKey: "expr.help.filterAgents", insertText: "filterAgents()", cursorOffset: 13, helpSection: "agent" },
+      mapAgents: { kind: "agent", signature: "mapAgents(expr, agents)", descriptionKey: "expr.help.mapAgents", insertText: "mapAgents()", cursorOffset: 10, helpSection: "agent" },
       array: { kind: "array", signature: "array(dim | [d0,d1,...], expr)", descriptionKey: "expr.help.array", insertText: "array()", cursorOffset: 6 },
       map: { kind: "function", signature: "map(expr, array)", descriptionKey: "expr.help.map", insertText: "map()", cursorOffset: 4 },
       filter: { kind: "array", signature: "filter(cond, array[, mode])", descriptionKey: "expr.help.filter", insertText: "filter()", cursorOffset: 7 },
@@ -1133,6 +1632,12 @@
   global.GraphFunctions = Object.freeze({
     probability,
     helpers: Object.freeze({
+      attachAgentSchema,
+      getAgentFieldNames,
+      isAgentStructuredValue,
+      cloneArrayPreservingAgentSchema,
+      collectAgentFieldAliasesFromContext,
+      agentSpaceToMatrix,
       sameArrayShape,
       countTruthyValues,
       indicesWhereValues,

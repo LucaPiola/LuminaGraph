@@ -18,8 +18,8 @@
     "showGrid": true,
     "highlightNodeEdges": true,
     "gridSize": 20,
-    "scrollLeft": 0,
-    "scrollTop": 140
+    "scrollLeft": 378,
+    "scrollTop": 170
   },
   "debug": {
     "watches": [],
@@ -27,14 +27,14 @@
     "breakpointExpression": ""
   },
   "modelProperties": [],
-  "nodeCounter": 45,
-  "edgeCounter": 104,
-  "widgetCounter": 19,
-  "textItemCounter": 12,
+  "nodeCounter": 47,
+  "edgeCounter": 106,
+  "widgetCounter": 21,
+  "textItemCounter": 14,
   "execution": {
     "t0": 0,
     "dt": 0.1,
-    "t1": 25,
+    "t1": 100,
     "delayMs": 1,
     "decimals": 4,
     "integrator": "rk4",
@@ -1455,7 +1455,7 @@
     {
       "id": 1,
       "type": "xychart",
-      "customTitle": "Orbiti nel piano x-y (riferimento selezionabile)",
+      "customTitle": "Orbite nel piano x-y",
       "x": 1320,
       "y": 20,
       "width": 640,

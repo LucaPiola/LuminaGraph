@@ -12,6 +12,9 @@
   const sameArrayShape = graphFunctions.helpers?.sameArrayShape || ((left, right) => JSON.stringify(left) === JSON.stringify(right));
   const countTruthyValues = graphFunctions.helpers?.countTruthyValues;
   const indicesWhereValues = graphFunctions.helpers?.indicesWhereValues;
+  const attachAgentSchema = graphFunctions.helpers?.attachAgentSchema || ((value) => value);
+  const getAgentFieldNames = graphFunctions.helpers?.getAgentFieldNames || (() => null);
+  const collectAgentFieldAliasesFromContext = graphFunctions.helpers?.collectAgentFieldAliasesFromContext || (() => ({}));
   const EXPRESSION_CACHE_LIMIT = 1000;
   const expressionCache = new Map();
 
@@ -64,6 +67,24 @@
       return coerceBooleanToNumber(evaluateAstNode(predicateAst, localScope, hooks));
     }
     return target.map((item, idx) => buildPredicateMask(item, predicateAst, scope, hooks, [...localIndices, idx]));
+  }
+
+  function buildAgentLocalScope(scope, agentsValue, rowValue, rowIndex) {
+    const localScope = {
+      ...scope,
+      self: rowValue,
+      $i: rowIndex,
+      $value: rowValue,
+    };
+    const fieldNames = getAgentFieldNames(agentsValue);
+    if (Array.isArray(fieldNames)) {
+      fieldNames.forEach((name, index) => {
+        if (!Object.prototype.hasOwnProperty.call(localScope, name)) {
+          localScope[name] = index;
+        }
+      });
+    }
+    return localScope;
   }
 
   const MATH_SCOPE = Object.freeze(graphFunctions.createMathScope({
@@ -264,17 +285,45 @@
     if (typeof value === "string") {
       return { ok: true, kind: "text", value };
     }
+    if (Array.isArray(value) && value.length === 0) {
+      const fieldNames = getAgentFieldNames(value);
+      if (fieldNames) {
+        const cloned = [];
+        attachAgentSchema(cloned, fieldNames);
+        return { ok: true, kind: "matrix", value: cloned };
+      }
+    }
     if (isNumericVector(value)) {
-      return { ok: true, kind: "vector", value: value.slice() };
+      const cloned = value.slice();
+      const fieldNames = getAgentFieldNames(value);
+      if (fieldNames) {
+        attachAgentSchema(cloned, fieldNames);
+      }
+      return { ok: true, kind: "vector", value: cloned };
     }
     if (isComputedVector(value)) {
-      return { ok: true, kind: "vector", value: value.slice() };
+      const cloned = value.slice();
+      const fieldNames = getAgentFieldNames(value);
+      if (fieldNames) {
+        attachAgentSchema(cloned, fieldNames);
+      }
+      return { ok: true, kind: "vector", value: cloned };
     }
     if (isNumericMatrix(value)) {
-      return { ok: true, kind: "matrix", value: value.map((row) => row.slice()) };
+      const cloned = value.map((row) => row.slice());
+      const fieldNames = getAgentFieldNames(value);
+      if (fieldNames) {
+        attachAgentSchema(cloned, fieldNames);
+      }
+      return { ok: true, kind: "matrix", value: cloned };
     }
     if (isComputedMatrix(value)) {
-      return { ok: true, kind: "matrix", value: value.map((row) => row.slice()) };
+      const cloned = value.map((row) => row.slice());
+      const fieldNames = getAgentFieldNames(value);
+      if (fieldNames) {
+        attachAgentSchema(cloned, fieldNames);
+      }
+      return { ok: true, kind: "matrix", value: cloned };
     }
     if (isNumericTensor(value)) {
       return { ok: true, kind: "array", value: JSON.parse(JSON.stringify(value)) };
@@ -284,6 +333,9 @@
     }
     if (isNumericNestedArray(value)) {
       return { ok: true, kind: "array", value: JSON.parse(JSON.stringify(value)) };
+    }
+    if (value && typeof value === "object") {
+      return { ok: true, kind: "object", value: JSON.parse(JSON.stringify(value)) };
     }
     return { ok: false, reason: "type" };
   }
@@ -372,7 +424,12 @@
       return 0;
     }
     if (Array.isArray(value)) {
-      return value.map((item) => coerceBooleanToNumber(item));
+      const normalized = value.map((item) => coerceBooleanToNumber(item));
+      const fieldNames = getAgentFieldNames(value);
+      if (fieldNames) {
+        attachAgentSchema(normalized, fieldNames);
+      }
+      return normalized;
     }
     return value;
   }
@@ -756,6 +813,57 @@
     );
   }
 
+  function normalizeAgentFieldAliasMap(options = {}, context = {}) {
+    const explicit = options?.agentFieldAliases && typeof options.agentFieldAliases === "object"
+      ? options.agentFieldAliases
+      : null;
+    if (explicit && Object.keys(explicit).length) {
+      return { ...explicit };
+    }
+    return collectAgentFieldAliasesFromContext(context);
+  }
+
+  function collectAgentFieldNamesFromAst(node, out = new Set()) {
+    if (!node || typeof node !== "object") {
+      return out;
+    }
+    if (node.type === "call" && node.name === "agents" && Array.isArray(node.args) && node.args.length >= 1) {
+      const fieldArg = node.args[0];
+      if (fieldArg?.type === "array" && Array.isArray(fieldArg.elements)) {
+        fieldArg.elements.forEach((element) => {
+          if (element?.type === "literal" && typeof element.value === "string") {
+            const name = String(element.value || "").trim();
+            if (name) {
+              out.add(name);
+            }
+          }
+        });
+      }
+    }
+    Object.values(node).forEach((value) => {
+      if (Array.isArray(value)) {
+        value.forEach((item) => collectAgentFieldNamesFromAst(item, out));
+        return;
+      }
+      if (value && typeof value === "object") {
+        collectAgentFieldNamesFromAst(value, out);
+      }
+    });
+    return out;
+  }
+
+  function extractAgentFieldNamesFromExpression(expression) {
+    const source = String(expression ?? "").trim();
+    if (!source) {
+      return [];
+    }
+    const compiled = getCompiledExpression(source);
+    if (compiled.syntaxErrorMessage || !compiled.ast) {
+      return [];
+    }
+    return [...collectAgentFieldNamesFromAst(compiled.ast)];
+  }
+
 
   function collectIntegralArgAstsFromNode(node, out = []) {
     if (!node || typeof node !== "object") {
@@ -947,12 +1055,21 @@
     if (!Array.isArray(target)) {
       throw new Error("append expects a vector or matrix as first argument");
     }
-    const isMatrix = target.length > 0 && target.every((row) => Array.isArray(row));
+    const fieldNames = getAgentFieldNames(target);
+    const isMatrix = Boolean(fieldNames) || (target.length > 0 && target.every((row) => Array.isArray(row)));
     if (!isMatrix) {
       if (Array.isArray(value)) {
-        return [...target, ...value];
+        const out = [...target, ...value];
+        if (fieldNames) {
+          attachAgentSchema(out, fieldNames);
+        }
+        return out;
       }
-      return [...target, value];
+      const out = [...target, value];
+      if (fieldNames) {
+        attachAgentSchema(out, fieldNames);
+      }
+        return out;
     }
     if (!Array.isArray(value) || value.some((item) => Array.isArray(item))) {
       throw new Error("append on matrices expects a vector row as second argument");
@@ -964,7 +1081,11 @@
     if (value.length !== columnCount) {
       throw new Error("appended row length does not match matrix column count");
     }
-    return [...target.map((row) => row.slice()), value.slice()];
+    const out = [...target.map((row) => row.slice()), value.slice()];
+    if (fieldNames) {
+      attachAgentSchema(out, fieldNames);
+    }
+    return out;
   }
 
   function tokenizeExpression(source) {
@@ -1452,6 +1573,9 @@
         return node.elements.map((item) => evaluateAstNode(item, scope, hooks));
       case "identifier":
         if (!Object.prototype.hasOwnProperty.call(scope, node.name)) {
+          if (hooks?.agentFieldAliases && Object.prototype.hasOwnProperty.call(hooks.agentFieldAliases, node.name)) {
+            return hooks.agentFieldAliases[node.name];
+          }
           throw new ReferenceError(`${node.name} is not defined`);
         }
         return scope[node.name];
@@ -1677,6 +1801,73 @@
           const mask = buildPredicateMask(target, node.args[0], scope, hooks);
           return indicesWhereValues(mask);
         }
+        if (node.name === "agentIndicesWhere") {
+          if (node.args.length !== 2) {
+            throw new Error("agentIndicesWhere expects exactly 2 arguments");
+          }
+          const agentsValue = evaluateAstNode(node.args[1], scope, hooks);
+          if (!Array.isArray(agentsValue) || !agentsValue.every((row) => Array.isArray(row))) {
+            throw new Error("agentIndicesWhere expects a matrix of agents");
+          }
+          const rowCount = agentsValue.length;
+          const colCount = rowCount > 0 ? agentsValue[0].length : (getAgentFieldNames(agentsValue)?.length || 0);
+          if (!agentsValue.every((row) => row.length === colCount && row.every((item) => !Array.isArray(item)))) {
+            throw new Error("agentIndicesWhere expects a rectangular agent matrix");
+          }
+          return agentsValue.flatMap((row, rowIndex) => (
+            coerceBooleanToNumber(evaluateAstNode(node.args[0], buildAgentLocalScope(scope, agentsValue, row.slice(), rowIndex), hooks))
+              ? [rowIndex]
+              : []
+          ));
+        }
+        if (node.name === "filterAgents") {
+          if (node.args.length !== 2) {
+            throw new Error("filterAgents expects exactly 2 arguments");
+          }
+          const agentsValue = evaluateAstNode(node.args[1], scope, hooks);
+          if (!Array.isArray(agentsValue) || !agentsValue.every((row) => Array.isArray(row))) {
+            throw new Error("filterAgents expects a matrix of agents");
+          }
+          const rowCount = agentsValue.length;
+          const colCount = rowCount > 0 ? agentsValue[0].length : (getAgentFieldNames(agentsValue)?.length || 0);
+          if (!agentsValue.every((row) => row.length === colCount && row.every((item) => !Array.isArray(item)))) {
+            throw new Error("filterAgents expects a rectangular agent matrix");
+          }
+          const out = agentsValue.filter((row, rowIndex) => (
+            coerceBooleanToNumber(evaluateAstNode(node.args[0], buildAgentLocalScope(scope, agentsValue, row.slice(), rowIndex), hooks))
+          )).map((row) => row.slice());
+          const fieldNames = getAgentFieldNames(agentsValue);
+          if (fieldNames) {
+            attachAgentSchema(out, fieldNames);
+          }
+          return out;
+        }
+        if (node.name === "mapAgents") {
+          if (node.args.length !== 2) {
+            throw new Error("mapAgents expects exactly 2 arguments");
+          }
+          const agentsValue = evaluateAstNode(node.args[1], scope, hooks);
+          if (!Array.isArray(agentsValue) || !agentsValue.every((row) => Array.isArray(row))) {
+            throw new Error("mapAgents expects a matrix of agents");
+          }
+          const rowCount = agentsValue.length;
+          const colCount = rowCount > 0 ? agentsValue[0].length : (getAgentFieldNames(agentsValue)?.length || 0);
+          if (!agentsValue.every((row) => row.length === colCount && row.every((item) => !Array.isArray(item)))) {
+            throw new Error("mapAgents expects a rectangular agent matrix");
+          }
+          const out = agentsValue.map((row, rowIndex) => {
+            const mappedRow = evaluateAstNode(node.args[0], buildAgentLocalScope(scope, agentsValue, row.slice(), rowIndex), hooks);
+            if (!Array.isArray(mappedRow) || mappedRow.length !== colCount || mappedRow.some((item) => Array.isArray(item))) {
+              throw new Error("mapAgents expects each transformed agent to be a row vector with matching length");
+            }
+            return mappedRow.slice();
+          });
+          const fieldNames = getAgentFieldNames(agentsValue);
+          if (fieldNames) {
+            attachAgentSchema(out, fieldNames);
+          }
+          return out;
+        }
         const localFunctions = hooks?.localFunctions instanceof Map
           ? hooks.localFunctions
           : normalizeLocalFunctionDefinitions(hooks?.localFunctions || []);
@@ -1795,6 +1986,7 @@
         { ...MATH_SCOPE, ...context },
         {
           ...(options?.hooks && typeof options.hooks === "object" ? options.hooks : {}),
+          agentFieldAliases: normalizeAgentFieldAliasMap(options, context),
           localFunctions: normalizeLocalFunctionDefinitions(options?.localFunctions || []),
           localFunctionStack: [],
         },
@@ -1865,6 +2057,7 @@
         { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
         {
           ...(options?.hooks && typeof options.hooks === "object" ? options.hooks : {}),
+          agentFieldAliases: normalizeAgentFieldAliasMap(options, context),
           localFunctions: normalizeLocalFunctionDefinitions(options?.localFunctions || []),
           localFunctionStack: [],
         },
@@ -1908,6 +2101,7 @@
           { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
           {
             ...(options?.hooks && typeof options.hooks === "object" ? options.hooks : {}),
+            agentFieldAliases: normalizeAgentFieldAliasMap(options, context),
             localFunctions: normalizeLocalFunctionDefinitions(options?.localFunctions || []),
             localFunctionStack: [],
           },
@@ -1953,6 +2147,7 @@
         { ...MATH_SCOPE, integral: unavailableIntegral, ...context },
         {
           ...(baseHooks || {}),
+          agentFieldAliases: normalizeAgentFieldAliasMap(options, context),
           localFunctions: normalizeLocalFunctionDefinitions(options?.localFunctions || []),
           localFunctionStack: [],
           onIntegralCall(callNode) {
@@ -2011,6 +2206,7 @@
       "t0",
       "t1",
       "dt",
+      ...Object.keys(options?.agentFieldAliases || {}),
     ];
     const knownNames = new Set(scopeNames);
     if (compiled.syntaxErrorMessage) {
@@ -2520,5 +2716,6 @@
     prepareStatefulExecutionPlan,
     evaluateStatefulGraphStep,
     normalizeLocalFunctionDefinitions,
+    extractAgentFieldNamesFromExpression,
   };
 })(window);

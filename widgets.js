@@ -1,5 +1,7 @@
 (() => {
 
+const graphFunctionHelpers = globalThis.GraphFunctions?.helpers || {};
+
 function addTableWidget(at = null) {
   const id = widgetCounter++;
   const z = Math.max(0.0001, ui.zoom || 1);
@@ -1479,6 +1481,21 @@ function renderTextWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
   body.appendChild(wrap);
 }
 
+function matrixWidgetRenderableMatrix(value) {
+  if (Array.isArray(value) && value.every((row) => Array.isArray(row))) {
+    const rowCount = value.length;
+    const colCount = rowCount > 0 ? value[0].length : 0;
+    if (value.every((row) => row.length === colCount)) {
+      return value;
+    }
+    return null;
+  }
+  if (value && typeof value === "object" && value.kind === "agentSpace") {
+    return graphFunctionHelpers.agentSpaceToMatrix?.(value) || null;
+  }
+  return null;
+}
+
 function renderMatrixWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
   body.innerHTML = "";
   sanitizeMatrixWidgetOptions(widget);
@@ -1501,21 +1518,8 @@ function renderMatrixWidgetBody(body, widget, nodeMap = buildNodeNameMap()) {
     body.appendChild(msg);
     return;
   }
-  const matrix = sourceNode.computedValue;
-  if (!Array.isArray(matrix) || !matrix.every((row) => Array.isArray(row))) {
-    if (Array.isArray(widget.lastMatrixValue)) {
-      renderMatrixGrid(body, widget, widget.lastMatrixValue);
-      return;
-    }
-    const msg = document.createElement("div");
-    msg.className = "empty-props";
-    msg.textContent = t("widget.matrixNotMatrix");
-    body.appendChild(msg);
-    return;
-  }
-  const rowCount = matrix.length;
-  const colCount = rowCount > 0 ? matrix[0].length : 0;
-  if (!matrix.every((row) => row.length === colCount)) {
+  const matrix = matrixWidgetRenderableMatrix(sourceNode.computedValue);
+  if (!Array.isArray(matrix)) {
     if (Array.isArray(widget.lastMatrixValue)) {
       renderMatrixGrid(body, widget, widget.lastMatrixValue);
       return;
@@ -1596,17 +1600,8 @@ function matrixWidgetStructuredText(widget, nodeMap = buildNodeNameMap()) {
   sanitizeMatrixWidgetOptions(widget);
   const sourceNode = nodeMap.get(widget.source);
   let matrix = null;
-  if (
-    sourceNode &&
-    !sourceNode.computedError &&
-    Array.isArray(sourceNode.computedValue) &&
-    sourceNode.computedValue.every((row) => Array.isArray(row))
-  ) {
-    const rowCount = sourceNode.computedValue.length;
-    const colCount = rowCount > 0 ? sourceNode.computedValue[0].length : 0;
-    if (sourceNode.computedValue.every((row) => row.length === colCount)) {
-      matrix = sourceNode.computedValue;
-    }
+  if (sourceNode && !sourceNode.computedError) {
+    matrix = matrixWidgetRenderableMatrix(sourceNode.computedValue);
   }
   if (!matrix && Array.isArray(widget.lastMatrixValue)) {
     matrix = widget.lastMatrixValue;

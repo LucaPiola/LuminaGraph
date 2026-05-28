@@ -208,6 +208,8 @@ oppure:
 
 ```bash
 npm run start:desktop -- --lang=it
+
+npm run start:desktop -- --lang=pt
 ```
 
 Se non passi `--lang`, la shell Electron prova a usare la lingua del sistema operativo.

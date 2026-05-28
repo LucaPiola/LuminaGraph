@@ -279,7 +279,7 @@ const BASE_CANVAS_WIDTH = 1200;
 const BASE_CANVAS_HEIGHT = 800;
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 3;
-const SUPPORTED_LANGS = new Set(["it", "en"]);
+const SUPPORTED_LANGS = new Set(["it", "en", "pt"]);
 const CHART_SERIES_PALETTE = ["#0e7ac4", "#e67e22", "#27ae60", "#8e44ad", "#c0392b", "#16a085"];
 const RECENT_MODELS_STORAGE_KEY = "stgraphx.recentModels.v1";
 const MODEL_CLIPBOARD_STORAGE_KEY = "stgraphx.modelClipboard.v1";
@@ -345,6 +345,80 @@ function normalizeTableColumnName(column) {
     }
   }
   return String(column ?? "");
+}
+
+const graphFunctionHelpers = globalThis.GraphFunctions?.helpers || {};
+
+function appendUniqueNames(target, names) {
+  (names || []).forEach((name) => {
+    const normalized = String(name ?? "").trim();
+    if (normalized && !target.includes(normalized)) {
+      target.push(normalized);
+    }
+  });
+}
+
+function declaredAgentFieldNamesForNode(node) {
+  if (!node) {
+    return [];
+  }
+  const out = [];
+  appendUniqueNames(out, graphFunctionHelpers.getAgentFieldNames?.(node.computedValue));
+  if (isStateNode(node)) {
+    appendUniqueNames(out, semantics.extractAgentFieldNamesFromExpression?.(node.initialStateExpression));
+  }
+  appendUniqueNames(out, semantics.extractAgentFieldNamesFromExpression?.(node.valueExpression));
+  return out;
+}
+
+function accessibleAgentFieldAliasNames(node, fieldKey = "value") {
+  if (!node) {
+    return [];
+  }
+  const out = [];
+  appendUniqueNames(out, declaredAgentFieldNamesForNode(node));
+  globalParameterNodesForModel(graph, node.id).forEach((depNode) => {
+    appendUniqueNames(out, declaredAgentFieldNamesForNode(depNode));
+  });
+  graph.edges
+    .filter((edge) => edge.to === node.id)
+    .map((edge) => getNodeById(edge.from))
+    .filter(Boolean)
+    .filter((depNode) => fieldKey !== "initial" || depNode.shape === "diamond")
+    .forEach((depNode) => {
+      appendUniqueNames(out, declaredAgentFieldNamesForNode(depNode));
+    });
+  return out;
+}
+
+function accessibleAgentFieldAliasEntries(node, fieldKey = "value") {
+  const seen = new Set();
+  const out = [];
+  const addFromNode = (sourceNode) => {
+    declaredAgentFieldNamesForNode(sourceNode).forEach((name, index) => {
+      if (seen.has(name)) {
+        return;
+      }
+      seen.add(name);
+      out.push({
+        name,
+        index,
+        source: sourceNode?.name || "",
+      });
+    });
+  };
+  if (!node) {
+    return out;
+  }
+  addFromNode(node);
+  globalParameterNodesForModel(graph, node.id).forEach(addFromNode);
+  graph.edges
+    .filter((edge) => edge.to === node.id)
+    .map((edge) => getNodeById(edge.from))
+    .filter(Boolean)
+    .filter((depNode) => fieldKey !== "initial" || depNode.shape === "diamond")
+    .forEach(addFromNode);
+  return out;
 }
 
 function parseAutoNullableNumber(value) {
@@ -468,7 +542,7 @@ const SUBMODEL_DEFERRED_RESOLUTION = "__submodel_deferred_resolution__";
 const READ_DATA_CALL_PATTERN = /\breadData\s*\(/;
 const READ_DATA_LITERAL_CALL_PATTERN = /\breadData\s*\(\s*(['"])((?:\\.|(?!\1).)*)\1\s*\)/g;
 function descriptionPropertyKey() {
-  return currentLang === "en" ? "description" : "descrizione";
+  return currentLang === "it" ? "descrizione" : "description";
 }
 
 function descriptionPropertyKeys() {
@@ -476,7 +550,7 @@ function descriptionPropertyKeys() {
 }
 
 function formulaNotesPropertyKey() {
-  return currentLang === "en" ? "formula notes" : "note formula";
+  return currentLang === "it" ? "note formula" : "formula notes";
 }
 
 function formulaNotesPropertyKeys() {
@@ -530,12 +604,7 @@ function sanitizeLocalFunctionParams(params) {
 }
 
 function sanitizeLocalFunctionDefinition(definition = {}) {
-  return {
-    name: sanitizeLocalFunctionName(definition.name),
-    params: sanitizeLocalFunctionParams(definition.params),
-    expression: String(definition.expression ?? "").trim(),
-    description: String(definition.description ?? "").trim(),
-  };
+  return runtimeShared.sanitizeLocalFunctionDefinition(definition);
 }
 
 function sanitizeLocalFunctions(model = graph) {
@@ -820,8 +889,16 @@ svg.appendChild(controlsLayer);
 svg.appendChild(marqueeLayer);
 const semantics = window.GraphSemantics;
 
+const runtimeShared = globalThis.STGraphXRuntimeShared?.createRuntimeShared({
+  getCurrentLang: () => currentLang,
+});
+
+if (!runtimeShared) {
+  throw new Error("STGraphX runtime shared helpers are unavailable");
+}
+
 function clamp(val, min, max) {
-  return Math.min(max, Math.max(min, val));
+  return runtimeShared.clamp(val, min, max);
 }
 
 function svgPoint(evt) {
@@ -898,7 +975,7 @@ function updateCanvasGridAppearance() {
 }
 
 function deepClone(obj) {
-  return JSON.parse(JSON.stringify(obj));
+  return runtimeShared.deepClone(obj);
 }
 
 function normalizeColorString(value) {
@@ -1063,8 +1140,13 @@ async function showDirectoryPickerCompat(options) {
 }
 
 function bundledI18nMessages(lang) {
-  const raw = window.STGraphXI18nBundles?.[lang];
-  return raw && typeof raw === "object" ? { ...raw } : null;
+  const bundles = window.STGraphXI18nBundles || {};
+  const fallback = bundles.en && typeof bundles.en === "object" ? bundles.en : null;
+  const raw = bundles?.[lang];
+  if (raw && typeof raw === "object") {
+    return fallback && raw !== fallback ? { ...fallback, ...raw } : { ...raw };
+  }
+  return fallback ? { ...fallback } : null;
 }
 
 function resolveLangFromUrl() {
@@ -1684,6 +1766,15 @@ function localizeExpressionErrorMessage(message) {
   if (lower === "setat expects a row vector with matching length") {
     return t("expr.error.setAtRowVectorLength");
   }
+  if (lower === "setrow expects a row vector with matching length") {
+    return t("expr.error.setRowLength");
+  }
+  if (lower === "appendrow expects a row vector with matching length") {
+    return t("expr.error.appendRowLength");
+  }
+  if (lower === "setcol expects a vector with one value per matrix row") {
+    return t("expr.error.setColLength");
+  }
   if (lower === "removeat does not accept axis for vectors") {
     return t("expr.error.removeAtAxisVector");
   }
@@ -1733,8 +1824,79 @@ function localizeExpressionErrorMessage(message) {
   if (lower === "grid sum mode expects numeric values on coincident coordinates") {
     return t("expr.error.gridSumNumeric");
   }
+  if (lower === "agents expects at least one field name") {
+    return t("expr.error.agentsNeedsFields");
+  }
+  if (lower === "agents expects rows as a matrix") {
+    return t("expr.error.agentsRowsMatrix");
+  }
+  if (lower === "agents row count must be a non-negative integer") {
+    return t("expr.error.agentsRowCount");
+  }
+  if (lower === "agents rows must match the number of field names") {
+    return t("expr.error.agentsRowsLength");
+  }
+  const agentFieldInvalidMatch = raw.match(/^agents field name '([^']+)' is invalid$/i);
+  if (agentFieldInvalidMatch) {
+    return t("expr.error.agentsFieldInvalid", { name: agentFieldInvalidMatch[1] });
+  }
+  const agentFieldReservedMatch = raw.match(/^agents field name '([^']+)' is reserved$/i);
+  if (agentFieldReservedMatch) {
+    return t("expr.error.agentsFieldReserved", { name: agentFieldReservedMatch[1] });
+  }
+  const agentFieldDuplicatedMatch = raw.match(/^agents field name '([^']+)' is duplicated$/i);
+  if (agentFieldDuplicatedMatch) {
+    return t("expr.error.agentsFieldDuplicated", { name: agentFieldDuplicatedMatch[1] });
+  }
+  const agentFieldUnknownMatch = raw.match(/^([A-Za-z_$][A-Za-z0-9_$]*) field name '([^']+)' is unknown$/i);
+  if (agentFieldUnknownMatch) {
+    return t("expr.error.agentFieldUnknown", { fn: agentFieldUnknownMatch[1], name: agentFieldUnknownMatch[2] });
+  }
   if (lower === "filter mode must be 'elements', 'rows', or 'cols'") {
     return t("expr.error.filterMode");
+  }
+  if (lower === "agentspace explicit size expects [rows, cols]") {
+    return t("expr.error.agentSpaceSizePair");
+  }
+  if (lower === "agentspace explicit size expects non-negative integer dimensions") {
+    return t("expr.error.agentSpaceSizeNonNegative");
+  }
+  if (lower === "agentspace neighborhood must be 'moore' or 'vonneumann'") {
+    return t("expr.error.agentSpaceNeighborhood");
+  }
+  if (lower === "agentspace radius must be a positive integer") {
+    return t("expr.error.agentSpaceRadius");
+  }
+  if (lower === "agentspace expects non-negative integer coordinates") {
+    return t("expr.error.agentSpaceCoords");
+  }
+  if (lower === "agentspace coordinates exceed explicit matrix size") {
+    return t("expr.error.agentSpaceTooSmall");
+  }
+  if (lower === "agentspace identifier column expects scalar identifiers") {
+    return t("expr.error.agentSpaceIdScalar");
+  }
+  if (lower === "agentspace identifier values must be unique") {
+    return t("expr.error.agentSpaceIdUnique");
+  }
+  const agentSpaceExpectedMatch = raw.match(/^([A-Za-z_$][A-Za-z0-9_$]*) expects an agentspace$/i);
+  if (agentSpaceExpectedMatch) {
+    return t("expr.error.agentSpaceExpected", { name: agentSpaceExpectedMatch[1] });
+  }
+  const agentSpacePopulationMatch = raw.match(/^([A-Za-z_$][A-Za-z0-9_$]*) expects agents and space built from the same population$/i);
+  if (agentSpacePopulationMatch) {
+    return t("expr.error.agentSpacePopulationMismatch", { name: agentSpacePopulationMatch[1] });
+  }
+  const agentsMatrixMatch = raw.match(/^([A-Za-z_$][A-Za-z0-9_$]*) expects a matrix of agents$/i);
+  if (agentsMatrixMatch) {
+    return t("expr.error.agentsMatrixExpected", { name: agentsMatrixMatch[1] });
+  }
+  const agentsRectMatrixMatch = raw.match(/^([A-Za-z_$][A-Za-z0-9_$]*) expects a rectangular agent matrix$/i);
+  if (agentsRectMatrixMatch) {
+    return t("expr.error.agentsMatrixRectangular", { name: agentsRectMatrixMatch[1] });
+  }
+  if (lower === "mapagents expects each transformed agent to be a row vector with matching length") {
+    return t("expr.error.mapAgentsRowLength");
   }
   if (lower === "filter mode 'rows' or 'cols' requires a matrix") {
     return t("expr.error.filterRowsColsMatrix");
@@ -1841,6 +2003,9 @@ function validateExpressionDraft(value, fieldKey = null) {
       .forEach((depNode) => {
         extraNames.push(depNode.name);
       });
+    accessibleAgentFieldAliasNames(node, meta?.key || "value").forEach((name) => {
+      extraNames.push(name);
+    });
   }
   const result = semantics.validateExpressionSyntax(text, extraNames, {
     allowThisAlias: allowStateTransitionOnly,
@@ -1886,6 +2051,9 @@ function validateNodeDefinition(node) {
       .forEach((depNode) => {
         extraNames.push(depNode.name);
       });
+    accessibleAgentFieldAliasNames(node, fieldKey || "value").forEach((name) => {
+      extraNames.push(name);
+    });
     return semantics.validateExpressionSyntax(String(value ?? ""), extraNames, {
       ...options,
       localFunctions: localFunctionsForSemantics(graph),
@@ -2069,7 +2237,11 @@ function expressionReferencesForAnalysis(node, fieldKey = "value") {
   const expr = fieldKey === "initial"
     ? String(node.initialStateExpression ?? "")
     : String(node.valueExpression ?? "");
-  return collectExpressionIdentifierReferences(expr);
+  const refs = collectExpressionIdentifierReferences(expr);
+  accessibleAgentFieldAliasNames(node, fieldKey).forEach((name) => {
+    refs.delete(name);
+  });
+  return refs;
 }
 
 function nodeIsImplicitlyReferenced(targetNode, model = graph) {
@@ -2928,6 +3100,9 @@ function globalHelpEntries() {
 }
 
 function helpGroupLabel(kind) {
+  if (kind === "agent") {
+    return t("help.group.agent");
+  }
   if (kind === "variable") {
     return t("help.group.variables");
   }
@@ -2950,14 +3125,14 @@ function renderFunctionsHelp() {
   functionsHelpContent.innerHTML = "";
   const groups = new Map();
   globalHelpEntries().forEach((entry) => {
-    const key = entry.kind || "function";
+    const key = entry.helpSection || entry.kind || "function";
     if (!groups.has(key)) {
       groups.set(key, []);
     }
     groups.get(key).push(entry);
   });
 
-  ["variable", "function", "array", "probability", "math"].forEach((kind) => {
+  ["variable", "function", "array", "probability", "math", "agent"].forEach((kind) => {
     const entries = (groups.get(kind) || []).slice().sort((left, right) => left.name.localeCompare(right.name));
     if (!entries || !entries.length) {
       return;
@@ -3999,6 +4174,15 @@ function expressionCatalogForEditor() {
       insertText: "$j",
       cursorOffset: 2,
     });
+    accessibleAgentFieldAliasEntries(node, meta?.key || "value").forEach((entry) => {
+      pushEntry(entry.name, {
+        kind: "agentField",
+        signature: entry.name,
+        description: t("expr.help.agentFieldAlias", { name: entry.name, index: entry.index }),
+        insertText: entry.name,
+        cursorOffset: entry.name.length,
+      });
+    });
   }
 
   if ((meta.key === "value" || meta.key === "initial") && node) {
@@ -4068,6 +4252,10 @@ function expressionEntryKindOrder(kind) {
       return 6;
     case "node":
       return 7;
+    case "agentField":
+      return 8;
+    case "agent":
+      return 9;
     default:
       return 99;
   }
@@ -4119,6 +4307,9 @@ function expressionTokenClass(name, entryMap) {
   }
   if (entry.kind === "variable") {
     return entry.name?.includes(".") ? "expression-token-node" : "expression-token-variable";
+  }
+  if (entry.kind === "agentField") {
+    return "expression-token-variable";
   }
   return "expression-token-function";
 }
@@ -4305,20 +4496,27 @@ function setExpressionHelp(entry = null) {
   ].filter(Boolean);
   expressionHelp.textContent = lines.join("\n");
   expressionHelpCopyBtn?.classList.remove("hidden");
+}
+
+function setExpressionEntryTooltip(entry = null) {
   const preview = expressionValuePreviewForEntry(entry);
-  if (!preview) {
-    return;
+  const lines = [];
+  if (entry?.name) {
+    lines.push(entry.name);
   }
-  const valueEl = document.createElement("div");
-  valueEl.className = `expression-help-value${preview.error ? " error" : ""}`;
-  valueEl.textContent = `${t("expr.preview.title")}: ${preview.text}`;
-  expressionHelp.appendChild(valueEl);
-  if (preview.typeLabel) {
-    const typeEl = document.createElement("div");
-    typeEl.className = "expression-help-type";
-    typeEl.textContent = `${t("expr.preview.type")}: ${preview.typeLabel}`;
-    expressionHelp.appendChild(typeEl);
+  if (preview?.text) {
+    lines.push(`${t("expr.preview.title")}: ${preview.text}`);
   }
+  if (preview?.typeLabel) {
+    lines.push(`${t("expr.preview.type")}: ${preview.typeLabel}`);
+  }
+  const tooltipText = lines.join("\n");
+  [
+    expressionEditorTextarea,
+    expressionEditorHighlight,
+    expressionStateInitialInput,
+    expressionStateInitialHighlight,
+  ].forEach((el) => setTooltipText(el, tooltipText));
 }
 
 async function copyExpressionAuxText(sourceEl, emptyKey = "expr.copy.empty") {
@@ -4393,6 +4591,14 @@ function expressionValuePreviewForEntry(entry) {
         error: false,
       };
     }
+    const agentFieldAliases = graphFunctionHelpers.collectAgentFieldAliasesFromContext?.(baseContext) || {};
+    if (Object.prototype.hasOwnProperty.call(agentFieldAliases, entry.name)) {
+      return {
+        text: summarizeExpressionPreviewValue(agentFieldAliases[entry.name]),
+        typeLabel: describeExpressionPreviewShape(agentFieldAliases[entry.name]),
+        error: false,
+      };
+    }
     return null;
   }
   return null;
@@ -4456,6 +4662,7 @@ function renderExpressionAutocomplete() {
     helpEntry = allEntries.find((entry) => entry.name === ui.expressionEditor.librarySelectedName) || null;
   }
   setExpressionHelp(helpEntry);
+  setExpressionEntryTooltip(helpEntry);
   renderExpressionLibrary();
 }
 
@@ -5209,9 +5416,9 @@ async function loadI18n() {
   const bundledCurrent = bundledI18nMessages(currentLang);
   if (bundledCurrent) {
     i18n = bundledCurrent;
-  } else if (currentLang !== "it") {
-    currentLang = "it";
-    i18n = bundledI18nMessages("it") || {};
+  } else if (currentLang !== "en") {
+    currentLang = "en";
+    i18n = bundledI18nMessages("en") || {};
   } else {
     i18n = {};
   }
@@ -5322,12 +5529,33 @@ function formatExecutionDuration(ms) {
   return `${formatNumberValue(value / 1000)} s`;
 }
 
+function isAgentSpaceValue(value) {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && value.kind === "agentSpace"
+    && Number.isInteger(Number(value.rowCount))
+    && Number.isInteger(Number(value.colCount))
+  );
+}
+
+function formatAgentSpaceSummary(value) {
+  return t("text.agentSpaceSummary", {
+    rows: Number(value?.rowCount) || 0,
+    cols: Number(value?.colCount) || 0,
+    agents: Number(value?.agentCount) || 0,
+  });
+}
+
 function formatComputedValue(value) {
   if (value === null || value === undefined) {
     return "-";
   }
   if (typeof value === "number") {
     return formatNumberValue(value);
+  }
+  if (isAgentSpaceValue(value)) {
+    return formatAgentSpaceSummary(value);
   }
   if (Array.isArray(value)) {
     return `[${value.map((item) => formatComputedValue(item)).join(", ")}]`;
@@ -5344,6 +5572,9 @@ function formatComputedValue(value) {
 }
 
 function summarizeTooltipValue(value) {
+  if (isAgentSpaceValue(value)) {
+    return formatAgentSpaceSummary(value);
+  }
   if (Array.isArray(value)) {
     const isMatrix =
       value.length > 0 &&
@@ -5363,6 +5594,9 @@ function summarizeTooltipValue(value) {
 }
 
 function summarizeExpressionPreviewValue(value) {
+  if (isAgentSpaceValue(value)) {
+    return formatAgentSpaceSummary(value);
+  }
   if (Array.isArray(value)) {
     const isMatrix =
       value.length > 0 &&
@@ -5404,6 +5638,12 @@ function describeExpressionPreviewShape(value) {
     }
     return t("expr.preview.shape.array");
   }
+  if (isAgentSpaceValue(value)) {
+    return t("expr.preview.shape.agentSpace", {
+      rows: Number(value?.rowCount) || 0,
+      cols: Number(value?.colCount) || 0,
+    });
+  }
   if (typeof value === "object") {
     return t("expr.preview.shape.object");
   }
@@ -5411,24 +5651,7 @@ function describeExpressionPreviewShape(value) {
 }
 
 function normalizeExecutionConfig(raw) {
-  const t0 = Number(raw?.t0);
-  const dt = Number(raw?.dt);
-  const t1 = Number(raw?.t1);
-  const delayMs = Number(raw?.delayMs);
-  const decimals = Number(raw?.decimals);
-  const integrator = String(raw?.integrator ?? "euler").toLowerCase();
-  const strictDefinitions = Boolean(raw?.strictDefinitions);
-  const currentTime = raw?.currentTime;
-  return {
-    t0: Number.isFinite(t0) ? t0 : 0,
-    dt: Number.isFinite(dt) && dt !== 0 ? dt : 1,
-    t1: Number.isFinite(t1) ? t1 : 10,
-    delayMs: Number.isFinite(delayMs) && delayMs > 0 ? Math.round(delayMs) : 1000,
-    decimals: Number.isFinite(decimals) ? clampDisplayDecimals(decimals) : 3,
-    integrator: integrator === "rk4" ? "rk4" : "euler",
-    strictDefinitions,
-    currentTime: Number.isFinite(Number(currentTime)) ? Number(currentTime) : null,
-  };
+  return runtimeShared.normalizeExecutionConfig(raw);
 }
 
 function propagateNodeRenameInExpressions(oldName, newName) {
@@ -5581,24 +5804,7 @@ function canBindSliderToNode(node) {
 }
 
 function normalizeSubmodelPath(value) {
-  let raw = String(value ?? "").trim();
-  if (!raw) {
-    return "";
-  }
-  raw = raw.replace(/\\/g, "/");
-  while (raw.startsWith("./")) {
-    raw = raw.slice(2);
-  }
-  raw = raw.trim();
-  if (!raw || raw === "." || raw.includes("..")) {
-    return "";
-  }
-  const parts = raw.split("/").filter(Boolean);
-  const base = parts.length ? parts[parts.length - 1].trim() : "";
-  if (!base || base === "." || base === "..") {
-    return "";
-  }
-  return base;
+  return runtimeShared.normalizeSubmodelPath(value);
 }
 
 function expressionUsesReadData(expression) {
@@ -5634,23 +5840,7 @@ function extractReadDataPaths(expression) {
 }
 
 function normalizeReadDataPath(value) {
-  let raw = String(value ?? "").trim();
-  if (!raw) {
-    return "";
-  }
-  raw = raw.replace(/\\/g, "/");
-  while (raw.startsWith("./")) {
-    raw = raw.slice(2);
-  }
-  raw = raw.trim();
-  if (!raw || raw === "." || raw.startsWith("/") || /^[A-Za-z]:\//.test(raw)) {
-    return "";
-  }
-  const parts = raw.split("/").filter(Boolean);
-  if (!parts.length || parts.some((part) => part === "." || part === "..")) {
-    return "";
-  }
-  return parts.join("/");
+  return runtimeShared.normalizeReadDataPath(value);
 }
 
 function validateReadDataExpressionUsage(expression, options = {}) {
@@ -5994,29 +6184,11 @@ function selectedNodesList() {
 }
 
 function serializeNodeType(shape) {
-  if (shape === "ellipse") {
-    return "algebraic";
-  }
-  if (shape === "diamond") {
-    return "parameter";
-  }
-  if (shape === "submodel") {
-    return "submodel";
-  }
-  return "state";
+  return runtimeShared.serializeNodeType(shape);
 }
 
 function deserializeNodeType(type) {
-  if (type === "algebraic") {
-    return "ellipse";
-  }
-  if (type === "parameter") {
-    return "diamond";
-  }
-  if (type === "submodel") {
-    return "submodel";
-  }
-  return "rect";
+  return runtimeShared.deserializeNodeType(type);
 }
 
 function graphBounds() {
@@ -9389,7 +9561,7 @@ function loadGraphFromJsonText(jsonText, sourceName = "", fileHandle = null, dir
       submodelFileHandleCache.clear();
       submodelSourceCache.clear();
     }
-    const data = JSON.parse(String(jsonText || "{}"));
+    const data = runtimeLoader.parseJsonText(jsonText);
     runAction(() => {
       importGraphData(data);
     });
@@ -9484,67 +9656,11 @@ async function getModelDirectoryHandleForReadData(model) {
 }
 
 async function prepareReadDataCacheForModel(model) {
-  if (!model) {
-    return;
-  }
-  const parameterNodes = (model.nodes || []).filter((node) => node?.shape === "diamond");
-  const referencedPaths = new Set();
-  parameterNodes.forEach((node) => {
-    const source = String(node.valueExpression ?? "");
-    if (!expressionUsesReadData(source)) {
-      return;
-    }
-    const usage = validateReadDataExpressionUsage(source, { allowReadData: true });
-    if (!usage.ok) {
-      throw new Error(usage.message || "readData expects a string literal path");
-    }
-    extractReadDataPaths(source).forEach((path) => {
-      const normalized = normalizeReadDataPath(path);
-      if (normalized) {
-        referencedPaths.add(normalized);
-      }
-    });
-  });
-  model.__readDataCache = Object.create(null);
-  if (!referencedPaths.size) {
-    return;
-  }
-  const directoryHandle = await getModelDirectoryHandleForReadData(model);
-  for (const relativePath of referencedPaths) {
-    let fileHandle;
-    let file;
-    try {
-      fileHandle = await directoryHandle.getFileHandle(relativePath);
-      file = await fileHandle.getFile();
-    } catch (_err) {
-      throw new Error(`readData file is unavailable: ${relativePath}`);
-    }
-    let text;
-    try {
-      text = await file.text();
-    } catch (_err) {
-      throw new Error(`readData file is unavailable: ${relativePath}`);
-    }
-    model.__readDataCache[relativePath] = parseCsvMatrix(text, relativePath);
-  }
+  return runtimeLoader.prepareReadDataCacheForModel(model);
 }
 
 async function prepareReadDataCachesForModelTree(model, visited = new Set()) {
-  if (!model || visited.has(model)) {
-    return;
-  }
-  visited.add(model);
-  await prepareReadDataCacheForModel(model);
-  for (const node of model.nodes || []) {
-    if (!isSubmodelNode(node)) {
-      continue;
-    }
-    const normalizedPath = normalizeSubmodelPath(node.modelPath);
-    if (!normalizedPath || !submodelTemplateCache.has(normalizedPath)) {
-      continue;
-    }
-    await prepareReadDataCachesForModelTree(submodelTemplateCache.get(normalizedPath), visited);
-  }
+  return runtimeLoader.prepareReadDataCachesForModelTree(model, visited);
 }
 
 function basenameOfSubmodelPath(modelPath) {
@@ -10549,16 +10665,7 @@ async function createNewGraph() {
 }
 
 function stopTimedExecution(updateStatus = true) {
-  const hadHandle = ui.timedRunHandle != null;
-  const wasRunningStep = ui.timedStepRunning === true;
-  clearTimedExecutionStateSilently();
-  if (hadHandle || wasRunningStep) {
-    updateEditingLockUi();
-    if (updateStatus) {
-      setStatusKey("status.timedStopped");
-    }
-    render();
-  }
+  runtimeController.stopTimedExecution(updateStatus);
 }
 
 function isTimeWithinBounds(value, t0, dt, t1) {
@@ -10578,207 +10685,141 @@ function isExecutionEnded(cfg) {
 }
 
 function parseModelPropertyStoredValue(raw) {
-  const text = String(raw ?? "");
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return "";
-  }
-  if (trimmed === "true") {
-    return 1;
-  }
-  if (trimmed === "false") {
-    return 0;
-  }
-  const numeric = Number(trimmed);
-  if (Number.isFinite(numeric)) {
-    return numeric;
-  }
-  if (
-    (trimmed.startsWith("[") && trimmed.endsWith("]")) ||
-    (trimmed.startsWith("{") && trimmed.endsWith("}"))
-  ) {
-    try {
-      return JSON.parse(trimmed);
-    } catch (err) {
-      return text;
-    }
-  }
-  return text;
+  return runtimeShared.parseModelPropertyStoredValue(raw);
 }
 
 function serializeModelPropertyStoredValue(value) {
-  if (value === true) {
-    return "1";
-  }
-  if (value === false) {
-    return "0";
-  }
-  if (value === null || value === undefined) {
-    return "";
-  }
-  if (typeof value === "number") {
-    return String(value);
-  }
-  if (Array.isArray(value) || typeof value === "object") {
-    return JSON.stringify(value);
-  }
-  return String(value);
+  return runtimeShared.serializeModelPropertyStoredValue(value);
 }
 
 function parseNodePropertyStoredValue(raw) {
-  const text = String(raw ?? "");
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return "";
-  }
-  if (trimmed === "true") {
-    return 1;
-  }
-  if (trimmed === "false") {
-    return 0;
-  }
-  const numeric = Number(trimmed);
-  if (Number.isFinite(numeric)) {
-    return numeric;
-  }
-  if (
-    (trimmed.startsWith("[") && trimmed.endsWith("]")) ||
-    (trimmed.startsWith("{") && trimmed.endsWith("}"))
-  ) {
-    try {
-      return JSON.parse(trimmed);
-    } catch (err) {
-      return text;
-    }
-  }
-  return text;
+  return runtimeShared.parseNodePropertyStoredValue(raw);
 }
 
 function serializeNodePropertyStoredValue(value) {
-  if (value === true) {
-    return "1";
-  }
-  if (value === false) {
-    return "0";
-  }
-  if (value === null || value === undefined) {
-    return "";
-  }
-  if (typeof value === "number") {
-    return String(value);
-  }
-  if (Array.isArray(value) || typeof value === "object") {
-    return JSON.stringify(value);
-  }
-  return String(value);
+  return runtimeShared.serializeNodePropertyStoredValue(value);
+}
+
+const runtimeCore = globalThis.STGraphXRuntimeCore?.createRuntimeCore({
+  t,
+  semantics,
+  normalizeExecutionConfig,
+  deserializeNodeType,
+  normalizeNodeDescriptionProperty: runtimeShared.normalizeNodeDescriptionProperty,
+  normalizeNodeFormulaNotesProperty: runtimeShared.normalizeNodeFormulaNotesProperty,
+  sanitizeLocalFunctionDefinition,
+  clamp,
+  deepClone,
+  localFunctionsForSemantics,
+  globalParameterNodesForModel,
+  referencedGlobalParameterNodesForTarget,
+  isStateNode,
+  getModelNodeById,
+  isSubmodelNode,
+  normalizeSubmodelPath,
+  normalizeReadDataPath,
+  parseModelPropertyStoredValue,
+  serializeModelPropertyStoredValue,
+  parseNodePropertyStoredValue,
+  serializeNodePropertyStoredValue,
+  submodelBindingReferences,
+  applyRuntimeModelInputOverrides,
+  getSubmodelTemplate: (modelPath) => {
+    const normalized = normalizeSubmodelPath(modelPath);
+    return normalized ? submodelTemplateCache.get(normalized) || null : null;
+  },
+});
+
+if (!runtimeCore) {
+  throw new Error("STGraphX runtime core is unavailable");
+}
+
+const runtimeLoader = globalThis.STGraphXRuntimeLoader?.createRuntimeLoader({
+  t,
+  normalizeReadDataPath,
+  expressionUsesReadData,
+  validateReadDataExpressionUsage,
+  extractReadDataPaths,
+  parseCsvMatrix,
+  normalizeSubmodelPath,
+  isSubmodelNode,
+  getSubmodelTemplate: (modelPath) => {
+    const normalized = normalizeSubmodelPath(modelPath);
+    return normalized ? submodelTemplateCache.get(normalized) || null : null;
+  },
+  getDirectoryHandleForModel: async (model) => getModelDirectoryHandleForReadData(model),
+});
+
+if (!runtimeLoader) {
+  throw new Error("STGraphX runtime loader is unavailable");
+}
+
+const runtimeSession = globalThis.STGraphXRuntimeSession?.createRuntimeSession({
+  core: runtimeCore,
+  model: graph,
+  rootExecution: graph.execution,
+  isStateNode,
+  beforeEvaluate: () => {
+    captureWatchSnapshot();
+    applyWidgetDrivenNodeValues();
+  },
+  afterEvaluate: ({ timeValue }) => {
+    const nodeMap = buildNodeNameMap();
+    updateTableWidgetsFromComputedValues(timeValue, nodeMap);
+    updateXYWidgetsFromComputedValues(timeValue, nodeMap);
+    recordSimulationOutputSnapshot(timeValue);
+  },
+});
+
+if (!runtimeSession) {
+  throw new Error("STGraphX runtime session is unavailable");
+}
+
+const runtimeController = globalThis.STGraphXRuntimeController?.createRuntimeController({
+  session: runtimeSession,
+  getExecution: () => graph.execution,
+  timedState: ui,
+  t,
+  enforceStrictDefinitions: () => enforceStrictDefinitionsIfNeeded(),
+  ensureBreakpointReady: () => ensureBreakpointReadyForExecution(),
+  prepareForExecution: () => prepareSubmodelsForExecution(),
+  isExecutionEnded,
+  refreshRuntimeView: () => refreshRuntimeView(),
+  render: () => render(),
+  updateEditingLockUi: () => updateEditingLockUi(),
+  setStatusKey: (key, vars) => setStatusKey(key, vars),
+  setStatus: (message, isError) => setStatus(message, isError),
+  formatNumberValue: (value) => formatNumberValue(value),
+  formatExecutionDuration: (ms) => formatExecutionDuration(ms),
+  evalReasonText: (reason) => evalReasonText(reason),
+  evaluateBreakpointConditionAtTime: (timeValue) => {
+    const result = evaluateBreakpointConditionAtTime(timeValue);
+    ui.breakpointLastResult = result.hit ? { ...result, time: timeValue } : result;
+    return result;
+  },
+  openWatchDebugger: () => openWatchDebugger(),
+  clearVisualHistory: () => {
+    clearAllXYChartPoints();
+    clearAllTableWidgetRows();
+  },
+  clearSimulationHistory: () => clearSimulationOutputHistory(),
+  hasStrictExecutionBlock: () => graph.execution.strictDefinitions && invalidDefinedNodes().length > 0,
+  buildEvaluationEnv: () => ({
+    rootExecution: graph.execution,
+    stack: [],
+  }),
+});
+
+if (!runtimeController) {
+  throw new Error("STGraphX runtime controller is unavailable");
 }
 
 function buildRuntimeModelFromData(data, options = {}) {
-  if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
-    throw new Error(t("error.invalidJson"));
-  }
-  const execCfg = normalizeExecutionConfig(data.execution);
-  const nodes = data.nodes
-    .filter((n) => Number.isInteger(n.id))
-    .map((n) => {
-      if (!["state", "algebraic", "parameter", "submodel"].includes(n.type)) {
-        throw new Error(t("error.invalidJson"));
-      }
-      const shape = deserializeNodeType(n.type);
-      const node = {
-        id: n.id,
-        name: typeof n.name === "string" ? n.name : t("node.defaultName", { id: n.id }),
-        input: shape === "ellipse" ? Boolean(n.input) : false,
-        output: Boolean(n.output),
-        global: shape === "diamond" ? Boolean(n.global) : false,
-        shape,
-        x: Number.isFinite(Number(n.x)) ? Number(n.x) : 200,
-        y: Number.isFinite(Number(n.y)) ? Number(n.y) : 200,
-        width: clamp(Number(n.width) || 120, 40, 500),
-        height: clamp(Number(n.height) || 70, 30, 500),
-      valueExpression: shape === "rect"
-        ? String(n.stateTransition ?? "")
-        : String(n.valueExpression ?? ""),
-      initialStateExpression: shape === "rect"
-        ? String(n.initialState ?? "")
-        : "",
-      modelPath: shape === "submodel" ? String(n.modelPath ?? "") : "",
-      inputBindings: shape === "submodel" && n.inputBindings && typeof n.inputBindings === "object"
-          ? Object.fromEntries(
-            Object.entries(n.inputBindings)
-              .map(([key, value]) => [String(key), String(value ?? "")])
-              .filter(([key]) => key.trim()),
-          )
-          : {},
-        interfaceCache: shape === "submodel" && n.interfaceCache && typeof n.interfaceCache === "object"
-          ? {
-            inputs: Array.isArray(n.interfaceCache.inputs) ? n.interfaceCache.inputs.map((value) => String(value)) : [],
-            outputs: Array.isArray(n.interfaceCache.outputs) ? n.interfaceCache.outputs.map((value) => String(value)) : [],
-          }
-          : { inputs: [], outputs: [] },
-        submodelError: "",
-        computedValue: null,
-        computedError: "",
-        pendingStateValue: null,
-        pendingStateError: "",
-        externalValueEnabled: false,
-        externalValue: null,
-        properties: Array.isArray(n.properties)
-          ? n.properties.map((p) => ({ key: String(p?.key ?? ""), value: String(p?.value ?? "") }))
-          : [],
-      };
-      normalizeNodeDescriptionProperty(node);
-      normalizeNodeFormulaNotesProperty(node);
-      return node;
-    });
-  const nodesWithValidNames = semantics.sanitizeNodeNames(nodes, "n");
-  const nodeIds = new Set(nodesWithValidNames.map((node) => node.id));
-  const edges = data.edges
-    .filter((e) => Number.isInteger(e.id) && nodeIds.has(e.from) && nodeIds.has(e.to) && e.from !== e.to)
-    .map((e) => ({
-      id: e.id,
-      from: e.from,
-      to: e.to,
-      sourcePort: String(e.sourcePort ?? ""),
-      targetPort: String(e.targetPort ?? ""),
-      controlPoints: Array.isArray(e.controlPoints)
-        ? e.controlPoints.filter(isValidPoint).map((cp) => ({ x: cp.x, y: cp.y }))
-        : [],
-    }));
-
-  return {
-    modelTitle: String(data?.modelTitle ?? ""),
-    properties: Array.isArray(data?.modelProperties)
-      ? data.modelProperties.map((p) => ({ key: String(p?.key ?? ""), value: String(p?.value ?? "") }))
-      : [],
-    localFunctions: Array.isArray(data?.localFunctions)
-      ? data.localFunctions.map((definition) => sanitizeLocalFunctionDefinition(definition))
-      : [],
-    debug: {
-      watches: Array.isArray(data?.debug?.watches) ? data.debug.watches.map((name) => String(name ?? "")) : [],
-      breakpointEnabled: Boolean(data?.debug?.breakpointEnabled),
-      breakpointExpression: String(data?.debug?.breakpointExpression ?? ""),
-    },
-    nodes: nodesWithValidNames,
-    edges,
-    widgets: [],
-    execution: {
-      t0: execCfg.t0,
-      dt: execCfg.dt,
-      t1: execCfg.t1,
-      delayMs: execCfg.delayMs,
-      decimals: execCfg.decimals,
-      integrator: execCfg.integrator,
-      strictDefinitions: execCfg.strictDefinitions,
-      currentTime: null,
-    },
-    __directoryPath: String(options.directoryPath ?? ""),
-    __readDataCache: Object.create(null),
-  };
+  return runtimeCore.buildRuntimeModelFromData(data, options);
 }
 
 function cloneRuntimeModel(template) {
-  return deepClone(template);
+  return runtimeCore.cloneRuntimeModel(template);
 }
 
 function getModelPropertyValue(key, fallback = null) {
@@ -10803,17 +10844,7 @@ function setModelPropertyValue(key, value) {
 }
 
 function readDataFromModelCache(model, relativePath) {
-  const normalizedPath = normalizeReadDataPath(relativePath);
-  if (!normalizedPath) {
-    throw new Error("readData path is invalid");
-  }
-  const cache = model?.__readDataCache && typeof model.__readDataCache === "object"
-    ? model.__readDataCache
-    : null;
-  if (!cache || !Object.prototype.hasOwnProperty.call(cache, normalizedPath)) {
-    throw new Error(`readData file is unavailable: ${normalizedPath}`);
-  }
-  return cache[normalizedPath];
+  return runtimeCore.readDataFromModelCache(model, relativePath);
 }
 
 function clearSimulationOutputHistory() {
@@ -11025,40 +11056,14 @@ function buildSimulationCsvText() {
 
 function buildExecutionGlobals(timeValue) {
   return {
-    time: timeValue,
-    t0: Number(graph.execution.t0),
-    t1: Number(graph.execution.t1),
-    dt: Number(graph.execution.dt),
+    ...runtimeCore.buildExecutionGlobalsForModel(graph, graph.execution, timeValue),
     getModelProperty: getModelPropertyValue,
     setModelProperty: setModelPropertyValue,
-    readData: (path) => readDataFromModelCache(graph, path),
   };
 }
 
 function buildExecutionGlobalsForModel(model, rootExecution, timeValue) {
-  return {
-    time: timeValue,
-    t0: Number(rootExecution.t0),
-    t1: Number(rootExecution.t1),
-    dt: Number(rootExecution.dt),
-    getModelProperty: (key, fallback = null) => {
-      const name = String(key ?? "");
-      const found = model.properties.find((prop) => String(prop?.key ?? "") === name);
-      return found ? parseModelPropertyStoredValue(found.value) : fallback;
-    },
-    setModelProperty: (key, value) => {
-      const name = String(key ?? "");
-      const stored = serializeModelPropertyStoredValue(value);
-      const found = model.properties.find((prop) => String(prop?.key ?? "") === name);
-      if (found) {
-        found.value = stored;
-      } else {
-        model.properties.push({ key: name, value: stored });
-      }
-      return value;
-    },
-    readData: (path) => readDataFromModelCache(model, path),
-  };
+  return runtimeCore.buildExecutionGlobalsForModel(model, rootExecution, timeValue);
 }
 
 function nodePropertyAccessForContext(node) {
@@ -11082,161 +11087,19 @@ function nodePropertyAccessForContext(node) {
 }
 
 function evaluateParameterNodesForModel(model, timeValue, rootExecution) {
-  const globals = buildExecutionGlobalsForModel(model, rootExecution, timeValue);
-  const parameterNodes = (model?.nodes || []).filter((node) => node?.shape === "diamond");
-  const pending = new Set(parameterNodes.map((node) => node.id));
-  const resolved = new Set();
-
-  parameterNodes.forEach((node) => {
-    node.pendingStateValue = null;
-    node.pendingStateError = "";
-  });
-
-  while (pending.size > 0) {
-    let progressed = false;
-    for (const nodeId of [...pending]) {
-      const node = getModelNodeById(model, nodeId);
-      if (!node) {
-        pending.delete(nodeId);
-        continue;
-      }
-      const context = {
-        ...globals,
-        ...nodePropertyAccessForContext(node),
-      };
-      let blockedByDependency = false;
-      referencedGlobalParameterNodesForTarget(model, node, "value").forEach((depNode) => {
-        if (!resolved.has(depNode.id)) {
-          blockedByDependency = true;
-          return;
-        }
-        if (!depNode.computedError) {
-          context[depNode.name] = depNode.computedValue;
-        }
-      });
-      if (blockedByDependency) {
-        continue;
-      }
-      (model.edges || [])
-        .filter((edge) => edge.to === node.id)
-        .forEach((edge) => {
-          const fromNode = getModelNodeById(model, edge.from);
-          if (!fromNode || fromNode.shape !== "diamond") {
-            return;
-          }
-          if (!resolved.has(fromNode.id)) {
-            blockedByDependency = true;
-            return;
-          }
-          context[fromNode.name] = fromNode.computedValue;
-        });
-      if (blockedByDependency) {
-        continue;
-      }
-
-      const expr = String(node.valueExpression ?? "0");
-      const result = semantics.evaluateValueExpression(expr, context, {
-        localFunctions: localFunctionsForSemantics(model),
-      });
-      if (result.ok) {
-        node.computedValue = result.value;
-        node.computedError = "";
-      } else {
-        node.computedValue = null;
-        node.computedError = result.reason || "runtime";
-      }
-      pending.delete(nodeId);
-      resolved.add(nodeId);
-      progressed = true;
-    }
-
-    if (progressed) {
-      continue;
-    }
-
-    pending.forEach((nodeId) => {
-      const node = getModelNodeById(model, nodeId);
-      if (!node) {
-        return;
-      }
-      node.computedValue = null;
-      node.computedError = "dependency";
-    });
-    break;
-  }
+  return runtimeCore.evaluateParameterNodesForModel(model, timeValue, rootExecution);
 }
 
 function buildInitialStateContextForModel(model, node, timeValue, rootExecution) {
-  const context = {
-    ...buildExecutionGlobalsForModel(model, rootExecution, timeValue),
-    ...nodePropertyAccessForContext(node),
-  };
-  globalParameterNodesForModel(model, node.id).forEach((depNode) => {
-    if (!depNode.computedError) {
-      context[depNode.name] = depNode.computedValue;
-    }
-  });
-  (model.edges || [])
-    .filter((edge) => edge.to === node.id)
-    .forEach((edge) => {
-      const fromNode = getModelNodeById(model, edge.from);
-      if (!fromNode || fromNode.shape !== "diamond" || fromNode.computedError) {
-        return;
-      }
-      context[fromNode.name] = fromNode.computedValue;
-    });
-  return context;
+  return runtimeCore.buildInitialStateContextForModel(model, node, timeValue, rootExecution);
 }
 
 function initializeStateNodesForModel(model, timeValue, rootExecution) {
-  evaluateParameterNodesForModel(model, timeValue, rootExecution);
-  model.nodes.forEach((node) => {
-    if (!isStateNode(node)) {
-      if (node.shape !== "diamond") {
-        node.computedValue = null;
-        node.computedError = "";
-      }
-      node.pendingStateValue = null;
-      node.pendingStateError = "";
-      return;
-    }
-    const initExpr = String(node.initialStateExpression ?? "0");
-    const initResult = semantics.evaluateValueExpression(
-      initExpr,
-      buildInitialStateContextForModel(model, node, timeValue, rootExecution),
-      { localFunctions: localFunctionsForSemantics(model) },
-    );
-    if (initResult.ok) {
-      node.computedValue = initResult.value;
-      node.computedError = "";
-    } else {
-      node.computedValue = null;
-      node.computedError = initResult.reason || "runtime";
-    }
-    node.pendingStateValue = null;
-    node.pendingStateError = "";
-  });
+  return runtimeCore.initializeStateNodesForModel(model, timeValue, rootExecution);
 }
 
 function promotePendingStateNodesForModel(model) {
-  model.nodes.forEach((node) => {
-    if (!isStateNode(node)) {
-      return;
-    }
-    if (node.pendingStateError) {
-      node.computedValue = null;
-      node.computedError = node.pendingStateError;
-      node.pendingStateValue = null;
-      node.pendingStateError = "";
-      return;
-    }
-    if (node.pendingStateValue !== null && node.pendingStateValue !== undefined) {
-      node.computedValue = node.pendingStateValue;
-      node.computedError = "";
-      node.pendingStateValue = null;
-      node.pendingStateError = "";
-    }
-  });
+  return runtimeCore.promotePendingStateNodesForModel(model);
 }
 
 function getCachedSubmodelTemplate(modelPath) {
@@ -11244,277 +11107,8 @@ function getCachedSubmodelTemplate(modelPath) {
   return normalized ? submodelTemplateCache.get(normalized) || null : null;
 }
 
-function ensureSubmodelRuntimeModel(node) {
-  const normalizedPath = normalizeSubmodelPath(node?.modelPath);
-  if (!normalizedPath) {
-    return null;
-  }
-  const template = getCachedSubmodelTemplate(normalizedPath);
-  if (!template) {
-    return null;
-  }
-  if (!node.__runtimeSubmodel || node.__runtimeSubmodelPath !== normalizedPath) {
-    node.__runtimeSubmodel = cloneRuntimeModel(template);
-    node.__runtimeSubmodelPath = normalizedPath;
-  }
-  return node.__runtimeSubmodel;
-}
-
-function buildSubmodelInputOverrides(model, node, parentContext) {
-  const overrides = new Map();
-  const assignedPorts = new Set();
-
-  (model?.edges || [])
-    .filter((edge) => edge.to === node.id && String(edge.targetPort ?? "").trim())
-    .forEach((edge) => {
-      const targetPort = String(edge.targetPort ?? "").trim();
-      const fromNode = getModelNodeById(model, edge.from);
-      if (!fromNode) {
-        return;
-      }
-      if (assignedPorts.has(targetPort)) {
-        throw new Error(`duplicate input binding for ${targetPort}`);
-      }
-      let value = parentContext[fromNode.name];
-      const sourcePort = String(edge.sourcePort ?? "").trim();
-      if (sourcePort) {
-        if (value == null || typeof value !== "object" || !Object.prototype.hasOwnProperty.call(value, sourcePort)) {
-          throw new Error(`missing submodel output ${sourcePort}`);
-        }
-        value = value[sourcePort];
-      }
-      overrides.set(targetPort, value);
-      assignedPorts.add(targetPort);
-    });
-
-  Object.entries(node.inputBindings || {}).forEach(([inputName, expr]) => {
-    const name = String(inputName || "").trim();
-    if (!name || assignedPorts.has(name)) {
-      return;
-    }
-    const result = semantics.evaluateValueExpression(String(expr ?? ""), parentContext, {
-      localFunctions: localFunctionsForSemantics(model),
-    });
-    if (!result.ok) {
-      throw new Error(result.message || result.reason || "runtime");
-    }
-    overrides.set(name, result.value);
-  });
-
-  return overrides;
-}
-
 function evaluateModelAtTimeRecursive(model, timeValue, env, options = {}) {
-  const executionGlobals = buildExecutionGlobalsForModel(model, env.rootExecution, timeValue);
-  const executionPlan = semantics.prepareStatefulExecutionPlan(model.nodes, model.edges);
-  const stateValueOverrides = options.stateValueOverrides instanceof Map ? options.stateValueOverrides : null;
-  const rk4Analyses = String(env.rootExecution?.integrator ?? "euler") === "rk4"
-    ? collectRk4IntegralStateAnalysesForModel(model)
-    : new Map();
-  const integralStateNodeIds = new Set(rk4Analyses.keys());
-  const evalResults = semantics.evaluateStatefulGraphStep(
-    model.nodes,
-    model.edges,
-    executionGlobals,
-    executionPlan,
-    {
-      stateValueOverrides: stateValueOverrides || undefined,
-      localFunctions: localFunctionsForSemantics(model),
-      derivativeStateNodeIds: integralStateNodeIds.size > 0 ? integralStateNodeIds : undefined,
-      customNodeEvaluator: createSubmodelNodeEvaluator(model, timeValue, env, {
-        applyResults: options.applyResults !== false,
-      }),
-    },
-  );
-  const algebraicValueMap = extractSuccessfulAlgebraicValueMap(evalResults.algebraic);
-
-  let rk4Results = null;
-  if (integralStateNodeIds.size > 0) {
-    const stage1Failure = firstFailedEntry(evalResults.stateTransitions, integralStateNodeIds);
-    if (!stage1Failure) {
-      const currentStateMap = buildCurrentStateMapForModel(model, stateValueOverrides);
-      const k1 = extractSuccessfulResultMap(evalResults.stateTransitions);
-      const dt = Number(env.rootExecution.dt);
-      const stage2IntegralValues = buildStageIntegralValuesMap(currentStateMap, k1, dt / 2);
-      const stage2TransitionValues = evaluateTransitionResultsWithIntegralValuesForModel(
-        model,
-        timeValue + dt / 2,
-        env,
-        executionPlan,
-        integralStateNodeIds,
-        stage2IntegralValues,
-        algebraicValueMap,
-        stateValueOverrides,
-      );
-      const stage2StateOverrides = new Map(
-        [...integralStateNodeIds].map((nodeId) => [nodeId, stage2TransitionValues.get(nodeId)?.value ?? currentStateMap.get(nodeId)]),
-      );
-      const stage2 = semantics.evaluateStatefulGraphStep(
-        model.nodes,
-        model.edges,
-        buildExecutionGlobalsForModel(model, env.rootExecution, timeValue + dt / 2),
-        executionPlan,
-        {
-          derivativeStateNodeIds: integralStateNodeIds,
-          stateValueOverrides: stage2StateOverrides,
-          localFunctions: localFunctionsForSemantics(model),
-          customNodeEvaluator: createSubmodelNodeEvaluator(model, timeValue + dt / 2, env, { applyResults: false }),
-        },
-      );
-      const stage2Failure = firstFailedEntry(stage2.stateTransitions, integralStateNodeIds);
-      if (!stage2Failure) {
-        const stage2AlgebraicValueMap = extractSuccessfulAlgebraicValueMap(stage2.algebraic);
-        const k2 = extractSuccessfulResultMap(stage2.stateTransitions);
-        const stage3IntegralValues = buildStageIntegralValuesMap(currentStateMap, k2, dt / 2);
-        const stage3TransitionValues = evaluateTransitionResultsWithIntegralValuesForModel(
-          model,
-          timeValue + dt / 2,
-          env,
-          executionPlan,
-          integralStateNodeIds,
-          stage3IntegralValues,
-          stage2AlgebraicValueMap,
-          stage2StateOverrides,
-        );
-        const stage3StateOverrides = new Map(
-          [...integralStateNodeIds].map((nodeId) => [nodeId, stage3TransitionValues.get(nodeId)?.value ?? currentStateMap.get(nodeId)]),
-        );
-        const stage3 = semantics.evaluateStatefulGraphStep(
-          model.nodes,
-          model.edges,
-          buildExecutionGlobalsForModel(model, env.rootExecution, timeValue + dt / 2),
-          executionPlan,
-          {
-            derivativeStateNodeIds: integralStateNodeIds,
-            stateValueOverrides: stage3StateOverrides,
-            localFunctions: localFunctionsForSemantics(model),
-            customNodeEvaluator: createSubmodelNodeEvaluator(model, timeValue + dt / 2, env, { applyResults: false }),
-          },
-        );
-        const stage3Failure = firstFailedEntry(stage3.stateTransitions, integralStateNodeIds);
-        if (!stage3Failure) {
-          const stage3AlgebraicValueMap = extractSuccessfulAlgebraicValueMap(stage3.algebraic);
-          const k3 = extractSuccessfulResultMap(stage3.stateTransitions);
-          const stage4IntegralValues = buildStageIntegralValuesMap(currentStateMap, k3, dt);
-          const stage4TransitionValues = evaluateTransitionResultsWithIntegralValuesForModel(
-            model,
-            timeValue + dt,
-            env,
-            executionPlan,
-            integralStateNodeIds,
-            stage4IntegralValues,
-            stage3AlgebraicValueMap,
-            stage3StateOverrides,
-          );
-          const stage4StateOverrides = new Map(
-            [...integralStateNodeIds].map((nodeId) => [nodeId, stage4TransitionValues.get(nodeId)?.value ?? currentStateMap.get(nodeId)]),
-          );
-          const stage4 = semantics.evaluateStatefulGraphStep(
-            model.nodes,
-            model.edges,
-            buildExecutionGlobalsForModel(model, env.rootExecution, timeValue + dt),
-            executionPlan,
-            {
-              derivativeStateNodeIds: integralStateNodeIds,
-              stateValueOverrides: stage4StateOverrides,
-              localFunctions: localFunctionsForSemantics(model),
-              customNodeEvaluator: createSubmodelNodeEvaluator(model, timeValue + dt, env, { applyResults: false }),
-            },
-          );
-          const stage4Failure = firstFailedEntry(stage4.stateTransitions, integralStateNodeIds);
-          if (!stage4Failure) {
-            const k4 = extractSuccessfulResultMap(stage4.stateTransitions);
-            rk4Results = new Map();
-            integralStateNodeIds.forEach((nodeId) => {
-              const k1List = k1.get(nodeId) || [];
-              const k2List = k2.get(nodeId) || [];
-              const k3List = k3.get(nodeId) || [];
-              const k4List = k4.get(nodeId) || [];
-              const integratedValues = k1List.map((_, idx) => rk4IntegratedValue(
-                currentStateMap.get(nodeId),
-                k1List[idx],
-                k2List[idx],
-                k3List[idx],
-                k4List[idx],
-                dt,
-              ));
-              rk4Results.set(
-                nodeId,
-                evaluateTransitionResultsWithIntegralValuesForModel(
-                  model,
-                  timeValue,
-                  env,
-                  executionPlan,
-                  new Set([nodeId]),
-                  new Map([[nodeId, integratedValues]]),
-                  algebraicValueMap,
-                  stateValueOverrides,
-                ).get(nodeId) || { ok: false, reason: "dependency" },
-              );
-            });
-          } else {
-            rk4Results = new Map(stage4.stateTransitions.map((entry) => [entry.id, entry.result]));
-          }
-        } else {
-          rk4Results = new Map(stage3.stateTransitions.map((entry) => [entry.id, entry.result]));
-        }
-      } else {
-        rk4Results = new Map(stage2.stateTransitions.map((entry) => [entry.id, entry.result]));
-      }
-    } else {
-      rk4Results = new Map(evalResults.stateTransitions.map((entry) => [entry.id, entry.result]));
-    }
-  }
-
-  let successCount = 0;
-  let errorCount = 0;
-  let firstErrorNode = null;
-  let firstErrorReason = null;
-
-  evalResults.algebraic.forEach((entry) => {
-    const node = getModelNodeById(model, entry.id);
-    if (!node) {
-      return;
-    }
-    if (entry.result.ok) {
-      node.computedValue = entry.result.value;
-      node.computedError = "";
-      successCount += 1;
-    } else {
-      node.computedValue = null;
-      node.computedError = entry.result.reason || "runtime";
-      errorCount += 1;
-      if (!firstErrorNode) {
-        firstErrorNode = node.name;
-        firstErrorReason = node.computedError;
-      }
-    }
-  });
-
-  evalResults.stateTransitions.forEach((entry) => {
-    const node = getModelNodeById(model, entry.id);
-    if (!node) {
-      return;
-    }
-    const result = integralStateNodeIds.has(entry.id) && rk4Results
-      ? (rk4Results.get(entry.id) || { ok: false, reason: "dependency" })
-      : entry.result;
-    if (result.ok) {
-      node.pendingStateValue = result.value;
-      node.pendingStateError = "";
-      successCount += 1;
-    } else {
-      node.pendingStateValue = null;
-      node.pendingStateError = result.reason || "runtime";
-      errorCount += 1;
-      if (!firstErrorNode) {
-        firstErrorNode = node.name;
-        firstErrorReason = node.pendingStateError;
-      }
-    }
-  });
-
-  return { successCount, errorCount, firstErrorNode, firstErrorReason };
+  return runtimeCore.evaluateModelAtTimeRecursive(model, timeValue, env, options);
 }
 
 function currentDisplayTimeValue() {
@@ -11524,15 +11118,7 @@ function currentDisplayTimeValue() {
 }
 
 function hasInitializedStateSnapshot(model = graph) {
-  const stateNodes = (model?.nodes || []).filter((node) => isStateNode(node));
-  if (stateNodes.length === 0) {
-    return true;
-  }
-  return stateNodes.some((node) =>
-    (node.computedValue !== null && node.computedValue !== undefined) ||
-    String(node.computedError || "").trim() ||
-    (node.pendingStateValue !== null && node.pendingStateValue !== undefined) ||
-    String(node.pendingStateError || "").trim());
+  return runtimeSession.hasInitializedStateSnapshot(model);
 }
 
 function updateMenuTimeLabel() {
@@ -11565,42 +11151,23 @@ function graphHasSubmodels(model = graph) {
 }
 
 function clearRuntimeSubmodelState(model = graph) {
-  (model?.nodes || []).forEach((node) => {
-    node.__runtimeSubmodel = null;
-    node.__runtimeSubmodelPath = "";
-  });
+  return runtimeSession.clearSubmodelState(model);
 }
 
 function scaleTensorValue(value, factor) {
-  if (Array.isArray(value)) {
-    return value.map((item) => scaleTensorValue(item, factor));
-  }
-  return Number(value) * factor;
+  return runtimeCore.scaleTensorValue(value, factor);
 }
 
 function combineTensorValues(left, right, scalarFn) {
-  if (Array.isArray(left) && Array.isArray(right)) {
-    if (left.length !== right.length) {
-      throw new Error("tensor shape mismatch");
-    }
-    return left.map((item, idx) => combineTensorValues(item, right[idx], scalarFn));
-  }
-  if (Array.isArray(left) || Array.isArray(right)) {
-    throw new Error("tensor shape mismatch");
-  }
-  return scalarFn(Number(left), Number(right));
+  return runtimeCore.combineTensorValues(left, right, scalarFn);
 }
 
 function addTensorValues(left, right) {
-  return combineTensorValues(left, right, (a, b) => a + b);
+  return runtimeCore.addTensorValues(left, right);
 }
 
 function rk4IntegratedValue(currentValue, k1, k2, k3, k4, dt) {
-  const weighted = addTensorValues(
-    addTensorValues(k1, scaleTensorValue(k2, 2)),
-    addTensorValues(scaleTensorValue(k3, 2), k4),
-  );
-  return addTensorValues(currentValue, scaleTensorValue(weighted, dt / 6));
+  return runtimeCore.rk4IntegratedValue(currentValue, k1, k2, k3, k4, dt);
 }
 
 function collectRk4IntegralStateAnalyses() {
@@ -11630,136 +11197,27 @@ function buildStateOverrideMap(baseMap, derivativeMap, factor) {
 }
 
 function extractSuccessfulResultMap(entries) {
-  const out = new Map();
-  entries.forEach((entry) => {
-    if (entry?.result?.ok) {
-      out.set(entry.id, entry.result.value);
-    }
-  });
-  return out;
+  return runtimeCore.extractSuccessfulResultMap(entries);
 }
 
 function extractSuccessfulAlgebraicValueMap(entries) {
-  const out = new Map();
-  entries.forEach((entry) => {
-    if (entry?.result?.ok) {
-      out.set(entry.id, entry.result.value);
-    }
-  });
-  return out;
+  return runtimeCore.extractSuccessfulAlgebraicValueMap(entries);
 }
 
 function firstFailedEntry(entries, nodeIds = null) {
-  const allowed = nodeIds instanceof Set ? nodeIds : null;
-  for (const entry of entries) {
-    if (allowed && !allowed.has(entry.id)) {
-      continue;
-    }
-    if (!entry?.result?.ok) {
-      return entry;
-    }
-  }
-  return null;
+  return runtimeCore.firstFailedEntry(entries, nodeIds);
 }
 
 function collectRk4IntegralStateAnalysesForModel(model) {
-  const analyses = new Map();
-  (model?.nodes || []).forEach((node) => {
-    if (!isStateNode(node)) {
-      return;
-    }
-    const analysis = semantics.analyzeStateTransitionExpression(node.valueExpression);
-    if (analysis.ok && analysis.usesIntegral && analysis.integralCount > 0) {
-      analyses.set(node.id, analysis);
-    }
-  });
-  return analyses;
+  return runtimeCore.collectRk4IntegralStateAnalysesForModel(model);
 }
 
 function buildCurrentStateMapForModel(model, stateValueOverrides = null) {
-  const out = new Map();
-  (model?.nodes || []).forEach((node) => {
-    if (!isStateNode(node)) {
-      return;
-    }
-    out.set(
-      node.id,
-      stateValueOverrides instanceof Map && stateValueOverrides.has(node.id)
-        ? stateValueOverrides.get(node.id)
-        : node.computedValue,
-    );
-  });
-  return out;
+  return runtimeCore.buildCurrentStateMapForModel(model, stateValueOverrides);
 }
 
 function createSubmodelNodeEvaluator(model, timeValue, env, options = {}) {
-  const applyResults = options.applyResults !== false;
-  return function submodelNodeEvaluator(runtimeNode, context) {
-    if (!isSubmodelNode(runtimeNode)) {
-      return null;
-    }
-    const normalizedPath = normalizeSubmodelPath(runtimeNode.modelPath);
-    if (!normalizedPath) {
-      return { ok: false, reason: "runtime", message: "missing submodel path" };
-    }
-    if (!submodelTemplateCache.has(normalizedPath)) {
-      return { ok: false, reason: "runtime", message: "submodel is not loaded" };
-    }
-    if (env.stack.includes(normalizedPath)) {
-      return { ok: false, reason: "runtime", message: "recursive submodel reference" };
-    }
-    try {
-      const effectiveContext = { ...context };
-      const bindingRefs = submodelBindingReferences(runtimeNode);
-      globalParameterNodesForModel(model, runtimeNode.id).forEach((depNode) => {
-        const used = [...bindingRefs.values()].some((refs) => refs.has(depNode.name));
-        if (used && !depNode.computedError) {
-          effectiveContext[depNode.name] = depNode.computedValue;
-        }
-      });
-      const inputOverrides = buildSubmodelInputOverrides(model, runtimeNode, effectiveContext);
-      const runtimeChildModel = ensureSubmodelRuntimeModel(runtimeNode);
-      if (!runtimeChildModel) {
-        return { ok: false, reason: "runtime", message: "submodel is not loaded" };
-      }
-      const childModel = applyResults ? runtimeChildModel : cloneRuntimeModel(runtimeChildModel);
-      applyRuntimeModelInputOverrides(childModel, inputOverrides);
-      let childResult;
-      if (childModel.execution.currentTime == null || childModel.execution.currentTime !== timeValue) {
-        if (childModel.execution.currentTime == null) {
-          initializeStateNodesForModel(childModel, timeValue, env.rootExecution);
-        } else {
-          promotePendingStateNodesForModel(childModel);
-        }
-      }
-      childResult = evaluateModelAtTimeRecursive(
-        childModel,
-        timeValue,
-        {
-          rootExecution: env.rootExecution,
-          stack: [...env.stack, normalizedPath],
-        },
-        { applyResults },
-      );
-      childModel.execution.currentTime = timeValue;
-      if (childResult.errorCount > 0) {
-        return {
-          ok: false,
-          reason: childResult.firstErrorReason || "runtime",
-          message: childResult.firstErrorNode || "submodel",
-        };
-      }
-      const outputs = {};
-      childModel.nodes.forEach((childNode) => {
-        if (childNode.output) {
-          outputs[childNode.name] = childNode.computedValue;
-        }
-      });
-      return { ok: true, kind: "object", value: outputs };
-    } catch (err) {
-      return { ok: false, reason: "runtime", message: String(err?.message || "runtime") };
-    }
-  };
+  return runtimeCore.createSubmodelNodeEvaluator(model, timeValue, env, options);
 }
 
 function evaluateTransitionResultsWithIntegralValuesForModel(
@@ -11772,79 +11230,20 @@ function evaluateTransitionResultsWithIntegralValuesForModel(
   algebraicValueMap,
   stateValueOverrides = null,
 ) {
-  const globals = buildExecutionGlobalsForModel(model, env.rootExecution, timeValue);
-  const results = new Map();
-  (model?.nodes || []).forEach((node) => {
-    if (!integralStateIds.has(node.id)) {
-      return;
-    }
-    const context = {
-      ...globals,
-      __self: stateValueOverrides instanceof Map && stateValueOverrides.has(node.id)
-        ? stateValueOverrides.get(node.id)
-        : node.computedValue,
-      getProperty: (key, fallback = null) => {
-        const found = node.properties.find((prop) => String(prop?.key ?? "") === String(key ?? ""));
-        return found ? parseNodePropertyStoredValue(found.value) : fallback;
-      },
-      setProperty: (key, value) => {
-        const name = String(key ?? "");
-        const stored = serializeNodePropertyStoredValue(value);
-        const found = node.properties.find((prop) => String(prop?.key ?? "") === name);
-        if (found) {
-          found.value = stored;
-        } else {
-          node.properties.push({ key: name, value: stored });
-        }
-        return value;
-      },
-    };
-    globalParameterNodesForModel(model, node.id).forEach((depNode) => {
-      if (!depNode.computedError) {
-        context[depNode.name] = depNode.computedValue;
-      }
-    });
-    (executionPlan.incoming.get(node.id) || []).forEach((fromId) => {
-      const fromNode = getModelNodeById(model, fromId);
-      if (!fromNode) {
-        return;
-      }
-      if (isStateNode(fromNode)) {
-        context[fromNode.name] = stateValueOverrides instanceof Map && stateValueOverrides.has(fromId)
-          ? stateValueOverrides.get(fromId)
-          : fromNode.computedValue;
-        return;
-      }
-      if (algebraicValueMap.has(fromId)) {
-        context[fromNode.name] = algebraicValueMap.get(fromId);
-      }
-    });
-    results.set(
-      node.id,
-      semantics.evaluateStateTransitionExpressionWithIntegralValues(
-        node.valueExpression,
-        context,
-        integralValuesMap.get(node.id) || [],
-        { allowThisAlias: true, localFunctions: localFunctionsForSemantics(model) },
-      ),
-    );
-  });
-  return results;
+  return runtimeCore.evaluateTransitionResultsWithIntegralValuesForModel(
+    model,
+    timeValue,
+    env,
+    executionPlan,
+    integralStateIds,
+    integralValuesMap,
+    algebraicValueMap,
+    stateValueOverrides,
+  );
 }
 
 function buildStageIntegralValuesMap(currentStateMap, derivativeListMap, factor) {
-  const out = new Map();
-  for (const [nodeId, derivativeList] of derivativeListMap.entries()) {
-    const currentValue = currentStateMap.get(nodeId);
-    if (!Array.isArray(derivativeList)) {
-      continue;
-    }
-    out.set(
-      nodeId,
-      derivativeList.map((derivativeValue) => addTensorValues(currentValue, scaleTensorValue(derivativeValue, factor))),
-    );
-  }
-  return out;
+  return runtimeCore.buildStageIntegralValuesMap(currentStateMap, derivativeListMap, factor);
 }
 
 function evaluateTransitionResultsWithIntegralValues(timeValue, integralStateIds, integralValuesMap) {
@@ -11902,87 +11301,22 @@ function evaluateTransitionResultsWithIntegralValues(timeValue, integralStateIds
 }
 
 function initializeStateNodes(timeValue) {
-  evaluateParameterNodesForModel(graph, timeValue, graph.execution);
-  graph.nodes.forEach((node) => {
-    if (!isStateNode(node)) {
-      if (node.shape !== "diamond") {
-        node.computedValue = null;
-        node.computedError = "";
-      }
-      node.pendingStateValue = null;
-      node.pendingStateError = "";
-      return;
-    }
-    const initExpr = String(node.initialStateExpression ?? "0");
-    const initResult = semantics.evaluateValueExpression(
-      initExpr,
-      buildInitialStateContextForModel(graph, node, timeValue, graph.execution),
-      { localFunctions: localFunctionsForSemantics(graph) },
-    );
-    if (initResult.ok) {
-      node.computedValue = initResult.value;
-      node.computedError = "";
-    } else {
-      node.computedValue = null;
-      node.computedError = initResult.reason || "runtime";
-    }
-    node.pendingStateValue = null;
-    node.pendingStateError = "";
-  });
+  runtimeSession.initializeAt(timeValue, graph, graph.execution);
 }
 
 function promotePendingStateNodes() {
-  graph.nodes.forEach((node) => {
-    if (!isStateNode(node)) {
-      return;
-    }
-    if (node.pendingStateError) {
-      node.computedValue = null;
-      node.computedError = node.pendingStateError;
-      node.pendingStateValue = null;
-      node.pendingStateError = "";
-      return;
-    }
-    if (node.pendingStateValue !== null && node.pendingStateValue !== undefined) {
-      node.computedValue = node.pendingStateValue;
-      node.computedError = "";
-      node.pendingStateValue = null;
-      node.pendingStateError = "";
-    }
-  });
+  runtimeSession.promotePending(graph);
 }
 
 function evaluateAtTime(timeValue) {
-  captureWatchSnapshot();
-  applyWidgetDrivenNodeValues();
-  const result = evaluateModelAtTimeRecursive(graph, timeValue, {
+  return runtimeSession.evaluateAtTime(timeValue, {
     rootExecution: graph.execution,
     stack: [],
   });
-  const nodeMap = buildNodeNameMap();
-  updateTableWidgetsFromComputedValues(timeValue, nodeMap);
-  updateXYWidgetsFromComputedValues(timeValue, nodeMap);
-  recordSimulationOutputSnapshot(timeValue);
-  return result;
 }
 
 function validateTimeConfig() {
-  const t0 = Number(graph.execution.t0);
-  const dt = Number(graph.execution.dt);
-  const t1 = Number(graph.execution.t1);
-  if (!Number.isFinite(t0) || !Number.isFinite(dt) || !Number.isFinite(t1)) {
-    setStatusKey("error.timeInvalid");
-    return null;
-  }
-  if (dt === 0) {
-    setStatusKey("error.timeStepZero");
-    return null;
-  }
-  if ((dt > 0 && t0 > t1) || (dt < 0 && t0 < t1)) {
-    setStatusKey("error.timeDirection");
-    return null;
-  }
-  return { t0, dt, t1 };
+  return runtimeController.validateTimeConfig();
 }
 
 async function prepareSubmodelsForExecution() {
@@ -12013,308 +11347,23 @@ async function prepareSubmodelsForExecution() {
 }
 
 async function executeOneStep(restartIfEnded = true) {
-  if (!enforceStrictDefinitionsIfNeeded()) {
-    return false;
-  }
-  if (!ensureBreakpointReadyForExecution()) {
-    return false;
-  }
-  if (!(await prepareSubmodelsForExecution())) {
-    return false;
-  }
-  const cfg = validateTimeConfig();
-  if (!cfg) {
-    return false;
-  }
-
-  let restarted = false;
-  const hasStateSnapshot = hasInitializedStateSnapshot();
-  if (isExecutionEnded(cfg)) {
-    if (!restartIfEnded) {
-      setStatusKey("status.timeEndReached", {
-        time: formatNumberValue(Number(graph.execution.currentTime ?? cfg.t0)),
-      });
-      return false;
-    }
-    graph.execution.currentTime = null;
-    restarted = true;
-  }
-  if (graph.execution.currentTime != null && !hasStateSnapshot) {
-    graph.execution.currentTime = null;
-    restarted = true;
-  }
-  const nextTime = graph.execution.currentTime == null ? cfg.t0 : graph.execution.currentTime + cfg.dt;
-
-  let stepResult = null;
-  const startingFresh = graph.execution.currentTime == null;
-  if (restarted) {
-    clearAllXYChartPoints();
-    clearAllTableWidgetRows();
-    clearSimulationOutputHistory();
-  } else if (startingFresh) {
-    clearSimulationOutputHistory();
-  }
-  if (graph.execution.currentTime == null) {
-    clearRuntimeSubmodelState();
-    initializeStateNodes(nextTime);
-  } else {
-    promotePendingStateNodes();
-  }
-  stepResult = evaluateAtTime(nextTime);
-  graph.execution.currentTime = nextTime;
-  const breakpointResult = evaluateBreakpointConditionAtTime(nextTime);
-  ui.breakpointLastResult = breakpointResult.hit ? { ...breakpointResult, time: nextTime } : breakpointResult;
-  refreshRuntimeView();
-
-  if (breakpointResult.invalid) {
-    setStatus(t("error.breakpointInvalid", { reason: breakpointResult.message || t("error.evalReason.runtime") }), true);
-    openWatchDebugger();
-    return { ok: false, breakpointHit: false };
-  }
-
-  if (breakpointResult.hit) {
-    setStatusKey("status.breakpointHit", {
-      time: formatNumberValue(Number(nextTime)),
-    });
-    openWatchDebugger();
-    return { ok: true, breakpointHit: true };
-  }
-
-  if (restarted && stepResult.errorCount === 0) {
-    setStatusKey("status.executionRestarted", {
-      time: formatNumberValue(Number(nextTime)),
-      count: stepResult.successCount,
-    });
-  } else if (stepResult.errorCount > 0) {
-    setStatusKey("error.evalStepFailed", {
-      node: stepResult.firstErrorNode,
-      reason: evalReasonText(stepResult.firstErrorReason),
-      time: formatNumberValue(Number(nextTime)),
-    });
-  } else {
-    setStatusKey("status.evalStepDone", {
-      count: stepResult.successCount,
-      time: formatNumberValue(Number(nextTime)),
-    });
-  }
-  return { ok: true, breakpointHit: false };
+  return runtimeController.executeOneStep(restartIfEnded);
 }
 
 async function executeNodeExpressions() {
-  if (!enforceStrictDefinitionsIfNeeded()) {
-    return;
-  }
-  if (!ensureBreakpointReadyForExecution()) {
-    return;
-  }
-  if (!(await prepareSubmodelsForExecution())) {
-    return;
-  }
-  stopTimedExecution(false);
-  const cfg = validateTimeConfig();
-  if (!cfg) {
-    return;
-  }
-
-  let continuing = graph.execution.currentTime != null && hasInitializedStateSnapshot();
-  if (continuing && isExecutionEnded(cfg)) {
-    continuing = false;
-  }
-
-  if (!continuing) {
-    graph.execution.currentTime = null;
-    clearAllXYChartPoints();
-    clearAllTableWidgetRows();
-    clearSimulationOutputHistory();
-    clearRuntimeSubmodelState();
-    initializeStateNodes(cfg.t0);
-    refreshRuntimeView();
-  }
-
-  const execStartedAt = performance.now();
-
-  const maxSteps = 100000;
-  const epsilon = Math.max(1e-12, Math.abs(cfg.dt) * 1e-9);
-  const timeValues = [];
-  let current = continuing ? graph.execution.currentTime + cfg.dt : cfg.t0;
-  for (let i = 0; i < maxSteps; i += 1) {
-    if ((cfg.dt > 0 && current > cfg.t1 + epsilon) || (cfg.dt < 0 && current < cfg.t1 - epsilon)) {
-      break;
-    }
-    timeValues.push(current);
-    current += cfg.dt;
-  }
-
-  if (timeValues.length === 0) {
-    setStatusKey("error.timeInvalid");
-    return;
-  }
-  if (timeValues.length >= maxSteps) {
-    setStatusKey("error.timeTooManySteps", { max: maxSteps });
-    return;
-  }
-
-  let successCount = 0;
-  let errorCount = 0;
-  let totalErrorCount = 0;
-  let firstErrorNode = null;
-  let firstErrorReason = null;
-  let firstErrorTime = null;
-  let lastTime = timeValues[timeValues.length - 1];
-  let breakpointHit = false;
-
-  for (let idx = 0; idx < timeValues.length; idx += 1) {
-    const timeValue = timeValues[idx];
-    if (continuing || idx > 0) {
-      promotePendingStateNodes();
-    }
-    const stepResult = evaluateAtTime(timeValue);
-    successCount = stepResult.successCount;
-    errorCount = stepResult.errorCount;
-    totalErrorCount += stepResult.errorCount;
-    if (!firstErrorNode && stepResult.firstErrorNode) {
-      firstErrorNode = stepResult.firstErrorNode;
-      firstErrorReason = stepResult.firstErrorReason;
-      firstErrorTime = timeValue;
-    }
-    lastTime = timeValue;
-    const breakpointResult = evaluateBreakpointConditionAtTime(timeValue);
-    ui.breakpointLastResult = breakpointResult.hit ? { ...breakpointResult, time: timeValue } : breakpointResult;
-    if (breakpointResult.invalid) {
-      refreshRuntimeView();
-      setStatus(t("error.breakpointInvalid", { reason: breakpointResult.message || t("error.evalReason.runtime") }), true);
-      openWatchDebugger();
-      return;
-    }
-    if (breakpointResult.hit) {
-      breakpointHit = true;
-      break;
-    }
-  }
-  graph.execution.currentTime = lastTime;
-  refreshRuntimeView();
-
-  if (breakpointHit) {
-    setStatusKey("status.breakpointHit", {
-      time: formatNumberValue(Number(lastTime)),
-    });
-    openWatchDebugger();
-  } else if (firstErrorNode) {
-    setStatusKey("error.evalFailedDetailedTime", {
-      node: firstErrorNode,
-      count: totalErrorCount,
-      reason: evalReasonText(firstErrorReason),
-      time: formatNumberValue(Number(firstErrorTime)),
-    });
-  } else {
-    setStatusKey("status.evalDoneTime", {
-      count: successCount,
-      steps: timeValues.length,
-      time: formatNumberValue(Number(lastTime)),
-      duration: formatExecutionDuration(performance.now() - execStartedAt),
-    });
-  }
+  await runtimeController.executeAll();
 }
 
 async function runManualStep() {
-  if (!enforceStrictDefinitionsIfNeeded()) {
-    return;
-  }
-  stopTimedExecution(false);
-  await executeOneStep(true);
+  await runtimeController.runManualStep();
 }
 
 async function resetExecution() {
-  stopTimedExecution(false);
-  if (!(await prepareSubmodelsForExecution())) {
-    return;
-  }
-  const cfg = validateTimeConfig();
-  if (!cfg) {
-    return;
-  }
-  graph.execution.currentTime = null;
-  clearAllXYChartPoints();
-  clearAllTableWidgetRows();
-  clearSimulationOutputHistory();
-  clearRuntimeSubmodelState();
-  initializeStateNodes(cfg.t0);
-  refreshRuntimeView();
-  setStatusKey("status.executionReset", { time: formatNumberValue(Number(cfg.t0)) });
+  await runtimeController.resetExecution();
 }
 
 async function toggleTimedExecution() {
-  if (ui.timedRunHandle != null) {
-    stopTimedExecution(true);
-    return;
-  }
-
-  if (!enforceStrictDefinitionsIfNeeded()) {
-    return;
-  }
-  if (!ensureBreakpointReadyForExecution()) {
-    return;
-  }
-  if (!(await prepareSubmodelsForExecution())) {
-    return;
-  }
-
-  const cfg = validateTimeConfig();
-  const delayMs = Number(graph.execution.delayMs);
-  if (!cfg) {
-    return;
-  }
-  if (!Number.isFinite(delayMs) || delayMs <= 0) {
-    setStatusKey("error.timeDelayInvalid");
-    return;
-  }
-  const ended = isExecutionEnded(cfg);
-  const isFreshStart = graph.execution.currentTime == null || ended || !hasInitializedStateSnapshot();
-  if (isFreshStart) {
-    clearAllXYChartPoints();
-    clearAllTableWidgetRows();
-    if (ended) {
-      graph.execution.currentTime = null;
-    }
-    refreshRuntimeView();
-  }
-
-  ui.timedStepRunning = false;
-  ui.timedRunStartedAt = Date.now();
-  ui.timedStepLastActivityAt = ui.timedRunStartedAt;
-  updateEditingLockUi();
-  ui.timedRunHandle = window.setInterval(async () => {
-    if (ui.timedStepRunning) {
-      return;
-    }
-    ui.timedStepRunning = true;
-    ui.timedStepLastActivityAt = Date.now();
-    updateEditingLockUi();
-    try {
-      const outcome = await executeOneStep(false);
-      if (!outcome || !outcome.ok) {
-        stopTimedExecution(false);
-        if (!(graph.execution.strictDefinitions && invalidDefinedNodes().length > 0)) {
-          setStatusKey("status.timedStopped");
-        }
-      } else if (outcome.breakpointHit) {
-        stopTimedExecution(false);
-        setStatusKey("status.breakpointHit", {
-          time: formatNumberValue(Number(graph.execution.currentTime)),
-        });
-        openWatchDebugger();
-      }
-    } catch (err) {
-      stopTimedExecution(false);
-      setStatus(err?.message || t("error.evalReason.runtime"), true);
-    } finally {
-      ui.timedStepRunning = false;
-      ui.timedStepLastActivityAt = Date.now();
-      updateEditingLockUi();
-    }
-  }, delayMs);
-  setStatusKey("status.timedStarted", { delay: delayMs });
-  render();
+  await runtimeController.toggleTimedExecution();
 }
 
 window.addEventListener("pointermove", (evt) => {

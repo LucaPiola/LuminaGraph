@@ -1,11 +1,25 @@
 {
   "version": 1,
   "modelTitle": "",
+  "localFunctions": [],
+  "view": {
+    "zoom": 0.85,
+    "showGrid": true,
+    "highlightNodeEdges": false,
+    "gridSize": 20,
+    "scrollLeft": 83,
+    "scrollTop": 106
+  },
+  "debug": {
+    "watches": [],
+    "breakpointEnabled": false,
+    "breakpointExpression": ""
+  },
   "modelProperties": [],
-  "nodeCounter": 15,
-  "edgeCounter": 17,
-  "widgetCounter": 10,
-  "textItemCounter": 6,
+  "nodeCounter": 16,
+  "edgeCounter": 18,
+  "widgetCounter": 12,
+  "textItemCounter": 7,
   "execution": {
     "t0": 0,
     "dt": 0.03125,
@@ -20,6 +34,7 @@
       "id": 1,
       "name": "x",
       "output": true,
+      "global": false,
       "type": "state",
       "x": 300,
       "y": 140,
@@ -29,7 +44,11 @@
       "strokeColor": "",
       "properties": [
         {
-          "key": "descrizione",
+          "key": "formula notes",
+          "value": ""
+        },
+        {
+          "key": "description",
           "value": "Prima variabile di stato del sistema di Lorenz"
         }
       ],
@@ -40,6 +59,7 @@
       "id": 2,
       "name": "z",
       "output": true,
+      "global": false,
       "type": "state",
       "x": 440,
       "y": 20,
@@ -49,7 +69,11 @@
       "strokeColor": "",
       "properties": [
         {
-          "key": "descrizione",
+          "key": "formula notes",
+          "value": ""
+        },
+        {
+          "key": "description",
           "value": "Terza variabile di stato del sistema di Lorenz"
         }
       ],
@@ -60,6 +84,7 @@
       "id": 3,
       "name": "y",
       "output": true,
+      "global": false,
       "type": "state",
       "x": 560,
       "y": 140,
@@ -69,7 +94,11 @@
       "strokeColor": "",
       "properties": [
         {
-          "key": "descrizione",
+          "key": "formula notes",
+          "value": ""
+        },
+        {
+          "key": "description",
           "value": "Seconda variabile di stato del sistema di Lorenz"
         }
       ],
@@ -80,6 +109,7 @@
       "id": 4,
       "name": "s",
       "output": false,
+      "global": false,
       "type": "parameter",
       "x": 140,
       "y": 140,
@@ -89,7 +119,11 @@
       "strokeColor": "",
       "properties": [
         {
-          "key": "descrizione",
+          "key": "formula notes",
+          "value": ""
+        },
+        {
+          "key": "description",
           "value": "Parametro sigma del sistema di Lorenz"
         }
       ],
@@ -99,6 +133,7 @@
       "id": 5,
       "name": "b",
       "output": false,
+      "global": false,
       "type": "parameter",
       "x": 260,
       "y": 20,
@@ -108,7 +143,11 @@
       "strokeColor": "",
       "properties": [
         {
-          "key": "descrizione",
+          "key": "formula notes",
+          "value": ""
+        },
+        {
+          "key": "description",
           "value": "Parametro beta del sistema di Lorenz"
         }
       ],
@@ -118,6 +157,7 @@
       "id": 6,
       "name": "r",
       "output": false,
+      "global": false,
       "type": "parameter",
       "x": 720,
       "y": 140,
@@ -127,7 +167,11 @@
       "strokeColor": "",
       "properties": [
         {
-          "key": "descrizione",
+          "key": "formula notes",
+          "value": ""
+        },
+        {
+          "key": "description",
           "value": "Parametro rho del sistema di Lorenz"
         }
       ],
@@ -205,22 +249,22 @@
       "id": 1,
       "x": 620,
       "y": -20,
-      "width": 320,
-      "height": 60,
+      "width": 520,
+      "height": 80,
       "fillColor": "",
       "strokeColor": "",
-      "html": "<h1>Frattale di Lorenz</h1>"
+      "html": "<h1>Lorenz system</h1>\nA simple dynamics that generates a complex, fractal behaviour... "
     }
   ],
   "widgets": [
     {
       "id": 1,
       "type": "xychart",
-      "customTitle": "",
-      "x": 142.49920003165658,
-      "y": 213.81985658816183,
-      "width": 756.0926296566956,
-      "height": 658.5097193365929,
+      "customTitle": "xy projection",
+      "x": 40,
+      "y": 220,
+      "width": 560,
+      "height": 460,
       "minimized": false,
       "outputOnly": false,
       "showHistory": false,
@@ -244,6 +288,8 @@
       "max": 100,
       "step": 1,
       "value": 0,
+      "options": [],
+      "mappings": [],
       "columns": [],
       "xyPairs": [
         {
@@ -255,8 +301,57 @@
           "showLine": true,
           "lineWidth": 2.2,
           "lineStyle": "solid",
-          "pointMode": "none",
-          "pointSize": 2.4
+          "pointMode": "last",
+          "pointSize": 10
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "xychart",
+      "customTitle": "xz projection",
+      "x": 600,
+      "y": 220,
+      "width": 580,
+      "height": 460,
+      "minimized": false,
+      "outputOnly": false,
+      "showHistory": false,
+      "xMin": "auto",
+      "xMax": "auto",
+      "yMin": "auto",
+      "yMax": "auto",
+      "showGrid": true,
+      "legendPosition": "top-right",
+      "source": "",
+      "showNumericValues": true,
+      "showIndices": true,
+      "autoFitCells": true,
+      "cellSize": 28,
+      "valueMin": "auto",
+      "valueMax": "auto",
+      "displayRows": null,
+      "displayCols": null,
+      "colorScheme": "blue",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "value": 0,
+      "options": [],
+      "mappings": [],
+      "columns": [],
+      "xyPairs": [
+        {
+          "xSource": "x",
+          "ySource": "z",
+          "showTimeSeries": true,
+          "showInstantProfile": false,
+          "color": "#c40e20",
+          "showLine": true,
+          "lineWidth": 2.2,
+          "lineStyle": "solid",
+          "pointMode": "last",
+          "pointSize": 10
         }
       ]
     }
