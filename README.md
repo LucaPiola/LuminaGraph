@@ -1,6 +1,6 @@
 # LuminaGraph
 
-> **A browser-native playground built on the foundations of [STGraph](https://www.stgraph.it/) by [Professor Luca Mari](https://www.liuc.it/en/university/faculties-and-departments/economics/luca-mari/) — Università Liuc.**
+> **A browser-native playground built on the foundations of [STGraph](https://github.com/lmari/stgraph) by [Professor Luca Mari](https://lmari.github.io/) — Università Liuc.**
 
 ![LuminaGraph interface](img/example.png)
 
@@ -231,7 +231,6 @@ LuminaGraph/
 
 ## Credits
 
-- **STGraph original application**: [Professor Luca Mari](https://www.liuc.it/en/university/faculties-and-departments/economics/luca-mari/), Università Liuc — Castellanza, Italy
-- **LuminaGraph browser port & UX experimentation**: Luca Piola
+- **STGraph original application**: [Professor Luca Mari](https://lmari.github.io/), Università Liuc — Castellanza, Italy
 
 > LuminaGraph is an independent, non-commercial experiment and is not an official release of STGraph.
