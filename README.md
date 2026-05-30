@@ -2,10 +2,11 @@
 
 > **A browser-native playground built on the foundations of [STGraph](https://github.com/lmari/stgraph) by [Professor Luca Mari](https://lmari.github.io/) — Università Liuc.**
 
-![LuminaGraph interface](img/example.png)
-
 LuminaGraph is an experimental reimplementation of STGraph in JavaScript, served entirely in the browser with no build step and no backend. The goal is to explore new UX paradigms, modern visual design, and extended interactivity while staying faithful to the systems-dynamics modeling philosophy of the original Java application.
 
+**[Test it here!](https://lucapiola.github.io/LuminaGraph/)**
+
+![LuminaGraph interface](img/example.png)
 ---
 
 ## What is STGraph?
