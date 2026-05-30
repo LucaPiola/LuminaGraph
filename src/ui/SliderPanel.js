@@ -47,7 +47,12 @@ class SliderPanel {
     for (const [id, row] of this._rows) {
       const node = this._model.nodes.get(id);
       if (!node) continue;
-      if (row.slider) row.slider.value = node.initVal;
+      if (row.slider) {
+        row.slider.value = node.initVal;
+        const mn = parseFloat(row.slider.min), mx = parseFloat(row.slider.max);
+        const pct = mx > mn ? ((node.initVal - mn) / (mx - mn)) * 100 : 0;
+        row.slider.style.setProperty('--fill', Math.max(0, Math.min(100, pct)) + '%');
+      }
       row.number.value = node.initVal;
     }
   }
@@ -98,6 +103,14 @@ class SliderPanel {
     const origMin = node.sliderMin;
     const origMax = node.sliderMax;
 
+    const updateFill = () => {
+      if (!sliderEl) return;
+      const mn = parseFloat(sliderEl.min), mx = parseFloat(sliderEl.max);
+      const v  = parseFloat(sliderEl.value);
+      const pct = mx > mn ? ((v - mn) / (mx - mn)) * 100 : 0;
+      sliderEl.style.setProperty('--fill', Math.max(0, Math.min(100, pct)) + '%');
+    };
+
     const commit = (rawVal) => {
       const v = parseFloat(rawVal);
       if (!isFinite(v)) return;
@@ -111,12 +124,14 @@ class SliderPanel {
         // Visual cue when range has been extended beyond original
         const expanded = parseFloat(sliderEl.min) < origMin || parseFloat(sliderEl.max) > origMax;
         sliderEl.classList.toggle('range-expanded', expanded);
+        updateFill();
       }
       numEl.value = v;
       this._onParamChange(node.id, v);
     };
 
     if (sliderEl) {
+      updateFill(); // initial fill
       sliderEl.addEventListener('input', e => {
         numEl.value = e.target.value;   // live preview
         commit(e.target.value);

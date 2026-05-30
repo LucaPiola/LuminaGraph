@@ -693,6 +693,7 @@
 
     lastSimAction = 'animate';
     animating = true;
+    gc.setFlow(true);
     _animButtonProgress(0);
 
     const { t1 } = getParams();
@@ -733,6 +734,7 @@
 
   function stopAnimate() {
     animating = false;
+    gc.setFlow(false);
     if (animRafId) { cancelAnimationFrame(animRafId); animRafId = null; }
     btnAnimate.textContent   = '▶ Animate';
     btnAnimate.style.cssText = 'transition:background 0.5s ease,border-color 0.5s ease';

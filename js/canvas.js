@@ -49,12 +49,25 @@ class GraphCanvas {
     // Live phase trail: { pts: Float32Array, len, xName, yName, xMin,xMax,yMin,yMax }
     this._trail        = null;
 
+    // Data-flow pulse animation along edges
+    this._flowActive   = false;
+    this._flowPhase    = 0;
+    this._flowRaf      = null;
+
     this._colors = {
-      state:     '#4f8ef7',
-      algebraic: '#3ecf8e',
-      input:     '#f7a24f',
-      output:    '#f7604f',
+      state:     '#5b9dff',
+      algebraic: '#2dd4a7',
+      input:     '#f0a04b',
+      output:    '#f07477',
       text:      '#a78bfa', // Task 7
+    };
+    // Second gradient stop per type — gives nodes a subtle two-tone fill
+    this._colors2 = {
+      state:     '#3fd0e0', // blue  → teal
+      algebraic: '#4fe0c0', // green → mint
+      input:     '#f5c06b', // orange→ amber
+      output:    '#f0567f', // red   → rose
+      text:      '#c4b5fd',
     };
 
     this._resize();
@@ -143,6 +156,26 @@ class GraphCanvas {
   }
 
   clearTrail() { this._trail = null; }
+
+  // ── Data-flow pulses ────────────────────────────────────────────────────────
+  /** Toggle the glowing pulse animation that travels along edges. */
+  setFlow(active) {
+    if (active === this._flowActive) return;
+    this._flowActive = active;
+    if (active) {
+      const loop = (t) => {
+        if (!this._flowActive) { this._flowRaf = null; return; }
+        this._flowPhase = (t || 0) / 1400; // ~1.4s per cycle
+        this.draw();
+        this._flowRaf = requestAnimationFrame(loop);
+      };
+      this._flowRaf = requestAnimationFrame(loop);
+    } else if (this._flowRaf) {
+      cancelAnimationFrame(this._flowRaf);
+      this._flowRaf = null;
+      this.draw();
+    }
+  }
 
   // ── Auto layout (Fruchterman-Reingold spring embedder) ────────────────────
 
@@ -680,9 +713,6 @@ class GraphCanvas {
   _drawGrid(W, H) {
     const ctx = this.ctx;
     const { scale, ox, oy } = this._tx;
-    ctx.strokeStyle = getComputedStyle(document.documentElement)
-                        .getPropertyValue('--grid-color').trim() || '#1e2229';
-    ctx.lineWidth = 1;
 
     const worldLeft   = -ox / scale;
     const worldTop    = -oy / scale;
@@ -690,16 +720,22 @@ class GraphCanvas {
     const worldBottom = (H - oy) / scale;
 
     const GRID = 40;
-    const startX = Math.floor(worldLeft  / GRID) * GRID;
-    const startY = Math.floor(worldTop   / GRID) * GRID;
+    const startX = Math.floor(worldLeft / GRID) * GRID;
+    const startY = Math.floor(worldTop  / GRID) * GRID;
+
+    // Faint dot grid (ambient depth) — fades out when zoomed far out
+    const dotAlpha = Math.min(0.5, Math.max(0, (scale - 0.35))) * 0.5 + 0.18;
+    ctx.fillStyle = `rgba(140,170,255,${dotAlpha.toFixed(3)})`;
+    const r = Math.max(0.6, 1.1 * scale);
 
     for (let gx = startX; gx <= worldRight; gx += GRID) {
       const sx = gx * scale + ox;
-      ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke();
-    }
-    for (let gy = startY; gy <= worldBottom; gy += GRID) {
-      const sy = gy * scale + oy;
-      ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke();
+      for (let gy = startY; gy <= worldBottom; gy += GRID) {
+        const sy = gy * scale + oy;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 
@@ -739,22 +775,37 @@ class GraphCanvas {
     const sx = a.x + ux * startR, sy = a.y + uy * startR;
     const ex = b.x - ux * endR,   ey = b.y - uy * endR;
 
+    // Smooth S-curve control points — horizontally biased for a flow look,
+    // falling back to the connection direction for steep vertical links.
+    const cdx = ex - sx, cdy = ey - sy;
+    const horizBias = Math.abs(cdx) > Math.abs(cdy) * 0.6;
+    const k = 0.5;
+    let c1x, c1y, c2x, c2y;
+    if (horizBias) {
+      c1x = sx + cdx * k; c1y = sy;
+      c2x = ex - cdx * k; c2y = ey;
+    } else {
+      c1x = sx; c1y = sy + cdy * k;
+      c2x = ex; c2y = ey - cdy * k;
+    }
+
     const color = getComputedStyle(document.documentElement)
-                    .getPropertyValue('--edge-color').trim() || 'rgba(100,150,255,0.45)';
+                    .getPropertyValue('--edge-color').trim() || 'rgba(120,160,255,0.42)';
     ctx.strokeStyle = color;
     ctx.fillStyle   = color;
     ctx.lineWidth   = 1.5 / s;
+    ctx.lineCap     = 'round';
     ctx.setLineDash([]);
-    // Glowing path
     ctx.shadowColor = color;
-    ctx.shadowBlur  = 8 / s;
+    ctx.shadowBlur  = 7 / s;
     ctx.beginPath();
     ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
+    ctx.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
     ctx.stroke();
 
-    const angle = Math.atan2(ey - sy, ex - sx);
-    const al = 10 / s, aw = 0.4;
+    // Arrowhead — tangent at end of cubic bezier is (P3 - P2)
+    const angle = Math.atan2(ey - c2y, ex - c2x);
+    const al = 10 / s, aw = 0.42;
     ctx.beginPath();
     ctx.moveTo(ex, ey);
     ctx.lineTo(ex - al * Math.cos(angle - aw), ey - al * Math.sin(angle - aw));
@@ -762,6 +813,31 @@ class GraphCanvas {
     ctx.closePath();
     ctx.fill();
     ctx.shadowBlur = 0;
+
+    // Flowing data pulses — glowing dots traveling source → target
+    if (this._flowActive) {
+      const bez = (t, p0, p1, p2, p3) => {
+        const mt = 1 - t;
+        return mt*mt*mt*p0 + 3*mt*mt*t*p1 + 3*mt*t*t*p2 + t*t*t*p3;
+      };
+      const PULSES = 3;
+      ctx.save();
+      ctx.shadowColor = '#9ec4ff';
+      for (let i = 0; i < PULSES; i++) {
+        let t = (this._flowPhase + i / PULSES) % 1;
+        const px = bez(t, sx, c1x, c2x, ex);
+        const py = bez(t, sy, c1y, c2y, ey);
+        // Fade in/out at the ends
+        const fade = Math.sin(t * Math.PI);
+        ctx.globalAlpha = fade;
+        ctx.shadowBlur = 8 / s;
+        ctx.fillStyle = '#bcd6ff';
+        ctx.beginPath();
+        ctx.arc(px, py, 2.2 / s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
   }
 
   _edgeRadius(node, ux, uy) {
@@ -814,25 +890,31 @@ class GraphCanvas {
       this._roundRectPath(ctx, x - rx, y - ry, rx * 2, ry * 2, cr);
     }
 
-    // Glass gradient fill
-    const grad = ctx.createLinearGradient(x, y - ry, x, y + ry);
+    // Two-tone glass gradient fill (diagonal for a richer, premium look)
+    const _raw2 = this._colors2[n.type];
+    const color2 = (_raw2 && !hlColor) ? _raw2 : color;
+    const grad = ctx.createLinearGradient(x - rx, y - ry, x + rx, y + ry);
     if (isSelected) {
-      grad.addColorStop(0, color + '70');
-      grad.addColorStop(0.5, color + '44');
-      grad.addColorStop(1, color + '28');
+      grad.addColorStop(0, color + '7A');
+      grad.addColorStop(1, color2 + '34');
     } else {
-      grad.addColorStop(0, color + '42');
-      grad.addColorStop(0.5, color + '28');
-      grad.addColorStop(1, color + '14');
+      grad.addColorStop(0, color + '4A');
+      grad.addColorStop(1, color2 + '18');
     }
     ctx.fillStyle = grad;
     ctx.fill();
 
-    // Border
-    ctx.shadowBlur  = 0;
+    // 1px glowing accent border (brighter + glow when selected/running)
+    if (isSelected || isStepNode) {
+      ctx.shadowColor = isStepNode ? '#ffffff' : color;
+      ctx.shadowBlur  = (isStepNode ? 18 : 12) / s;
+    } else {
+      ctx.shadowBlur = 0;
+    }
     ctx.strokeStyle = isStepNode ? '#ffffff' : isSelected ? color : (hlColor || color) + 'CC';
-    ctx.lineWidth   = (isStepNode ? 4 : isSelected ? 2.5 : hlColor ? 2.5 : isHighlight ? 2.5 : 1.8) / s;
+    ctx.lineWidth   = (isStepNode ? 3 : isSelected ? 2 : hlColor ? 2.5 : isHighlight ? 2.5 : 1.4) / s;
     ctx.stroke();
+    ctx.shadowBlur  = 0;
 
     // Glass sheen: top half highlight (simulates lit glass plate)
     ctx.save();
@@ -852,7 +934,7 @@ class GraphCanvas {
 
     const fontSize = Math.max(9, Math.min(13, rx * 0.55));
     ctx.fillStyle     = isSelected ? '#fff' : 'rgba(255,255,255,0.92)';
-    ctx.font          = `bold ${fontSize}px monospace`;
+    ctx.font          = `600 ${fontSize}px 'JetBrains Mono', ui-monospace, monospace`;
     ctx.textAlign     = 'center';
     ctx.textBaseline  = 'middle';
     const maxChars = Math.floor(rx / (fontSize * 0.5));
@@ -861,7 +943,7 @@ class GraphCanvas {
 
     ctx.fillStyle    = getComputedStyle(document.documentElement)
                         .getPropertyValue('--muted').trim() || '#6b7280';
-    ctx.font         = '10px monospace';
+    ctx.font         = `500 10px 'JetBrains Mono', ui-monospace, monospace`;
     const valStr = this.quizMode
       ? '?'
       : (n.value !== undefined ? Number(n.value).toPrecision(4) : '');
