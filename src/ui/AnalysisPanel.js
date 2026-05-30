@@ -69,12 +69,25 @@
           <button id="btn-mc">Run Monte Carlo</button>
           <div id="mc-result" class="analysis-result"></div>
         </div>
+
+        <!-- Sensitivity Heatmap -->
+        <div class="analysis-section">
+          <div class="analysis-section-title">Sensitivity Analysis</div>
+          <div class="sm-row" style="margin-bottom:6px">
+            <span>Perturbation</span>
+            <input id="sens-pct" type="number" value="10" min="0.1" max="50" step="0.5" class="sm-input" />
+            <span>%</span>
+          </div>
+          <button id="btn-sensitivity">Run Sensitivity</button>
+          <div id="sensitivity-result" class="analysis-result"></div>
+        </div>
       `;
 
       this._eqResult         = this._container.querySelector('#eq-result');
       this._stabilityResult  = this._container.querySelector('#stability-result');
       this._bifResult        = this._container.querySelector('#bif-result');
       this._mcResult         = this._container.querySelector('#mc-result');
+      this._sensResult       = this._container.querySelector('#sensitivity-result');
       this._btnStability     = this._container.querySelector('#btn-stability');
       this._bifCanvas        = this._container.querySelector('#bif-canvas');
       this._bifCtx           = this._bifCanvas.getContext('2d');
@@ -85,6 +98,7 @@
       this._btnStability.addEventListener('click', () => this._runStability());
       this._container.querySelector('#btn-bif').addEventListener('click', () => this._runBif());
       this._container.querySelector('#btn-mc').addEventListener('click', () => this._runMC());
+      this._container.querySelector('#btn-sensitivity').addEventListener('click', () => this._runSensitivity());
 
       this._refreshBifNodes();
     }
@@ -266,6 +280,48 @@
       // Axis label
       ctx.fillStyle = muted; ctx.font = '10px monospace'; ctx.textAlign = 'center';
       ctx.fillText('parameter', PAD.left + plotW / 2, H - 3);
+    }
+
+    _runSensitivity() {
+      const pct = parseFloat(this._container.querySelector('#sens-pct').value) || 10;
+      const params = this._getParams();
+      this._sensResult.textContent = 'Running…';
+
+      setTimeout(() => {
+        const res = Analysis.sensitivityAnalysis(this._model, params, pct);
+
+        if (res.errors && res.errors.length) {
+          this._sensResult.innerHTML = `<span class="console-err">${res.errors.join(', ')}</span>`;
+          return;
+        }
+        if (!res.rankings.length) {
+          this._sensResult.textContent = 'No input nodes to analyse.';
+          return;
+        }
+
+        const maxScore = res.rankings[0].score || 1;
+        const rows = res.rankings.map((r, i) => {
+          const pct = Math.max(2, Math.round(r.score / maxScore * 100));
+          const label = r.desc ? `${r.name} — ${r.desc}` : r.name;
+          const palette = ['#4f8ef7','#a78bfa','#3ecf8e','#f7a24f','#f7604f','#7ef7c0'];
+          const col = palette[i % palette.length];
+          return `
+            <div style="margin-bottom:5px">
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">
+                <span style="color:rgba(255,255,255,0.75)">${label}</span>
+                <span style="color:rgba(255,255,255,0.45)">${r.score < 0.001 ? r.score.toExponential(1) : r.score.toFixed(3)}</span>
+              </div>
+              <div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08)">
+                <div style="width:${pct}%;height:100%;border-radius:3px;background:${col};transition:width 0.4s ease"></div>
+              </div>
+            </div>`;
+        }).join('');
+
+        this._sensResult.innerHTML = `
+          <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:8px">
+            Sensitivity to ±${pct}% perturbation on each parameter
+          </div>${rows}`;
+      }, 10);
     }
 
     _runMC() {

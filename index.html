@@ -95,42 +95,55 @@
         <input id="node-search" type="text" placeholder="🔍 Filter nodes…" title="Filter nodes by name or type" />
       </div>
 
+      <button id="btn-auto-layout" class="icon-btn" title="Auto-layout nodes (L)" style="width:auto;padding:0 10px;font-size:12px">⬡ Layout</button>
+
       <div style="flex:1"></div>
 
       <button id="error-badge" title="Download error logs">⚠ <span id="error-count">0</span> errors</button>
 
       <!-- Sim controls -->
       <div id="sim-group">
-        <label>t₀ <input id="t0" type="number" value="0"   step="1"    /></label>
-        <label>t₁ <input id="t1" type="number" value="10"  step="1"    /></label>
-        <label>dt <input id="dt" type="number" value="0.1" step="0.01" /></label>
+        <label>t₀ <input id="t0" type="number" value="0"   step="1"     min="0" /></label>
+        <label>t₁ <input id="t1" type="number" value="10"  step="1"     min="0" /></label>
+        <label>dt <input id="dt" type="number" value="0.1" step="0.001" min="0.0001" lang="en" /></label>
         <label title="Numerical integration method">
           <select id="integrator-select">
             <option value="euler">Euler</option>
             <option value="rk4"  >RK4 ✦</option>
           </select>
         </label>
-        <button id="btn-run">⚡ Run</button>
-        <div class="btn-split-group">
-          <button id="btn-animate">▶ Animate</button>
-          <button id="btn-animate-speed" class="btn-split-arrow" title="Animation speed">⋯</button>
-          <div id="animate-speed-menu" class="settings-menu" style="display:none; right:0; top:calc(100% + 6px)">
-            <div class="sm-row">
-              <span>Speed (sim s / real s)</span>
-              <input type="number" id="anim-speed" value="1" min="0.01" max="10000" step="0.1" />
-            </div>
-            <div class="sm-row sm-presets">
-              <button class="preset-btn" data-v="0.1">0.1×</button>
-              <button class="preset-btn" data-v="0.5">0.5×</button>
-              <button class="preset-btn" data-v="1">1×</button>
-              <button class="preset-btn" data-v="5">5×</button>
-              <button class="preset-btn" data-v="10">10×</button>
-              <button class="preset-btn" data-v="100">100×</button>
+        <!-- Playback group: Run · Animate · Step · Reset -->
+        <div class="playback-group">
+          <button id="btn-run" class="pb-btn pb-run" title="Run full simulation (R)">⚡ Run</button>
+          <div class="pb-divider"></div>
+          <button id="btn-animate" class="pb-btn" title="Animate step-by-step (Space)">▶ Animate</button>
+          <div class="pb-arrow-wrap">
+            <button id="btn-animate-speed" class="pb-btn pb-arrow" title="Playback options">⋯</button>
+            <div id="animate-speed-menu" class="settings-menu" style="display:none; right:0; top:calc(100% + 8px)">
+              <div class="sm-row">
+                <span>Speed (sim s / real s)</span>
+                <input type="number" id="anim-speed" value="1" min="0.01" max="10000" step="0.1" />
+              </div>
+              <div class="sm-row sm-presets">
+                <button class="preset-btn" data-v="0.1">0.1×</button>
+                <button class="preset-btn" data-v="0.5">0.5×</button>
+                <button class="preset-btn" data-v="1">1×</button>
+                <button class="preset-btn" data-v="5">5×</button>
+                <button class="preset-btn" data-v="10">10×</button>
+                <button class="preset-btn" data-v="100">100×</button>
+              </div>
+              <div class="sm-row">
+                <label style="display:flex;align-items:center;gap:6px">
+                  <input type="checkbox" id="chk-trail" />
+                  Phase trail on canvas
+                </label>
+              </div>
             </div>
           </div>
+          <div class="pb-divider"></div>
+          <button id="btn-step"  class="pb-btn" title="Step once (S)">⏭ Step</button>
+          <button id="btn-reset" class="pb-btn" title="Reset simulation">⏮ Reset</button>
         </div>
-        <button id="btn-step">⏭ Step</button>
-        <button id="btn-reset">⏮ Reset</button>
       </div>
 
       <div class="toolbar-divider"></div>

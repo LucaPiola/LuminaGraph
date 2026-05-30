@@ -42,6 +42,13 @@ class GraphCanvas {
     this._rubberBand   = null;  // { x0, y0, x1, y1 } in world coords
     this.selectedIds   = new Set(); // multi-selection set
 
+    // Sparklines: Map<nodeId, number[]> — last N values per node
+    this._sparklines   = new Map();
+    this._sparkMax     = 80; // number of samples to keep
+
+    // Live phase trail: { pts: Float32Array, len, xName, yName, xMin,xMax,yMin,yMax }
+    this._trail        = null;
+
     this._colors = {
       state:     '#4f8ef7',
       algebraic: '#3ecf8e',
@@ -102,6 +109,109 @@ class GraphCanvas {
 
     this.draw();
     if (this.onZoomChange) this.onZoomChange(scale);
+  }
+
+  // ── Sparklines ─────────────────────────────────────────────────────────────
+
+  /** Push one new value per node from the current model state */
+  pushSparklineSample() {
+    for (const n of this.model.nodes.values()) {
+      if (n.type === 'input') continue;
+      if (!this._sparklines.has(n.id)) this._sparklines.set(n.id, []);
+      const arr = this._sparklines.get(n.id);
+      arr.push(n.value);
+      if (arr.length > this._sparkMax) arr.shift();
+    }
+  }
+
+  clearSparklines() { this._sparklines.clear(); }
+
+  // ── Phase trail ────────────────────────────────────────────────────────────
+
+  /** Feed the live trail with current series data */
+  setTrailData(series, xName, yName) {
+    const xs = series[xName], ys = series[yName];
+    if (!xs || !ys || xs.length < 2) { this._trail = null; return; }
+    const N = Math.min(xs.length, ys.length);
+    let xMin =  Infinity, xMax = -Infinity;
+    let yMin =  Infinity, yMax = -Infinity;
+    for (let i = 0; i < N; i++) {
+      if (isFinite(xs[i])) { xMin = Math.min(xMin, xs[i]); xMax = Math.max(xMax, xs[i]); }
+      if (isFinite(ys[i])) { yMin = Math.min(yMin, ys[i]); yMax = Math.max(yMax, ys[i]); }
+    }
+    this._trail = { xs, ys, len: N, xName, yName, xMin, xMax, yMin, yMax };
+  }
+
+  clearTrail() { this._trail = null; }
+
+  // ── Auto layout (Fruchterman-Reingold spring embedder) ────────────────────
+
+  autoLayout() {
+    const nodes = [...this.model.nodes.values()];
+    if (nodes.length < 2) return;
+    const edges = this.model.edges;
+
+    const W = (this.canvas.width  / this._tx.scale) * 0.7;
+    const H = (this.canvas.height / this._tx.scale) * 0.7;
+    const k = Math.sqrt(W * H / nodes.length) * 1.2;
+
+    // Working positions
+    const pos = new Map(nodes.map(n => [n.id, { x: n.x, y: n.y }]));
+
+    let temp = W * 0.3;
+    const iters = 280;
+
+    for (let iter = 0; iter < iters; iter++) {
+      const disp = new Map(nodes.map(n => [n.id, { x: 0, y: 0 }]));
+
+      // Repulsion between every pair
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const u = nodes[i], v = nodes[j];
+          const pu = pos.get(u.id), pv = pos.get(v.id);
+          let dx = pu.x - pv.x, dy = pu.y - pv.y;
+          const d = Math.max(0.5, Math.sqrt(dx*dx + dy*dy));
+          const f = k * k / d;
+          dx = dx / d * f; dy = dy / d * f;
+          disp.get(u.id).x += dx; disp.get(u.id).y += dy;
+          disp.get(v.id).x -= dx; disp.get(v.id).y -= dy;
+        }
+      }
+
+      // Attraction along edges
+      for (const e of edges) {
+        const pu = pos.get(e.from), pv = pos.get(e.to);
+        if (!pu || !pv) continue;
+        const dx = pu.x - pv.x, dy = pu.y - pv.y;
+        const d = Math.max(0.5, Math.sqrt(dx*dx + dy*dy));
+        const f = d * d / k;
+        const fx = dx / d * f, fy = dy / d * f;
+        disp.get(e.from).x -= fx; disp.get(e.from).y -= fy;
+        disp.get(e.to).x   += fx; disp.get(e.to).y   += fy;
+      }
+
+      // Apply displacement clamped to temperature
+      for (const n of nodes) {
+        const d = disp.get(n.id);
+        const len = Math.max(0.01, Math.sqrt(d.x*d.x + d.y*d.y));
+        const move = Math.min(len, temp);
+        const p = pos.get(n.id);
+        p.x += d.x / len * move;
+        p.y += d.y / len * move;
+      }
+
+      temp *= 0.97; // cool
+    }
+
+    // Commit positions
+    for (const n of nodes) {
+      const p = pos.get(n.id);
+      n.x = Math.round(p.x);
+      n.y = Math.round(p.y);
+    }
+
+    if (this.onMutation) this.onMutation();
+    this.fitToScreen();
   }
 
   // ── Private: geometry helpers ───────────────────────────────────────────────
@@ -528,6 +638,9 @@ class GraphCanvas {
     ctx.save();
     ctx.setTransform(scale, 0, 0, scale, ox, oy);
 
+    // Phase trail — drawn first so nodes appear on top
+    if (this._trail) this._drawTrail();
+
     this._drawEdges();
     if (this._connecting) this._drawConnectingLine();
     for (const n of this.model.nodes.values()) this._drawNode(n);
@@ -754,8 +867,91 @@ class GraphCanvas {
       : (n.value !== undefined ? Number(n.value).toPrecision(4) : '');
     ctx.fillText(valStr, x, y + ry + 12);
 
+    // Sparkline — small value history chart below the node
+    const spark = this._sparklines.get(n.id);
+    if (spark && spark.length > 2 && !this.quizMode) {
+      const sw = rx * 1.6, sh = 10;
+      const sx0 = x - sw / 2, sy0 = y + ry + 18;
+      let vMin = Infinity, vMax = -Infinity;
+      for (const v of spark) { if (isFinite(v)) { vMin = Math.min(vMin, v); vMax = Math.max(vMax, v); } }
+      const vRange = vMax - vMin || 1;
+      ctx.save();
+      ctx.globalAlpha = isDimmed ? 0.15 : 0.55;
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = 1 / this._tx.scale;
+      ctx.beginPath();
+      for (let i = 0; i < spark.length; i++) {
+        const px = sx0 + (i / (spark.length - 1)) * sw;
+        const py = sy0 + sh - ((spark[i] - vMin) / vRange) * sh;
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
     if (isDimmed) ctx.globalAlpha = 1;
     if (isSelected) this._drawHandles(n, color);
+  }
+
+  // ── Trail drawing ──────────────────────────────────────────────────────────
+  _drawTrail() {
+    const t = this._trail;
+    const ctx = this.ctx;
+    const N = t.len;
+    if (N < 2) return;
+
+    // Compute centroid of all nodes (world space) to center the trail
+    const nodes = [...this.model.nodes.values()];
+    let cx = 0, cy = 0;
+    for (const n of nodes) { cx += n.x; cy += n.y; }
+    cx /= nodes.length; cy /= nodes.length;
+
+    // Scale trail to fit within ~250 world units
+    const xRange = (t.xMax - t.xMin) || 1;
+    const yRange = (t.yMax - t.yMin) || 1;
+    const trailSize = 220;
+    const scaleX = trailSize / xRange;
+    const scaleY = trailSize / yRange;
+    const sc = Math.min(scaleX, scaleY);
+    const toWx = v => cx + (v - (t.xMin + xRange / 2)) * sc;
+    const toWy = v => cy + (v - (t.yMin + yRange / 2)) * sc;
+
+    // Draw as segmented line with color gradient (blue → purple → cyan)
+    ctx.save();
+    ctx.lineWidth = 0.8 / this._tx.scale;
+
+    const segSize = 8; // points per segment for color banding
+    for (let i = 1; i < N; i++) {
+      const t0 = (i - 1) / (N - 1);
+      // Palette: #4f8ef7 → #a78bfa → #7ef7c0
+      let r, g, b;
+      if (t0 < 0.5) {
+        const s = t0 * 2;
+        r = Math.round(79  + (167 - 79)  * s);
+        g = Math.round(142 + (139 - 142) * s);
+        b = Math.round(247 + (250 - 247) * s);
+      } else {
+        const s = (t0 - 0.5) * 2;
+        r = Math.round(167 + (126 - 167) * s);
+        g = Math.round(139 + (247 - 139) * s);
+        b = Math.round(250 + (192 - 250) * s);
+      }
+      const alpha = 0.18 + t0 * 0.38; // older = more transparent
+      ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
+      ctx.beginPath();
+      ctx.moveTo(toWx(t.xs[i-1]), toWy(t.ys[i-1]));
+      ctx.lineTo(toWx(t.xs[i]),   toWy(t.ys[i]));
+      ctx.stroke();
+    }
+
+    // Draw a bright dot at the current position
+    const cx2 = toWx(t.xs[N-1]), cy2 = toWy(t.ys[N-1]);
+    const dotR = 3 / this._tx.scale;
+    ctx.beginPath();
+    ctx.arc(cx2, cy2, dotR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fill();
+    ctx.restore();
   }
 
   // Task 7: text node drawing

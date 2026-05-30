@@ -332,6 +332,85 @@
     return { times: timesArr || [], bandsMap, errors: [] };
   }
 
+  // ── Sensitivity analysis ──────────────────────────────────────────────────────
+  /**
+   * For each input node, perturb its value by ±δ% and measure the total
+   * change in all non-input variables' final values. Returns a ranked list.
+   *
+   * @param {STModel} model
+   * @param {object}  params  – { t0, t1, dt } from getParams()
+   * @param {number}  [pct=10] – perturbation percentage
+   * @returns {{ rankings: Array<{name,score,unit,desc}>, errors: string[] }}
+   */
+  function sensitivityAnalysis(model, params, pct = 10) {
+    const { t0, t1, dt } = params;
+    const errors = [];
+
+    // Baseline run
+    const errs = model.compile();
+    if (errs.length) return { rankings: [], errors: errs.map(e => e.message || e) };
+
+    const baseline = model.run(t0, t1, dt);
+    if (baseline.errors.length) return { rankings: [], errors: baseline.errors };
+
+    const inputNodes = [...model.nodes.values()].filter(n => n.type === 'input');
+    if (!inputNodes.length) return { rankings: [], errors: ['No input nodes found.'] };
+
+    // Output nodes to measure (state + algebraic + output)
+    const outputNodes = [...model.nodes.values()].filter(n =>
+      n.type !== 'input' && n.type !== 'text'
+    );
+
+    const savedState = {};
+    for (const n of model.nodes.values()) savedState[n.id] = { initVal: n.initVal, value: n.value };
+
+    const rankings = [];
+
+    for (const inp of inputNodes) {
+      const base = inp.initVal;
+      const delta = Math.abs(base) > 1e-10 ? base * pct / 100 : pct / 100;
+      if (Math.abs(delta) < 1e-14) continue;
+
+      let score = 0;
+
+      for (const sign of [1, -1]) {
+        inp.initVal = base + sign * delta;
+        model.compile();
+        const result = model.run(t0, t1, dt);
+        if (!result.errors.length) {
+          for (const out of outputNodes) {
+            const bVals = baseline.series[out.name];
+            const pVals = result.series[out.name];
+            if (!bVals || !pVals) continue;
+            const N = Math.min(bVals.length, pVals.length);
+            for (let i = 0; i < N; i++) {
+              const diff = (pVals[i] - bVals[i]) / (Math.abs(bVals[i]) + 1e-10);
+              score += diff * diff;
+            }
+          }
+        }
+        // Restore
+        inp.initVal = base;
+        for (const [id, s] of Object.entries(savedState)) {
+          const n = model.nodes.get(Number(id));
+          if (n) { n.initVal = s.initVal; n.value = s.initVal; }
+        }
+      }
+
+      rankings.push({ name: inp.name, desc: inp.desc || '', unit: inp.unit || '', score });
+    }
+
+    // Restore model fully and recompile
+    for (const [id, s] of Object.entries(savedState)) {
+      const n = model.nodes.get(Number(id));
+      if (n) { n.initVal = s.initVal; n.value = s.initVal; }
+    }
+    model.compile();
+
+    rankings.sort((a, b) => b.score - a.score);
+    return { rankings, errors };
+  }
+
   // ── Exports ───────────────────────────────────────────────────────────────────
 
   window.Analysis = {
@@ -339,6 +418,7 @@
     stabilityAnalysis,
     bifurcationDiagram,
     monteCarlo,
+    sensitivityAnalysis,
     eigenvalues,
   };
 

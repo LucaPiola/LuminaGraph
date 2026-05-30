@@ -371,7 +371,7 @@ body::before {
 #search-group { display: flex; align-items: center; gap: 4px; }
 
 /* ── General Buttons ──────────────────────────────────────────────────────── */
-button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropdown-item):not(.menu-btn) {
+button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropdown-item):not(.menu-btn):not(.pb-btn) {
   height: 34px;
   padding: 0 14px;
   background: rgba(255,255,255,0.07);
@@ -391,7 +391,7 @@ button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropd
   position: relative;
   overflow: hidden;
 }
-button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropdown-item):not(.menu-btn)::before {
+button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropdown-item):not(.menu-btn):not(.pb-btn)::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -399,7 +399,7 @@ button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropd
   pointer-events: none;
   border-radius: inherit;
 }
-button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropdown-item):not(.menu-btn):hover {
+button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropdown-item):not(.menu-btn):not(.pb-btn):hover {
   background: rgba(255,255,255,0.12);
   border-color: rgba(255,255,255,0.22);
   transform: translateY(-2px) scale(1.04);
@@ -407,23 +407,13 @@ button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropd
   transition: background 0.25s var(--spring-out), border-color 0.25s var(--spring-out),
               box-shadow 0.25s var(--spring-out), transform 0.55s var(--spring);
 }
-button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropdown-item):not(.menu-btn):active {
+button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropdown-item):not(.menu-btn):not(.pb-btn):active {
   transform: scale(0.96);
   box-shadow: none;
   transition: transform 0.1s;
 }
 
-#btn-run {
-  background: linear-gradient(135deg, rgba(79,142,247,0.90), rgba(55,90,220,0.90)) !important;
-  border-color: rgba(79,142,247,0.55) !important;
-  color: #fff !important;
-  font-weight: 600 !important;
-  box-shadow: 0 2px 16px rgba(79,142,247,0.35), inset 0 1px 0 rgba(255,255,255,0.25) !important;
-}
-#btn-run:hover {
-  box-shadow: 0 6px 28px rgba(79,142,247,0.55), inset 0 1px 0 rgba(255,255,255,0.3) !important;
-  transform: translateY(-2px) scale(1.02) !important;
-}
+/* #btn-run styling now handled by .pb-run inside .playback-group */
 
 #btn-theme {
   margin-left: auto;
@@ -1162,14 +1152,58 @@ input[type="range"]::-webkit-slider-thumb:hover {
   transform: scale(1.06);
 }
 
-/* ── Split Animate Button ──────────────────────────────────────────────────── */
-.btn-split-group { display: flex; align-items: stretch; position: relative; gap: 0; }
-.btn-split-group > #btn-animate { border-radius: 12px 0 0 12px !important; border-right: none !important; flex: 1; }
-.btn-split-arrow {
-  height: 34px; width: 28px; padding: 0;
-  border-radius: 0 12px 12px 0 !important;
-  display: flex; align-items: center; justify-content: center;
-  border-left: 1px solid rgba(255,255,255,0.12) !important; font-size: 14px;
+/* ── Playback Button Group ─────────────────────────────────────────────────── */
+.playback-group {
+  display: flex;
+  align-items: stretch;
+  height: 34px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 14px;
+  overflow: visible;       /* must be visible so dropdown escapes the group */
+  gap: 0;
+  flex-shrink: 0;
+}
+/* Round only the outer edges */
+.playback-group > .pb-btn:first-child,
+.playback-group > *:first-child > .pb-btn:first-child { border-radius: 13px 0 0 13px; }
+.playback-group > .pb-btn:last-child,
+.playback-group > *:last-child > .pb-btn               { border-radius: 0 13px 13px 0; }
+.pb-btn {
+  height: 34px;
+  padding: 0 14px;
+  border: none;
+  background: transparent;
+  color: rgba(255,255,255,0.75);
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 0;        /* group clips, not individual buttons */
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.pb-btn:hover { color: #fff; background: rgba(255,255,255,0.10); }
+.pb-run {
+  background: linear-gradient(135deg, #4f8ef7, #375ada);
+  color: #fff;
+  font-weight: 600;
+  padding: 0 16px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.20);
+}
+.pb-run:hover { background: linear-gradient(135deg, #6ba3ff, #4a70e8); color: #fff; }
+.pb-arrow-wrap { position: relative; display: flex; align-items: stretch; }
+.pb-arrow { padding: 0 11px; font-size: 13px; color: rgba(255,255,255,0.40); }
+.pb-arrow:hover { color: rgba(255,255,255,0.85); }
+.pb-divider {
+  width: 1px;
+  align-self: stretch;
+  background: rgba(255,255,255,0.09);
+  flex-shrink: 0;
 }
 
 /* ── Share Popover ─────────────────────────────────────────────────────────── */
@@ -1474,7 +1508,7 @@ body.embed #main { height: 100vh; }
 [data-theme="light"] .tool-btn { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.08); color: rgba(0,0,0,0.60); }
 [data-theme="light"] .tool-btn:hover { background: rgba(0,0,0,0.08); color: rgba(0,0,0,0.85); }
 [data-theme="light"] .tool-btn.active { background: rgba(37,99,235,0.14); border-color: rgba(37,99,235,0.35); color: #1d4ed8; }
-[data-theme="light"] button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropdown-item):not(.menu-btn) {
+[data-theme="light"] button:not(.tool-btn):not(.icon-btn):not(.chart-tab):not(.preset-btn):not(.dropdown-item):not(.menu-btn):not(.pb-btn) {
   background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.10); color: rgba(0,0,0,0.75);
 }
 [data-theme="light"] #toolbar input[type="number"],

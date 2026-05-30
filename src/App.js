@@ -722,6 +722,9 @@
         const pct = Math.min(1, (model._t - t0) / (t1 - t0));
         _animButtonProgress(pct);
         setStatus(`Animating… t = ${model._t.toFixed(3)}`);
+        // Feed sparklines and phase trail
+        gc.pushSparklineSample();
+        _updateTrail();
       }
       animRafId = requestAnimationFrame(tick);
     }
@@ -737,9 +740,35 @@
     if (incTimes !== null) updateDataTable(incTimes, incSeries);
   }
 
+  // ── Trail / sparkline helpers ──────────────────────────────────────────────
+  const chkTrail = document.getElementById('chk-trail'); // off by default
+
+  function _updateTrail() {
+    if (!incSeries) return;
+    if (!chkTrail || !chkTrail.checked) { gc.clearTrail(); return; }
+    // Pick first two state nodes for the trail X/Y
+    const stateNodes = [...model.nodes.values()].filter(n => n.type === 'state');
+    if (stateNodes.length >= 2) {
+      gc.setTrailData(incSeries, stateNodes[0].name, stateNodes[1].name);
+    }
+  }
+
+  function _clearOverlays() {
+    gc.clearSparklines();
+    gc.clearTrail();
+  }
+
+  // ── Auto-layout ────────────────────────────────────────────────────────────
+  document.getElementById('btn-auto-layout')?.addEventListener('click', () => {
+    pushUndoSnapshot();
+    gc.autoLayout();
+    setStatus('Auto-layout applied.');
+  });
+
   // ── Reset ──────────────────────────────────────────────────────────────────
   function resetSim() {
     stopAnimate();
+    _clearOverlays();
     lastSimAction = 'reset';
     const { t0 } = getParams();
     model.reset(t0);
@@ -888,6 +917,7 @@
     // Zoom shortcuts
     if (e.key === '0' && !isMeta) { gc.resetZoom(); return; }
     if (e.key === 'f' && !isMeta) { gc.fitToScreen(); return; }
+    if (e.key === 'l' && !isMeta) { pushUndoSnapshot(); gc.autoLayout(); setStatus('Auto-layout applied.'); return; }
     if ((e.key === '+' || e.key === '=') && !isMeta) {
       const canvas = document.getElementById('graph-canvas');
       const cx = canvas.width / 2, cy = canvas.height / 2;
@@ -1054,6 +1084,7 @@
     updateDataTable(null, null);
     incTimes = incSeries = null;
     statusTime.textContent = '';
+    _clearOverlays();
     gc.fitToScreen();
     if (analysisPanel) analysisPanel.refresh();
     _syncDocTitle();
