@@ -1,93 +1,237 @@
-# STGraphX: readme
+# LuminaGraph
 
-Luca Mari, versione 28 maggio 2026
+> **A browser-native playground built on the foundations of [STGraph](https://www.stgraph.it/) by [Professor Luca Mari](https://www.liuc.it/en/university/faculties-and-departments/economics/luca-mari/) — Università Liuc.**
 
-## Contesto
+![LuminaGraph interface](img/example.png)
 
-STGraphX è un editor ed esecutore di modelli dinamici a grafo orientato.
+LuminaGraph is an experimental reimplementation of STGraph in JavaScript, served entirely in the browser with no build step and no backend. The goal is to explore new UX paradigms, modern visual design, and extended interactivity while staying faithful to the systems-dynamics modeling philosophy of the original Java application.
 
-È un esperimento di reimplementazione di STGraph, da Java a JavaScript, realizzata interamente in _vibe coding_ con GPT-Codex-5.x.
+---
 
-(si può provare <a href="https://lmari.github.io/STGraphX" target="_blank" rel="noopener noreferrer">qui</a>)
+## What is STGraph?
 
-(come spiegato in README-ARCHITECTURE.md, dall'ambiente di sviluppo si può eseguire la versione Electron senza compilazione con `npm run start:desktop -- --lang=en`)
+STGraph is a Java desktop application for **systems thinking and systems dynamics modeling**. It allows users to build causal-loop and stock-and-flow diagrams, define variables with mathematical expressions, run simulations over time, and visualize the resulting dynamics. It is used in teaching and research contexts to model complex systems — from epidemics to ecosystems to economic circuits.
 
-Ho guardato ma mai toccato il codice generato, che al momento è di circa 600 linee HTML (index.html), 3k linee CSS (styles.css), 29k linee JS (runtime*: 3k; player*: 2k; app.js: 13k, graph-functions.js: 2k, i18n-inline.js: 2k, semantic.js: 3k, widgets.js: 4k).
+---
 
-## Stato del progetto
+## LuminaGraph — Design Goals
 
-Applicazione JavaScript con doppia shell e logica condivisa:
+- **Browser-native**: runs as a single `index.html` served by any HTTP server, no install required
+- **UX experimentation**: tests new interaction patterns (glass morphism, genie animations, rubber-band selection, floating panels, 3D visualization) that would be harder to iterate on in the original Java codebase
+- **Library integration**: explores how modern JS libraries (GSAP, Three.js, Chart.js-style canvas rendering) can enhance the modeling experience
+- **Feature parity as a target**, not a constraint — some features are re-imagined rather than replicated
 
-* web, per accesso da browser via `http:` (e con qualche limitazione anche `file:`);
-* desktop, mediante `Electron`.
+---
 
-__Al momento implementati (senza librerie esterne):__
+## Getting Started
 
-* editor per grafi orientati, con nodi di forme e colori diversi e tooltip, frecce spline, testi, gestione di ridimensionamento, spostamento, cancellazione dei nodi, anche per selezioni multiple, zoom, griglia, clipboard (anche condivisa tra instanze diverse dell'app), undo e redo, ...;
-* menu, menu contestuale e pannello di configurazione aggiornato dinamicamente, con tooltip;
-* gestione dei testi dell'interfaccia utente in italiano, inglese e portoghese, con scelta via query string nella shell web (`?lang=it|en|pt`) e via parametro `--lang=it|en|pt` nella shell Electron;
-* gestione dei nodi algebrici, di stato, parametri e sottomodelli, con funzioni in sintassi javascript (compresa la gestione locale di `this` come stato attuale); controllo sintattico sul nome dei nodi; controllo sui parametri (valore non cambia dopo la prima esecuzione; frecce entranti non ammesse); controllo sullo stato iniziale: solo espressioni locali o riferimenti a parametri; controllo del numero di cifre decimali visualizzate;
-* variabili globali;
-* gestione di esecuzione completa, passo-passo, temporizzata, con modello in modalità read-only durante l'esecuzione;
-* gestione opzionale di blocco di esecuzione ed evidenziazione per nodi non definiti;
-* editor per espressioni, con gestione ed help contestuale e controllo sintattico dinamico;
-* varie funzioni definite; mapping da valori booleani a valori numerici e funzione `if`;
-* funzione `integral`, con scelta dell'algoritmo di integrazione, se Eulero o RK4;
-* alcune funzioni per distribuzioni di probabilità;
-* generazione di vettori con la sintassi `range(inizio, fine, [passo])`; indicizzazione/slicing di vettori e matrici con la sintassi di NumPy, `[inizio:fine]` oppure `[inizio:fine:passo]`, anche con indici opzionali e negativi; gestione di funzioni a valori non scalari, per esempio `sin([1,2,3])`; gestione di operatori con argomenti non scalari;
-* funzioni "special form" per operare su vettori e matrici: `array`, `reduce`, `map`, `filter`;
-* una funzione per leggere il contenuto di file dati in formato csv;
-* una voce di menu per esportare la serie storica dei valori delle variabili di output in un file csv;
-* possibilità di definire funzioni locali ai modelli;
-* gestione di proprietà custom per il modello e i singoli nodi e funzioni `getModelProperty`/`getProperty` e `setModelProperty`/`setProperty`;
-* gestione di nodi di output e di widget di output: grafici, tabelle, matrici, led, testo; pannello di configurazione aggiornato dinamicamente;
-* gestione di nodi di input e di widget di input, anche per parametri: slider, pulsante, selettore di testo; pannello di configurazione aggiornato dinamicamente;
-* gestione dei sottomodelli con file JSON separati, con caricamento dalla stessa cartella del modello, binding dei nodi di input e accesso ai nodi di output con notazione `nomeSottomodello.nomeOutput`; prima gestione in logica ABM dichiarativa / funzionale, mediante variabili di sistema `self` e `$i$`;
-* visualizzazione alternata per il grafo e i widget;
-* enfatizzazione delle frecce sul nodo selezionato;
-* editor per testi con formattazione HTML basilare;
-* definizione della base dei tempi e modalità varie di esecuzione; pannello di configurazione aggiornato dinamicamente;
-* caricamento e salvataggio di modelli in file JSON;
-* editor per espressioni con controllo sintattico interattivo, visualizzazione dei valori attuali, help;
-* menu di help;
-* nel menu File, gestione dei modelli aperti di recente;
-* una prima gestione di controllo di correttezza del modello;
-* un primo debugger, con gestione di watch e breakpoint;
-* un player per esecuzione di modelli in pagine HTML;
-* un API JavaScript per esecuzione headless mediante script node.js;
-* ...
+```bash
+# Clone or download the repository
+cd LuminaGraph
 
-__Al momento non implementati (rispetto a STGraph):__
+# Serve with any HTTP server (Python built-in works fine)
+python3 -m http.server 7824
 
-* altri widget e altre opzioni per i widget già presenti;
-* altre funzioni;
-* nodi di stato con output;
-* gestione di interrupt;
-* playmode e altre modalità di esecuzione;
-* interfaccia a tab per più modelli;
-* una pagina di esempi;
-* ...
+# Open in browser
+open http://localhost:7824
+```
 
-## Appunti sul progetto
+---
 
-* Comprende le richieste molto bene e la qualità del codice prodotto è quasi sempre eccellente
-* Anche senza che glielo si chieda, fa test sul codice che ha generato, e quasi sempre lo corregge da sé se trova degli errori
-* Nel caso di estensioni a parti già realizzate, si fa carico automaticamente di mantenere la coerenza
-* Le spiegazioni del lavoro compiuto sono chiare e corrette
-* A volte prende iniziative proponendo o anche implementando estensioni a quanto richiesto
-* È in grado di fare refactoring e ottimizzazione, e fa refactoring anche autonomamente quando si accorge che è opportuno
-* Si possono chiedere pareri o comunque indicazioni su come si potrebbero risolvere problemi
-* Una stessa richiesta può includere cose diverse da realizzare
-* Quando si chiede di realizzare cose complesse, suggerisce di farlo per passi successivi ("Se vuoi, il prossimo passo utile è...")
-* Scrive ottima documentazione a partire dal codice, e aggiorna automaticamente la documentazione
-* È come un dialogo con uno sviluppatore esperto (inclusi suoi commenti come "Il patch è saltato su un punto di contesto nel CSS. Lo rifaccio in blocchi più piccoli così non rischiamo di lasciare roba a metà.")
-* Sa usare il software che ha generato: dunque in questo caso sa creare modelli stg come file json del formato atteso e di contenuto appropriato
-* ...
+## ✅ Supported Features
 
-## Documentazione aggiuntiva
+### Core Modeling
+| Feature | Notes |
+|---|---|
+| **Node types** | `state`, `algebraic`, `input` (parameter), `output`, `text label` |
+| **Directed edges** | Click-drag between nodes to create connections |
+| **Expression evaluation** | Full math expression engine with sandboxed JS compilation |
+| **Derivative mode** | State nodes support `dx/dt` expressions (derivMode flag) |
+| **Dependency resolution** | Topological sort ensures correct evaluation order |
+| **Circular dependency detection** | Flagged at compile time |
 
-Per l'architettura tecnica e per le istruzioni su come sviluppare il progetto, si veda `README-ARCHITECTURE.md`.
+### Simulation Engine
+| Feature | Notes |
+|---|---|
+| **Euler integrator** | Fast, O(dt) accuracy |
+| **Runge-Kutta 4** | Accurate, O(dt⁴) — recommended for chaotic/stiff systems |
+| **Run all** | Instant full simulation from t₀ to t₁ |
+| **Animate** | Real-time step-by-step with configurable speed |
+| **Step mode** | Single-step with node-by-node evaluation highlight |
+| **Reset** | Returns model to initial conditions |
+| **Configurable t₀, t₁, dt** | Full time range control |
 
-Per l'uso del player e dell'API JavaScript, si veda `README-PLAYER.md`.
+### Expression Scope (available in all expressions)
+```
+sin, cos, tan, asin, acos, atan, atan2
+exp, log, log2, log10, sqrt, abs, sign
+floor, ceil, round, min, max, clamp
+pow, hypot, pi, e, Infinity
+rand()         — uniform random in [0,1]
+randn(μ, σ)    — Gaussian random sample
+iff(c, a, b)   — conditional (also: if(c,a,b))
+t              — current simulation time
+dt             — current timestep
+```
 
-Per l'uso di funzioni nei modelli, si veda `README-USAGE.md`.
+### Canvas Editor
+| Feature | Notes |
+|---|---|
+| **Add nodes** | Double-click canvas |
+| **Move nodes** | Drag |
+| **Connect nodes** | Select Connect tool, drag from source to target |
+| **Delete** | Delete tool click, or Backspace/Delete key |
+| **Rubber-band selection** | Click-drag on empty canvas to select multiple nodes |
+| **Multi-node drag** | Move entire selection |
+| **Copy / Paste** | Cmd/Ctrl+C/V — preserves edges between copied nodes |
+| **Cut** | Cmd/Ctrl+X |
+| **Undo / Redo** | Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z |
+| **Fit to screen** | F key or automatic on model load (88% zoom) |
+| **Pan** | Middle mouse drag, or scroll wheel |
+| **Zoom** | Ctrl + scroll wheel (fine-grained) |
+| **Minimap** | Live overview in bottom-left corner |
+| **Node resize** | Drag handles on selected node |
+| **Search / filter** | Filter nodes by name or type in toolbar |
+| **Right-click context menu** | Node operations, add gauge |
+
+### Visualization
+| Feature | Notes |
+|---|---|
+| **Time Series chart** | All non-input variables plotted over time with legend |
+| **Phase Space 2D** | Any two variables as X/Y orbit |
+| **3D Phase Space** | Interactive 3D orbit via Three.js — rotate, zoom, pan |
+| **Data Table** | Tabular view of all simulation values per timestep |
+| **Parameter sliders** | Interactive sliders for input nodes with defined min/max/step |
+| **Gauge overlay** | Radial gauge widgets on canvas (via right-click menu) |
+
+### Panels & Windows
+| Feature | Notes |
+|---|---|
+| **Node Editor** | Full node properties editing (name, type, expression, init value, unit, description, slider range) |
+| **Parameters** | Dedicated slider panel for all input nodes |
+| **Data Table** | Simulation output table with float data |
+| **Console / REPL** | Live JavaScript REPL with access to the running model |
+| **Function Library** | Define reusable user functions, available in all expressions |
+| **Analysis Panel** | Dependency analysis and feedback loop detection |
+| **Model Diff** | Compare two model JSON snapshots |
+| **Minimize / Restore** | All panels can be minimized to a taskbar at the bottom of the canvas with a genie animation |
+
+### File & Sharing
+| Feature | Notes |
+|---|---|
+| **Import JSON** | Load any STGraph-compatible model JSON |
+| **Export JSON** | Save current model |
+| **Share via URL** | Encode model in URL hash — shareable link |
+| **Export chart as PNG** | Download current chart view |
+| **Export data as CSV** | Download simulation data table |
+| **Download error log** | Right-click the error badge |
+
+### Built-in Example Models
+- **Lorenz Attractor** — chaotic butterfly, default model (s=5, r=15, b=1, RK4)
+- **Climate System** — CO₂/temperature/ice feedback loops
+- **Logistic Growth** — population with carrying capacity
+- **Predator–Prey** — Lotka-Volterra system
+- **SIR Epidemic** — compartmental disease spread
+- **Exponential Growth** — simple growth model
+- **RC Circuit** — electrical analog
+
+---
+
+## ⚠️ Partially Supported
+
+| Feature | Status |
+|---|---|
+| **`parameter` node type** (from original Java JSON) | Loaded gracefully as a neutral grey node, but treated as `algebraic` internally — re-save as `input` for full slider support |
+| **JSON from original Java STGraph** | Structural differences in edge format (`id`, `sourcePort`, `controlPoints` fields are ignored) — model topology loads correctly |
+| **Gauge widgets** | Basic radial gauge rendering exists; no interactive resize or styling options yet |
+| **Quiz mode** | Skeleton implemented; question authoring UI is minimal |
+| **Step mode animations** | Node highlight works; no trace table yet |
+
+---
+
+## ❌ Not Yet Supported
+
+These features are not implemented yet in LuminaGraph:
+
+| Feature | Notes |
+|---|---|
+| **Multi-chart layout** | Original supports positioning multiple independent chart windows with full layout control; LuminaGraph has one floating chart window |
+| **`map3dto2d` projection function** | The original has a built-in 3D→2D projection helper for canvas drawing; LuminaGraph has a Three.js 3D orbit view instead |
+| **Submodel / module system** | Grouping nodes into reusable submodels with defined interfaces |
+| **Simulation comparison** | Running multiple scenarios and overlaying their time series |
+| **Embedded media nodes** | Original supports image/video content inside nodes |
+| **Table/matrix variables** | Array-valued variables with index access |
+| **Agent / network simulation** | Spatial grid models and multi-agent primitives |
+| **`sysTime()` / real-time mode** | Wall-clock time integration for real-time simulations |
+| **Model metadata dialog** (full) | Title/author fields exist but no rich editing UI |
+| **Adaptive step integrator (RK45)** | dt is fixed; no automatic step-size control |
+| **Print / PDF export** | No print layout or PDF generation |
+| **Collaborative editing** | No multi-user / sync features |
+| **Plugin system** | Original supports Java-based plugins; no equivalent in LuminaGraph |
+| **Desktop packaging** | Electron or similar wrapper not implemented |
+
+---
+
+## Architecture
+
+```
+LuminaGraph/
+├── index.html              # Single-page app shell
+├── css/
+│   └── style.css           # Full design system (glass morphism, animations)
+├── js/
+│   ├── canvas.js           # Graph canvas: nodes, edges, selection, zoom/pan
+│   ├── chart.js            # 2D time series + phase space renderer (Canvas 2D)
+│   └── chart3d.js          # 3D phase space orbit (Three.js WebGL)
+└── src/
+    ├── core/
+    │   ├── STNode.js        # Node data model + expression compiler
+    │   ├── STModel.js       # Model container, integrators, simulation loop
+    │   ├── Integrators.js   # Euler, RK4
+    │   ├── ExpressionScope.js  # Math/helper functions available in expressions
+    │   ├── Topology.js      # Topological sort, cycle detection
+    │   └── Analysis.js      # Dependency analysis, feedback loops
+    ├── data/
+    │   └── Examples.js      # Built-in example models
+    └── ui/
+        ├── App.js           # Application controller — wires everything together
+        ├── SliderPanel.js   # Parameter sliders
+        ├── ConsolePanel.js  # JS REPL
+        ├── FunctionLibrary.js  # User-defined function editor
+        ├── AnalysisPanel.js # Dependency / loop analysis UI
+        ├── ModelDiff.js     # Model comparison
+        ├── ErrorLogger.js   # Error capture + localStorage persistence
+        └── Minimap.js       # Canvas overview
+```
+
+**External dependencies** (CDN, no build step):
+- [GSAP 3.12.5](https://gsap.com/) — spring animations, genie effects, panel transitions
+- [Three.js r128](https://threejs.org/) + OrbitControls — 3D phase space
+
+---
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|---|---|
+| `F` | Fit all nodes to screen |
+| `R` | Run simulation |
+| `Space` | Toggle animate |
+| `S` | Step once |
+| `Backspace` / `Delete` | Delete selected node(s) |
+| `Cmd/Ctrl + C` | Copy selected node(s) with edges |
+| `Cmd/Ctrl + V` | Paste |
+| `Cmd/Ctrl + X` | Cut |
+| `Cmd/Ctrl + Z` | Undo |
+| `Cmd/Ctrl + Shift + Z` | Redo |
+| `Cmd/Ctrl` (hold) | Temporarily switch to Connect tool |
+| `Escape` | Clear search filter |
+
+---
+
+## Credits
+
+- **STGraph original application**: [Professor Luca Mari](https://www.liuc.it/en/university/faculties-and-departments/economics/luca-mari/), Università Liuc — Castellanza, Italy
+- **LuminaGraph browser port & UX experimentation**: Luca Piola
+
+> LuminaGraph is an independent, non-commercial experiment and is not an official release of STGraph.

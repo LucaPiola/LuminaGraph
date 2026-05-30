@@ -1,605 +1,921 @@
-<!doctype html>
-<html lang="it">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <title data-i18n="app.title"></title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <div class="app">
-      <header class="menu-bar" id="topMenuBar">
-        <div class="menu-root">
-          <button class="menu-title" type="button" data-menu="fileMenu" data-i18n="menu.file" data-title-i18n="tooltip.menu.file"></button>
-          <div class="menu-panel" id="fileMenu">
-            <button id="newGraphBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.new"><span data-i18n="menu.file.new"></span><span class="menu-shortcut">Alt+N</span></button>
-            <button id="loadJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.load"><span data-i18n="menu.file.load"></span><span class="menu-shortcut">Alt+O</span></button>
-            <div id="recentModelsMenuRoot" class="menu-submenu hidden">
-              <button id="recentModelsMenuBtn" class="menu-submenu-toggle" type="button">
-                <span data-i18n="menu.file.recent"></span>
-                <span class="menu-shortcut">›</span>
-              </button>
-              <div id="recentModelsSubmenu" class="menu-submenu-panel">
-                <div id="recentModelsSection"></div>
-                <hr id="recentModelsSep" class="menu-sep" />
-                <button id="clearRecentModelsBtn" class="menu-command" type="button"><span data-i18n="menu.file.clearRecent"></span></button>
-              </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LuminaGraph</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app" class="">
+
+    <!-- ── Toolbar ──────────────────────────────────────────────────────────── -->
+    <div id="toolbar">
+      <div id="app-brand">
+        <span id="app-title">LuminaGraph</span>
+        <span id="app-subtitle">forked from STGraph</span>
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <!-- ── File menu ── (first from left) -->
+      <div class="menu-wrap" id="file-menu-wrap">
+        <button id="btn-file-menu" class="menu-btn">File ▾</button>
+        <div id="file-dropdown" class="dropdown-menu" style="display:none">
+          <div class="dropdown-item" id="dm-example-trigger">📂 Load example…</div>
+          <div id="dm-example-sub" style="display:none;padding:4px 10px 6px">
+            <select id="example-select" style="width:100%">
+              <option value="lorenz">Lorenz Attractor</option>
+              <option value="climate">Climate System</option>
+              <option value="">— pick one —</option>
+              <option value="exponential">Exponential Growth</option>
+              <option value="logistic">Logistic Growth</option>
+              <option value="predprey">Predator–Prey</option>
+              <option value="sir">SIR Epidemic</option>
+              <option value="rc">RC Circuit</option>
+            </select>
+          </div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item" id="dm-save">💾 Save JSON</div>
+          <div class="dropdown-item" id="dm-load">📂 Load JSON</div>
+          <div class="dropdown-item" id="dm-share">🔗 Share link</div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item" id="dm-diff">⊕ Diff Models</div>
+          <div class="dropdown-item" id="dm-model-info">ℹ Model Info</div>
+        </div>
+        <div id="share-menu" class="settings-menu" style="display:none; min-width:320px; left:0; top:calc(100% + 6px)">
+          <div class="sm-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+            <span style="font-size:11px;opacity:0.6">Share link (model encoded in URL)</span>
+            <div style="display:flex;gap:6px;width:100%">
+              <input id="share-url" type="text" readonly
+                style="flex:1;padding:4px 8px;font-size:11px;font-family:monospace" />
+              <button id="btn-copy-url" style="flex-shrink:0">Copy</button>
             </div>
-            <hr class="menu-sep" />
-            <button id="saveJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.save"><span data-i18n="menu.file.save"></span><span class="menu-shortcut">Ctrl+S</span></button>
-            <button id="saveAsJsonBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.saveAs"><span data-i18n="menu.file.saveAs"></span><span class="menu-shortcut">Ctrl+Shift+S</span></button>
-            <button id="exportCsvBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.file.exportCsv"><span data-i18n="menu.file.exportCsv"></span></button>
-            <input id="loadJsonInput" type="file" accept="application/json" class="hidden-file" />
+            <span id="share-size-warn" style="color:#fb923c;font-size:10px;display:none">
+              ⚠ URL may be too long for some browsers (&gt;8 KB)
+            </span>
           </div>
         </div>
+      </div>
 
-        <div class="menu-root">
-          <button class="menu-title" type="button" data-menu="editMenu" data-i18n="menu.edit" data-title-i18n="tooltip.menu.edit"></button>
-          <div class="menu-panel" id="editMenu">
-            <button id="selectAllBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.selectAll"><span data-i18n="menu.edit.selectAll"></span><span class="menu-shortcut">Ctrl+A</span></button>
-            <hr class="menu-sep" />
-            <button id="cutBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.cut"><span data-i18n="menu.edit.cut"></span><span class="menu-shortcut">Ctrl+X</span></button>
-            <button id="copyBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.copy"><span data-i18n="menu.edit.copy"></span><span class="menu-shortcut">Ctrl+C</span></button>
-            <button id="pasteBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.paste"><span data-i18n="menu.edit.paste"></span><span class="menu-shortcut">Ctrl+V</span></button>
-            <hr class="menu-sep" />
-            <button id="undoBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.undo"><span data-i18n="menu.edit.undo"></span><span class="menu-shortcut">Ctrl+Z</span></button>
-            <button id="redoBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.redo"><span data-i18n="menu.edit.redo"></span><span class="menu-shortcut">Ctrl+Y</span></button>
-            <button id="deleteBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.edit.delete"><span data-i18n="menu.edit.delete"></span><span class="menu-shortcut">Del</span></button>
+      <!-- ── Tools menu ── -->
+      <div class="menu-wrap" id="tools-menu-wrap">
+        <button id="btn-tools-menu" class="menu-btn">Tools ▾</button>
+        <div id="tools-dropdown" class="dropdown-menu" style="display:none">
+          <div class="dropdown-item toggle-item active" id="dm-nodeeditor">✏ Node Editor</div>
+          <div class="dropdown-item toggle-item active" id="dm-parameters">⚙ Parameters</div>
+          <div class="dropdown-item toggle-item active" id="dm-datatable">📊 Data Table</div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item toggle-item" id="dm-minimap">⊡ Minimap</div>
+          <div class="dropdown-item toggle-item" id="dm-console">⌨ Console</div>
+          <div class="dropdown-item toggle-item" id="dm-fnlib">ƒ Functions</div>
+          <div class="dropdown-item toggle-item" id="dm-analysis">📈 Analysis</div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item toggle-item" id="dm-quiz">? Quiz Mode</div>
+          <div class="dropdown-item toggle-item" id="dm-stepmode">🔬 Step Mode</div>
+        </div>
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <!-- Annotation controls (shown when draw/text tool active) -->
+      <div id="annotation-controls" style="display:none;align-items:center;gap:6px">
+        <label style="color:var(--muted);font-size:11px">Color</label>
+        <input type="color" id="ann-color" value="#ff4444"
+          style="width:28px;height:28px;border:none;border-radius:4px;cursor:pointer;padding:0;background:none" />
+        <label style="color:var(--muted);font-size:11px">Width</label>
+        <input type="range" id="ann-width" min="1" max="10" value="2" style="width:60px" />
+        <button id="btn-ann-clear" class="icon-btn" style="width:auto;padding:0 6px;font-size:11px">Clear all</button>
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <!-- Search filter -->
+      <div id="search-group">
+        <input id="node-search" type="text" placeholder="🔍 Filter nodes…" title="Filter nodes by name or type" />
+      </div>
+
+      <div style="flex:1"></div>
+
+      <button id="error-badge" title="Download error logs">⚠ <span id="error-count">0</span> errors</button>
+
+      <!-- Sim controls -->
+      <div id="sim-group">
+        <label>t₀ <input id="t0" type="number" value="0"   step="1"    /></label>
+        <label>t₁ <input id="t1" type="number" value="10"  step="1"    /></label>
+        <label>dt <input id="dt" type="number" value="0.1" step="0.01" /></label>
+        <label title="Numerical integration method">
+          <select id="integrator-select">
+            <option value="euler">Euler</option>
+            <option value="rk4"  >RK4 ✦</option>
+          </select>
+        </label>
+        <button id="btn-run">⚡ Run</button>
+        <div class="btn-split-group">
+          <button id="btn-animate">▶ Animate</button>
+          <button id="btn-animate-speed" class="btn-split-arrow" title="Animation speed">⋯</button>
+          <div id="animate-speed-menu" class="settings-menu" style="display:none; right:0; top:calc(100% + 6px)">
+            <div class="sm-row">
+              <span>Speed (sim s / real s)</span>
+              <input type="number" id="anim-speed" value="1" min="0.01" max="10000" step="0.1" />
+            </div>
+            <div class="sm-row sm-presets">
+              <button class="preset-btn" data-v="0.1">0.1×</button>
+              <button class="preset-btn" data-v="0.5">0.5×</button>
+              <button class="preset-btn" data-v="1">1×</button>
+              <button class="preset-btn" data-v="5">5×</button>
+              <button class="preset-btn" data-v="10">10×</button>
+              <button class="preset-btn" data-v="100">100×</button>
+            </div>
           </div>
         </div>
+        <button id="btn-step">⏭ Step</button>
+        <button id="btn-reset">⏮ Reset</button>
+      </div>
 
-        <div class="menu-root">
-          <button class="menu-title" type="button" data-menu="insertMenu" data-i18n="menu.insert" data-title-i18n="tooltip.menu.insert"></button>
-          <div class="menu-panel" id="insertMenu">
-            <button id="addRectNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.rect"><span data-i18n="menu.insert.rect"></span><span class="menu-shortcut">Alt+1</span></button>
-            <button id="addEllipseNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.ellipse"><span data-i18n="menu.insert.ellipse"></span><span class="menu-shortcut">Alt+2</span></button>
-            <button id="addDiamondNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.diamond"><span data-i18n="menu.insert.diamond"></span><span class="menu-shortcut">Alt+3</span></button>
-            <button id="addSubmodelNodeItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.submodel"><span data-i18n="menu.insert.submodel"></span><span class="menu-shortcut">Alt+4</span></button>
-            <button id="addTextItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.insert.text"><span data-i18n="menu.insert.text"></span></button>
-            <hr class="menu-sep" />
-            <button id="addButtonWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.buttonWidget" data-title-i18n="tooltip.menu.insert.button"></button>
-            <button id="addSelectWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.selectWidget" data-title-i18n="tooltip.menu.insert.select"></button>
-            <button id="addSliderWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.sliderWidget" data-title-i18n="tooltip.menu.insert.slider"></button>
-            <hr class="menu-sep" />
-            <button id="addLedWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.ledWidget" data-title-i18n="tooltip.menu.insert.led"></button>
-            <button id="addTextWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.textWidget" data-title-i18n="tooltip.menu.insert.textWidget"></button>
-            <button id="addMatrixWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.matrixWidget" data-title-i18n="tooltip.menu.insert.matrix"></button>
-            <button id="addTableWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.tableWidget" data-title-i18n="tooltip.menu.insert.table"></button>
-            <button id="addXYChartWidgetItem" class="menu-command" type="button" data-i18n="menu.insert.xyChartWidget" data-title-i18n="tooltip.menu.insert.chart"></button>
-          </div>
+      <div class="toolbar-divider"></div>
+
+      <!-- Hidden file input for Load JSON -->
+      <input type="file" id="file-input" accept=".json" style="display:none" />
+    </div>
+
+    <!-- ── Main area ─────────────────────────────────────────────────────────── -->
+    <div id="main">
+
+      <!-- ── Floating canvas tool widget — top-left ─────────────────────────── -->
+      <div id="canvas-tools-widget">
+        <div class="vtool-row">
+          <button id="tool-select" class="tool-btn active">↖</button>
+          <span class="vtool-tip">Select</span>
         </div>
+        <div class="vtool-row">
+          <button id="tool-connect" class="tool-btn">⌁</button>
+          <span class="vtool-tip">Connect</span>
+        </div>
+        <div class="vtool-row">
+          <button id="tool-delete" class="tool-btn">✕</button>
+          <span class="vtool-tip">Delete</span>
+        </div>
+        <div class="vtool-separator"></div>
+        <div class="vtool-row">
+          <button id="tool-draw" class="tool-btn">✏</button>
+          <span class="vtool-tip">Draw</span>
+        </div>
+        <div class="vtool-row">
+          <button id="tool-text" class="tool-btn">T</button>
+          <span class="vtool-tip">Text</span>
+        </div>
+      </div>
 
-        <div class="menu-root">
-          <button class="menu-title" type="button" data-menu="viewMenu" data-i18n="menu.view" data-title-i18n="tooltip.menu.view"></button>
-          <div class="menu-panel" id="viewMenu">
-            <button id="fitContentItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.view.fit"><span data-i18n="menu.view.fit"></span><span class="menu-shortcut">Ctrl+Shift+F</span></button>
-            <hr class="menu-sep" />
-            <button id="zoomInItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.view.zoomIn"><span data-i18n="menu.view.zoomIn"></span><span class="menu-shortcut">Ctrl++</span></button>
-            <button id="zoomOutItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.view.zoomOut"><span data-i18n="menu.view.zoomOut"></span><span class="menu-shortcut">Ctrl+-</span></button>
-            <button id="zoomResetItem" class="menu-command" type="button" data-title-i18n="tooltip.menu.view.zoomReset"><span data-i18n="menu.view.zoomReset"></span><span class="menu-shortcut">Ctrl+0</span></button>
-            <hr class="menu-sep" />
-            <button id="toggleGraphItem" class="menu-command" type="button" data-i18n="menu.view.toggleGraph" data-title-i18n="tooltip.menu.view.toggleGraph"></button>
-            <button id="toggleWidgetsItem" class="menu-command" type="button" data-i18n="menu.view.toggleWidgets" data-title-i18n="tooltip.menu.view.toggleWidgets"></button>
-            <hr class="menu-sep" />
-            <label class="menu-check" for="snapToGridInput" data-title-i18n="tooltip.menu.view.snap">
-              <input id="snapToGridInput" type="checkbox" checked />
-              <span data-i18n="menu.view.snap"></span>
+      <!-- Graph canvas — always fills full area -->
+      <div id="canvas-wrap">
+        <canvas id="graph-canvas"></canvas>
+        <!-- Annotation overlay canvas -->
+        <canvas id="annotation-canvas" style="position:absolute;inset:0;pointer-events:none;z-index:5"></canvas>
+        <!-- Subtle grid depth overlay -->
+        <div id="canvas-hint">Double-click canvas to add a node</div>
+
+        <!-- Minimap — fixed bottom-left of canvas area -->
+        <canvas id="minimap-canvas" width="150" height="100">
+        </canvas>
+      </div>
+
+      <!-- Minimized panel tray — all minimized bars appear here, right of minimap -->
+      <div id="minimized-tray"></div>
+
+<!-- Right panel — overlays the canvas -->
+      <div id="right-panel">
+        <div id="right-resize-handle"></div>
+
+        <!-- Node editor -->
+        <div id="node-editor" class="panel">
+          <div class="panel-header">
+            <div class="mac-dots"><span class="mac-dot mac-close" data-minimize-close="node-editor"></span><span class="mac-dot mac-min" data-minimize="node-editor" data-label="Node Editor" data-icon="✏"></span></div>
+            <h3>Node Editor</h3>
+            <button id="btn-nodeed-float" class="icon-btn" title="Pop out Node Editor">⤢</button>
+          </div>
+          <div id="no-selection">Select a node to edit</div>
+          <div id="node-form" style="display:none">
+            <label>Name<input id="nf-name" type="text" /></label>
+            <label>Type
+              <select id="nf-type">
+                <option value="state">State</option>
+                <option value="algebraic">Algebraic</option>
+                <option value="input">Input (constant)</option>
+                <option value="output">Output</option>
+                <option value="text">Text label</option>
+              </select>
             </label>
-            <label class="menu-check" for="showGridInput" data-title-i18n="tooltip.menu.view.showGrid">
-              <input id="showGridInput" type="checkbox" checked />
-              <span data-i18n="menu.view.showGrid"></span>
+            <label id="nf-expr-row">
+              Expression
+              <input id="nf-expr" type="text" placeholder="e.g. x*r" />
             </label>
-            <label class="menu-check" for="highlightNodeEdgesInput" data-title-i18n="tooltip.menu.view.highlightNodeEdges">
-              <input id="highlightNodeEdgesInput" type="checkbox" />
-              <span data-i18n="menu.view.highlightNodeEdges"></span>
+            <label id="nf-deriv-row" style="display:none">
+              <span>Derivative mode (dx/dt)</span>
+              <input id="nf-deriv" type="checkbox" style="width:auto" />
             </label>
-            <label class="menu-field" for="gridSizeInput" data-i18n="menu.view.gridStep" data-title-i18n="tooltip.menu.view.gridStep"></label>
-            <input id="gridSizeInput" type="number" min="5" max="100" step="1" value="20" data-title-i18n="tooltip.menu.view.gridStep" />
-            <label class="menu-field" for="decimalDigitsInput" data-i18n="label.decimals" data-title-i18n="tooltip.model.decimals"></label>
-            <input id="decimalDigitsInput" type="number" min="0" max="12" step="1" data-title-i18n="tooltip.model.decimals" />
-          </div>
-        </div>
-
-        <div class="menu-root">
-          <button class="menu-title" type="button" data-menu="runMenu" data-i18n="menu.run" data-title-i18n="tooltip.menu.run"></button>
-          <div class="menu-panel" id="runMenu">
-            <button id="runEvalBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.execute"><span data-i18n="menu.run.execute"></span><span class="menu-shortcut">F7</span></button>
-            <button id="runStepBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.step"><span data-i18n="menu.run.step"></span><span class="menu-shortcut">F8</span></button>
-            <button id="runTimedToggleBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.timed"><span data-i18n="menu.run.timedToggle"></span><span class="menu-shortcut">F9</span></button>
-            <button id="runResetBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.reset"><span data-i18n="menu.run.reset"></span><span class="menu-shortcut">F10</span></button>
-            <hr class="menu-sep" />
-            <button id="analyzeModelBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.analyze"><span data-i18n="menu.run.analyze"></span></button>
-            <button id="watchDebuggerBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.run.watch"><span data-i18n="menu.run.watch"></span></button>
-            <label class="menu-check" for="runStrictDefinitionsInput" data-title-i18n="tooltip.model.strictDefinitions">
-              <input id="runStrictDefinitionsInput" type="checkbox" />
-              <span data-i18n="menu.run.strictDefinitions"></span>
+            <label>Init value<input id="nf-init" type="number" value="0" /></label>
+            <label id="nf-slider-section" style="display:none">
+              Slider min <input id="nf-smin" type="number" />
             </label>
-          </div>
-        </div>
-
-        <div class="menu-root">
-          <button class="menu-title" type="button" data-menu="helpMenu" data-i18n="menu.help" data-title-i18n="tooltip.menu.help"></button>
-          <div class="menu-panel" id="helpMenu">
-            <button id="functionsHelpBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.help.functions"><span data-i18n="menu.help.functions"></span><span class="menu-shortcut">F1</span></button>
-            <button id="aboutAppBtn" class="menu-command" type="button" data-title-i18n="tooltip.menu.help.about"><span data-i18n="menu.help.about"></span></button>
-          </div>
-        </div>
-
-        <div class="menu-run-toolbar" id="topRunToolbar">
-          <button id="topRunEvalBtn" class="icon-btn menu-run-btn" type="button">▶▶</button>
-          <button id="topRunStepBtn" class="icon-btn menu-run-btn" type="button">▶</button>
-          <button id="topRunTimedBtn" class="icon-btn menu-run-btn" type="button">⏱</button>
-          <button id="topRunResetBtn" class="icon-btn menu-run-btn" type="button">↺</button>
-        </div>
-
-        <button id="exitSubmodelBtn" class="menu-nav-btn hidden" type="button" data-i18n="action.exitSubmodel"></button>
-        <div class="menu-breadcrumb hidden" id="modelBreadcrumbText"></div>
-        <div class="menu-time" id="menuTimeText"></div>
-        <div class="menu-file-status" id="fileStatusText"></div>
-        <div class="menu-status" id="statusText" data-i18n="status.ready"></div>
-      </header>
-
-      <main class="layout">
-        <section class="canvas-wrap" id="graphViewport">
-          <div class="canvas-content" id="canvasContent">
-            <svg id="graphCanvas" viewBox="0 0 1200 800" role="img" data-i18n-aria-label="aria.graphCanvas"></svg>
-            <div id="widgetLayer" class="widget-layer"></div>
-          </div>
-        </section>
-
-        <aside class="sidebar" id="sidebar">
-          <div id="noSelection" class="hidden"></div>
-          <div id="globalPanel" class="panel hidden">
-            <h3 data-i18n="panel.model"></h3>
-
-            <div class="model-section">
-              <label for="modelTitleInput" data-i18n="label.modelTitle" data-title-i18n="tooltip.model.title"></label>
-              <input id="modelTitleInput" type="text" data-title-i18n="tooltip.model.title" />
-            </div>
-
-            <div class="model-section">
-              <div class="time-row3">
-                <div>
-                  <label for="timeStartInput" data-i18n="label.timeStart" data-title-i18n="tooltip.model.t0"></label>
-                  <input id="timeStartInput" type="number" step="any" data-title-i18n="tooltip.model.t0" />
-                </div>
-                <div>
-                  <label for="timeStepInput" data-i18n="label.timeStep" data-title-i18n="tooltip.model.dt"></label>
-                  <input id="timeStepInput" type="number" step="any" data-title-i18n="tooltip.model.dt" />
-                </div>
-                <div>
-                  <label for="timeEndInput" data-i18n="label.timeEnd" data-title-i18n="tooltip.model.t1"></label>
-                  <input id="timeEndInput" type="number" step="any" data-title-i18n="tooltip.model.t1" />
-                </div>
-              </div>
-
-              <div class="row3-exec model-compact-row">
-                <div>
-                  <label for="timeDelayInput" data-i18n="label.timeDelayMs" data-title-i18n="tooltip.model.delay"></label>
-                  <input id="timeDelayInput" type="number" min="1" step="1" data-title-i18n="tooltip.model.delay" />
-                </div>
-                <div>
-                  <label for="integratorInput" data-i18n="label.integrator" data-title-i18n="tooltip.model.integrator"></label>
-                  <select id="integratorInput" data-title-i18n="tooltip.model.integrator">
-                    <option value="euler" data-i18n="integrator.euler"></option>
-                    <option value="rk4" data-i18n="integrator.rk4"></option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="model-meta-row">
-                <div class="model-current-inline">
-                  <label for="timeCurrentOutput" data-i18n="label.timeCurrent" data-title-i18n="tooltip.model.currentTime"></label>
-                  <pre id="timeCurrentOutput" class="value-output">-</pre>
-                </div>
-              </div>
-            </div>
-
-            <div class="model-section">
-              <div class="run-icons-row">
-                <button id="runFullModelBtn" class="icon-btn" type="button">▶▶</button>
-                <button id="manualStepBtn" class="icon-btn" type="button">▶</button>
-                <button id="timedToggleBtn" class="icon-btn" type="button">⏱</button>
-                <button id="resetExecBtn" class="icon-btn" type="button">↺</button>
-              </div>
-              <div class="row2-exec">
-                <button id="toggleGraphBtn" class="small-btn" type="button" data-i18n="view.btn.showGraph"></button>
-                <button id="toggleWidgetsBtn" class="small-btn" type="button" data-i18n="view.btn.showWidgets"></button>
-              </div>
-            </div>
-
-            <div class="model-section model-properties-section">
-              <div class="row2-exec">
-                <button id="editLocalFunctionsBtn" class="small-btn" type="button" data-i18n="action.editLocalFunctions"></button>
-              </div>
-              <h4 data-i18n="panel.propertiesList"></h4>
-              <div id="modelPropsList" class="props-list"></div>
-              <button id="addModelPropBtn" class="small-btn" data-i18n="action.addProperty"></button>
-            </div>
-
-          </div>
-
-          <div id="nodePanel" class="panel hidden">
-            <h3 data-i18n="panel.node"></h3>
-
-            <div class="panel-section compact-panel-section">
-              <label for="nodeNameInput" data-i18n="label.name" data-title-i18n="tooltip.node.name"></label>
-              <input id="nodeNameInput" type="text" data-title-i18n="tooltip.node.name" />
-
-              <label for="nodeShapeInput" data-i18n="label.shape" data-title-i18n="tooltip.node.type"></label>
-              <div class="node-type-row">
-                <select id="nodeShapeInput">
-                  <option value="rect" data-i18n="shape.rect"></option>
-                  <option value="ellipse" data-i18n="shape.ellipse"></option>
-                  <option value="diamond" data-i18n="shape.diamond"></option>
-                  <option value="submodel" data-i18n="shape.submodel"></option>
-                </select>
-
-                <div class="node-flags-col">
-                  <label class="menu-check" for="nodeInputInput" data-title-i18n="tooltip.node.input">
-                    <input id="nodeInputInput" type="checkbox" />
-                    <span data-i18n="label.input"></span>
-                  </label>
-
-                  <label class="menu-check" for="nodeOutputInput" data-title-i18n="tooltip.node.output">
-                    <input id="nodeOutputInput" type="checkbox" />
-                    <span data-i18n="label.output"></span>
-                  </label>
-
-                  <label class="menu-check" for="nodeGlobalInput" data-title-i18n="tooltip.node.global">
-                    <input id="nodeGlobalInput" type="checkbox" />
-                    <span data-i18n="label.global"></span>
-                  </label>
-                </div>
-              </div>
-
-            </div>
-
-            <div class="panel-section compact-panel-section">
-              <label id="nodeModelPathLabel" for="nodeModelPathInput" class="hidden" data-i18n="label.submodelPath" data-title-i18n="tooltip.node.submodelPath"></label>
-              <input id="nodeModelPathInput" class="hidden display-only-input" type="text" readonly tabindex="-1" data-title-i18n="tooltip.node.submodelPath" />
-              <div id="submodelActionRow" class="row2-exec hidden">
-                <button id="loadSubmodelBtn" class="small-btn" type="button" data-i18n="action.loadSubmodel" data-title-i18n="tooltip.node.loadSubmodel"></button>
-                <button id="showSubmodelBtn" class="small-btn" type="button" data-i18n="action.showSubmodel" data-title-i18n="tooltip.node.showSubmodel"></button>
-              </div>
-              <div id="nodeSubmodelInfo" class="expr-status hidden"></div>
-              <div id="nodeSubmodelBindings" class="submodel-bindings hidden"></div>
-
-              <label id="nodeInitialStateLabel" for="nodeInitialStateInput" data-i18n="label.initialState" data-title-i18n="tooltip.node.initialState"></label>
-              <div id="nodeInitialStateRow" class="expr-inline-row">
-                <input id="nodeInitialStateInput" type="text" data-title-i18n="tooltip.node.initialState" />
-              </div>
-              <div id="nodeInitialStateStatus" class="expr-status hidden"></div>
-
-              <label id="nodeValueExprLabel" for="nodeValueExprInput" data-i18n="label.behaviorFunction" data-title-i18n="tooltip.node.expressionBehavior"></label>
-              <div id="nodeValueExprRow" class="expr-inline-row">
-                <textarea id="nodeValueExprInput" rows="2" data-title-i18n="tooltip.node.expressionBehavior"></textarea>
-                <button id="editNodeValueExprBtn" class="small-btn expr-edit-btn" type="button" data-i18n="action.editExpression" data-title-i18n="tooltip.node.editExpression"></button>
-              </div>
-              <div id="nodeValueExprStatus" class="expr-status hidden"></div>
-
-            </div>
-
-            <div class="panel-section compact-panel-section">
-              <label for="nodeValueOutput" data-i18n="label.valueComputed" data-title-i18n="tooltip.node.computedValue"></label>
-              <pre id="nodeValueOutput" class="value-output">-</pre>
-            </div>
-
-            <div class="panel-section compact-panel-section">
-              <div class="row2-exec">
-                <div>
-                  <label for="nodeFillColorInput" data-i18n="label.nodeFillColor"></label>
-                  <select id="nodeFillColorInput"></select>
-                </div>
-                <div>
-                  <label for="nodeStrokeColorInput" data-i18n="label.nodeStrokeColor"></label>
-                  <select id="nodeStrokeColorInput"></select>
-                </div>
-              </div>
-            </div>
-
-            <div class="panel-section compact-panel-section">
-              <h4 data-i18n="panel.propertiesList"></h4>
-              <div id="propsList" class="props-list"></div>
-              <button id="addPropBtn" class="small-btn" data-i18n="action.addProperty"></button>
-            </div>
-          </div>
-
-          <div id="edgePanel" class="panel hidden">
-            <h3 data-i18n="panel.edge"></h3>
-            <div id="edgeInfo" class="edge-info"></div>
-
-            <div class="hint">
-              <span data-i18n="hint.edge.1"></span><br />
-              <span data-i18n="hint.edge.2"></span><br />
-              <span data-i18n="hint.edge.3"></span><br />
-              <span data-i18n="hint.edge.4"></span>
-            </div>
-          </div>
-
-          <div id="textPanel" class="panel hidden">
-            <h3 data-i18n="panel.text"></h3>
-
-            <div class="panel-section compact-panel-section">
-              <div class="row2-exec">
-                <div>
-                  <label for="textWidthInput" data-i18n="label.width"></label>
-                  <input id="textWidthInput" type="number" min="40" max="1200" step="10" />
-                </div>
-                <div>
-                  <label for="textHeightInput" data-i18n="label.height"></label>
-                  <input id="textHeightInput" type="number" min="24" max="1200" step="10" />
-                </div>
-              </div>
-              <div class="row2-exec">
-                <div>
-                  <label for="textFillColorInput" data-i18n="label.background"></label>
-                  <select id="textFillColorInput"></select>
-                </div>
-                <div>
-                  <label for="textStrokeColorInput" data-i18n="label.border"></label>
-                  <select id="textStrokeColorInput"></select>
-                </div>
-              </div>
-              <div class="hint" data-i18n="hint.textFormatting"></div>
-              <label for="textHtmlInput" data-i18n="label.textHtml"></label>
-              <textarea id="textHtmlInput" class="panel-textarea"></textarea>
-            </div>
-          </div>
-
-          <div id="widgetPanel" class="panel hidden">
-            <h3 id="widgetPanelTitle" data-i18n="panel.widget"></h3>
-            <div id="widgetConfig"></div>
-          </div>
-
-          <div id="sidebarZoomControls" class="sidebar-zoom-controls">
-            <label for="zoomRangeInput" data-i18n="label.zoom"></label>
-            <div class="zoom-control-row">
-              <input id="zoomRangeInput" type="range" min="25" max="300" step="5" />
-              <span id="zoomRangeValue" class="zoom-range-value">100%</span>
-            </div>
-          </div>
-        </aside>
-      </main>
-    </div>
-    <div id="contextMenu" class="context-menu hidden"></div>
-    <div id="expressionEditorModal" class="modal-backdrop modal-modeless hidden">
-      <div class="modal-card expression-editor-card" role="dialog" aria-modal="false" aria-labelledby="expressionEditorTitle">
-        <div class="modal-head">
-          <h3 id="expressionEditorTitle" data-i18n="expr.editor.title"></h3>
-          <button id="expressionEditorCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
-        </div>
-        <div class="expression-editor-toolbar">
-          <div id="expressionEditorHint" class="expression-editor-hint" data-i18n="expr.hint"></div>
-        </div>
-        <div class="expression-editor-layout">
-          <div class="expression-editor-main">
-            <div id="expressionStateInitialBlock" class="expression-state-initial hidden">
-              <div class="expression-field-head">
-                <label for="expressionStateInitialInput" class="expression-preview-label" data-i18n="label.initialState" data-title-i18n="tooltip.node.initialState"></label>
-                <span id="expressionStateInitialStatus" class="expr-status inline hidden"></span>
-              </div>
-              <div class="expression-editor-surface expression-editor-surface-compact">
-                <pre id="expressionStateInitialHighlight" class="expression-editor-highlight" aria-hidden="true"></pre>
-                <textarea id="expressionStateInitialInput" class="expression-editor-textarea expression-state-initial-input" spellcheck="false" rows="1" data-title-i18n="tooltip.node.initialState"></textarea>
-              </div>
-            </div>
-            <div id="expressionStateTransitionHead" class="expression-field-head hidden">
-              <label id="expressionStateTransitionLabel" class="expression-preview-label" for="expressionEditorTextarea" data-i18n="label.stateTransition"></label>
-              <span id="expressionStateTransitionStatus" class="expr-status inline hidden"></span>
-            </div>
-            <div class="expression-editor-surface">
-              <pre id="expressionEditorHighlight" class="expression-editor-highlight" aria-hidden="true"></pre>
-              <textarea id="expressionEditorTextarea" class="expression-editor-textarea" spellcheck="false"></textarea>
-            </div>
-            <div class="expression-main-docs">
-              <div id="expressionDescriptionBox" class="expression-formula-notes">
-                <label for="expressionDescriptionInput" class="expression-preview-label" data-i18n="label.description" data-title-i18n="tooltip.node.description"></label>
-                <textarea id="expressionDescriptionInput" class="panel-textarea expression-formula-notes-input" rows="2" data-title-i18n="tooltip.node.description"></textarea>
-              </div>
-              <div id="expressionFormulaNotesBox" class="expression-formula-notes">
-                <label for="expressionFormulaNotesInput" class="expression-preview-label" data-i18n="label.formulaNotes" data-title-i18n="tooltip.node.formulaNotes"></label>
-                <textarea id="expressionFormulaNotesInput" class="panel-textarea expression-formula-notes-input" rows="3" data-title-i18n="tooltip.node.formulaNotes"></textarea>
-              </div>
-            </div>
-          </div>
-          <aside id="expressionSidebar" class="expression-sidebar">
-            <input id="expressionSymbolsFilter" class="expression-symbols-filter" type="text" data-i18n-placeholder="expr.filter.placeholder" />
-            <div id="expressionLibrary" class="expression-library"></div>
-            <div class="expression-help-section">
-              <div class="expression-field-head expression-help-head">
-                <div class="expression-preview-label" data-i18n="expr.help.title"></div>
-                <button id="expressionHelpCopyBtn" class="small-btn expression-copy-btn hidden" type="button" data-i18n="menu.edit.copy"></button>
-              </div>
-              <div id="expressionHelp" class="expression-help" data-i18n="expr.help.empty"></div>
-            </div>
-            <div id="expressionPreviewBox" class="expression-preview">
-              <div id="expressionPreviewLabel" class="expression-preview-label" data-i18n="expr.preview.title"></div>
-              <pre id="expressionPreviewValue" class="expression-preview-value" data-i18n="expr.preview.empty"></pre>
-            </div>
-          </aside>
-        </div>
-        <div class="expression-status-row">
-          <div id="expressionEditorStatus" class="expr-status hidden"></div>
-          <button id="expressionStatusCopyBtn" class="small-btn expression-copy-btn hidden" type="button" data-i18n="menu.edit.copy"></button>
-        </div>
-        <div class="modal-actions">
-          <button id="expressionEditorCancelBtn" type="button" data-i18n="action.cancel"></button>
-          <button id="expressionEditorApplyBtn" type="button" data-i18n="action.apply"></button>
-        </div>
-        <div id="expressionEditorResizeHandle" class="expression-editor-resize-handle" aria-hidden="true"></div>
-      </div>
-    </div>
-    <div id="functionsHelpModal" class="modal-backdrop hidden">
-      <div class="modal-card functions-help-card" role="dialog" aria-modal="true" aria-labelledby="functionsHelpTitle">
-        <div class="modal-head">
-          <h3 id="functionsHelpTitle" data-i18n="help.title"></h3>
-          <button id="functionsHelpCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
-        </div>
-        <div id="functionsHelpIntro" class="help-intro" data-i18n="help.intro"></div>
-        <div id="functionsHelpContent" class="functions-help-content"></div>
-        <div class="modal-actions">
-          <button id="functionsHelpDismissBtn" type="button" data-i18n="action.close"></button>
-        </div>
-      </div>
-    </div>
-    <div id="aboutAppModal" class="modal-backdrop hidden">
-      <div class="modal-card about-app-card" role="dialog" aria-modal="true" aria-labelledby="aboutAppTitle">
-        <div class="modal-head">
-          <h3 id="aboutAppTitle" data-i18n="about.title"></h3>
-          <button id="aboutAppCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
-        </div>
-        <div id="aboutAppContent" class="about-app-content">
-          <div class="about-app-hero">
-            <img class="about-app-icon" src="icon.svg" data-i18n-alt="about.iconAlt" alt="" />
-            <div class="about-app-copy">
-              <div class="about-app-name">STGraphX</div>
-              <div class="about-app-subtitle" data-i18n="about.subtitle"></div>
-            </div>
-          </div>
-          <div class="about-app-meta">
-            <div class="about-app-row">
-              <span class="about-app-label" data-i18n="about.versionLabel"></span>
-              <span id="aboutAppVersionValue" class="about-app-value"></span>
-            </div>
-            <div class="about-app-row">
-              <span class="about-app-label" data-i18n="about.authorLabel"></span>
-              <span id="aboutAppAuthorValue" class="about-app-value"></span>
-            </div>
-          </div>
-          <div class="about-app-note" data-i18n="about.body"></div>
-        </div>
-        <div class="modal-actions">
-          <button id="aboutAppDismissBtn" type="button" data-i18n="action.close"></button>
-        </div>
-      </div>
-    </div>
-    <div id="modelAnalysisModal" class="modal-backdrop modal-modeless hidden">
-      <div class="modal-card model-analysis-card" role="dialog" aria-modal="false" aria-labelledby="modelAnalysisTitle">
-        <div class="modal-head">
-          <h3 id="modelAnalysisTitle" data-i18n="analysis.title"></h3>
-          <button id="modelAnalysisCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
-        </div>
-        <div id="modelAnalysisSummary" class="model-analysis-summary"></div>
-        <div id="modelAnalysisContent" class="model-analysis-content"></div>
-        <div class="modal-actions">
-          <button id="modelAnalysisChecksBtn" type="button" data-i18n="analysis.checks.button"></button>
-          <button id="modelAnalysisDismissBtn" type="button" data-i18n="action.close"></button>
-        </div>
-      </div>
-    </div>
-    <div id="modelAnalysisChecksModal" class="modal-backdrop modal-modeless hidden">
-      <div class="modal-card model-analysis-checks-card" role="dialog" aria-modal="false" aria-labelledby="modelAnalysisChecksTitle">
-        <div class="modal-head">
-          <h3 id="modelAnalysisChecksTitle" data-i18n="analysis.checks.title"></h3>
-          <button id="modelAnalysisChecksCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
-        </div>
-        <div id="modelAnalysisChecksIntro" class="help-intro" data-i18n="analysis.checks.intro"></div>
-        <div id="modelAnalysisChecksContent" class="model-analysis-checks-content"></div>
-        <div class="modal-actions">
-          <button id="modelAnalysisChecksDismissBtn" type="button" data-i18n="action.close"></button>
-        </div>
-      </div>
-    </div>
-    <div id="watchDebuggerModal" class="modal-backdrop modal-modeless hidden">
-      <div class="modal-card watch-debugger-card" role="dialog" aria-modal="false" aria-labelledby="watchDebuggerTitle">
-        <div class="modal-head">
-          <h3 id="watchDebuggerTitle" data-i18n="watch.title"></h3>
-          <button id="watchDebuggerCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
-        </div>
-        <div class="modal-body watch-debugger-body">
-          <div class="watch-debugger-toolbar">
-            <button id="watchAddSelectedBtn" class="small-btn" type="button" data-i18n="watch.addSelected"></button>
-            <div id="watchDebuggerSummary" class="watch-debugger-summary"></div>
-          </div>
-          <section class="watch-breakpoint-section">
-            <label class="menu-check compact-bool" for="watchBreakpointEnabledInput">
-              <input id="watchBreakpointEnabledInput" type="checkbox" />
-              <span data-i18n="watch.breakpointEnabled"></span>
+            <label id="nf-slider-max-row" style="display:none">
+              Slider max <input id="nf-smax" type="number" />
             </label>
-            <label for="watchBreakpointInput" data-i18n="watch.breakpointExpr"></label>
-            <input id="watchBreakpointInput" type="text" spellcheck="false" />
-            <div id="watchBreakpointStatus" class="expr-status hidden"></div>
-          </section>
-          <div id="watchDebuggerList" class="watch-debugger-list"></div>
-        </div>
-        <div class="modal-actions">
-          <button id="watchDebuggerDismissBtn" type="button" data-i18n="action.close"></button>
-        </div>
-      </div>
-    </div>
-    <div id="localFunctionsModal" class="modal-backdrop modal-modeless hidden">
-      <div class="modal-card local-functions-card" role="dialog" aria-modal="false" aria-labelledby="localFunctionsTitle">
-        <div class="modal-head">
-          <h3 id="localFunctionsTitle" data-i18n="localFunctions.title"></h3>
-          <button id="localFunctionsCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
-        </div>
-        <div class="help-intro" data-i18n="localFunctions.intro"></div>
-        <div class="local-functions-toolbar">
-          <button id="localFunctionsAddBtn" class="small-btn" type="button" data-i18n="localFunctions.add"></button>
-        </div>
-        <div id="localFunctionsList" class="local-functions-list"></div>
-        <div id="localFunctionsStatus" class="expr-status hidden"></div>
-        <div class="modal-actions">
-          <button id="localFunctionsCancelBtn" type="button" data-i18n="action.cancel"></button>
-          <button id="localFunctionsApplyBtn" type="button" data-i18n="action.apply"></button>
-        </div>
-      </div>
-    </div>
-    <div id="textEditorModal" class="modal-backdrop modal-modeless hidden">
-      <div class="modal-card text-editor-card" role="dialog" aria-modal="false" aria-labelledby="textEditorTitle">
-        <div class="modal-head">
-          <h3 id="textEditorTitle" data-i18n="panel.text"></h3>
-          <button id="textEditorCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
-        </div>
-        <div class="text-editor-body">
-          <div id="textEditorToolbar" class="text-toolbar">
-            <button type="button" class="small-btn text-tool-btn" data-text-tool="h1">H1</button>
-            <button type="button" class="small-btn text-tool-btn" data-text-tool="h2">H2</button>
-            <button type="button" class="small-btn text-tool-btn" data-text-tool="h3">H3</button>
-            <button type="button" class="small-btn text-tool-btn" data-text-tool="p">P</button>
-            <button type="button" class="small-btn text-tool-btn" data-text-tool="b"><strong>B</strong></button>
-            <button type="button" class="small-btn text-tool-btn" data-text-tool="i"><em>I</em></button>
-            <button type="button" class="small-btn text-tool-btn" data-text-tool="u"><u>U</u></button>
-            <button type="button" class="small-btn text-tool-btn" data-text-tool="ul">UL</button>
-            <button type="button" class="small-btn text-tool-btn" data-text-tool="ol">OL</button>
-            <button type="button" class="small-btn text-tool-btn" data-text-tool="li">LI</button>
-            <button type="button" class="small-btn text-tool-btn" data-text-tool="br">BR</button>
-            <button type="button" class="small-btn text-tool-btn" data-text-tool="hr">HR</button>
+            <label id="nf-slider-step-row" style="display:none">
+              Slider step <input id="nf-sstep" type="number" />
+            </label>
+            <label>Unit<input id="nf-unit" type="text" /></label>
+            <label>Description<input id="nf-desc" type="text" /></label>
+            <button id="nf-apply">Apply</button>
+            <div id="nf-error" class="error-msg"></div>
           </div>
-          <textarea id="textEditorInput" class="text-editor-textarea"></textarea>
         </div>
-        <div class="modal-actions">
-          <button id="textEditorDismissBtn" type="button" data-i18n="action.close"></button>
-        </div>
-      </div>
-    </div>
-    <div id="expressionEditorSwitchModal" class="modal-backdrop hidden">
-      <div class="modal-card expression-switch-card" role="dialog" aria-modal="true" aria-labelledby="expressionEditorSwitchTitle">
-        <div class="modal-head">
-          <h3 id="expressionEditorSwitchTitle" data-i18n="expr.switch.title"></h3>
-          <button id="expressionEditorSwitchCloseBtn" class="icon-btn modal-close-btn" type="button" data-i18n-aria-label="aria.close">×</button>
-        </div>
-        <div id="expressionEditorSwitchBody" class="expression-switch-body" data-i18n="expr.switch.body"></div>
-        <div class="modal-actions">
-          <button id="expressionEditorSwitchCancelBtn" type="button" data-i18n="action.cancel"></button>
-          <button id="expressionEditorSwitchDiscardBtn" type="button" data-i18n="expr.switch.discard"></button>
-          <button id="expressionEditorSwitchApplyBtn" type="button" data-i18n="expr.switch.applyAndChange"></button>
-        </div>
-      </div>
-    </div>
-    <div id="appTooltip" class="app-tooltip hidden" role="tooltip" aria-hidden="true"></div>
 
-    <script src="graph-functions.js"></script>
-    <script src="semantic.js"></script>
-    <script src="i18n-inline.js"></script>
-    <script src="widgets.js"></script>
-    <script src="runtime-core.js"></script>
-    <script src="runtime-shared.js"></script>
-    <script src="runtime-loader.js"></script>
-    <script src="runtime-session.js"></script>
-    <script src="runtime-controller.js"></script>
-    <script src="app.js"></script>
-  </body>
+        <!-- Parameter sliders -->
+        <div id="slider-panel" class="panel">
+          <div class="panel-header">
+            <div class="mac-dots"><span class="mac-dot mac-close" data-minimize-close="slider-panel"></span><span class="mac-dot mac-min" data-minimize="slider-panel" data-label="Parameters" data-icon="⚙"></span></div>
+            <h3>Parameters</h3>
+            <button id="btn-params-float" class="icon-btn" title="Pop out Parameters">⤢</button>
+          </div>
+          <div id="slider-container"></div>
+        </div>
+
+        <!-- Data table — anchored by default, can be floated -->
+        <div id="data-table-panel" class="panel">
+          <div class="panel-header">
+            <div class="mac-dots"><span class="mac-dot mac-close" data-minimize-close="data-table-panel"></span><span class="mac-dot mac-min" data-minimize="data-table-panel" data-label="Data Table" data-icon="📊"></span></div>
+            <h3>Data Table</h3>
+            <button id="btn-datatable-float" class="icon-btn" title="Pop out Data Table">⤢</button>
+          </div>
+          <div id="data-table-wrap">
+            <div class="sp-empty" id="data-table-empty">Run simulation to see data</div>
+            <table id="data-table" style="display:none">
+              <thead id="data-table-head"></thead>
+              <tbody id="data-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Model Diff panel -->
+        <div id="modeldiff-panel" class="panel" style="display:none">
+          <div class="panel-header">
+            <h3>Diff Models</h3>
+            <button id="btn-diff-float" class="icon-btn" title="Pop out Diff">⤢</button>
+          </div>
+          <div id="modeldiff-container"></div>
+        </div>
+
+      </div><!-- end #right-panel -->
+    </div>
+
+    <!-- ── Chart Floating Window ────────────────────────────────────────────── -->
+    <div id="chart-panel" style="display:none; left:320px; top:80px; width:520px; height:380px;">
+      <!-- macOS-style window header -->
+      <div id="chart-win-header" class="panel-header">
+        <div class="mac-dots">
+          <span class="mac-dot mac-close" id="btn-chart-genie-close" title="Close"></span>
+          <span class="mac-dot mac-min" id="btn-chart-minimize" title="Minimize"></span>
+        </div>
+        <div class="chart-tabs">
+          <button class="chart-tab active" id="tab-timeseries"><span class="tab-icon">〜</span>Time Series</button>
+          <button class="chart-tab" id="tab-phasespace"><span class="tab-icon">◎</span>Phase Space</button>
+          <button class="chart-tab" id="tab-phasespace3d"><span class="tab-icon">⬡</span>3D Orbit</button>
+        </div>
+        <div class="panel-header-actions">
+          <button id="btn-export-csv" class="icon-btn" title="Export CSV" style="font-size:10px;width:auto;padding:0 6px">CSV</button>
+          <button id="btn-export-png" class="icon-btn" title="Export PNG" style="font-size:10px;width:auto;padding:0 6px">PNG</button>
+          <button id="btn-chart-settings" class="icon-btn" title="Chart settings">⋯</button>
+        </div>
+        <div id="chart-settings-menu" class="settings-menu" style="display:none">
+          <div class="sm-row"><span>Line width</span><input type="number" id="cs-linewidth" value="2" min="0.5" max="5" step="0.5" /></div>
+          <div class="sm-row"><label><input type="checkbox" id="cs-showlabels" /> Value labels</label></div>
+          <div class="sm-row"><span>Decimals</span><input type="number" id="cs-decimals" value="3" min="0" max="8" step="1" /></div>
+          <div class="sm-row"><span>Label every N steps</span><input type="number" id="cs-labelevery" value="10" min="1" step="1" /></div>
+          <div class="sm-row"><label><input type="checkbox" id="cs-showdots" /> Dots at labels</label></div>
+        </div>
+      </div>
+      <div id="phase-space-controls" style="display:none; flex-shrink:0; padding:6px 16px 8px; gap:12px; align-items:center; font-size:11px; border-bottom: 1px solid rgba(255,255,255,0.06)">
+        <label style="display:flex;align-items:center;gap:5px;color:rgba(255,255,255,0.55)">X <select id="ps-x"></select></label>
+        <label style="display:flex;align-items:center;gap:5px;color:rgba(255,255,255,0.55)">Y <select id="ps-y"></select></label>
+      </div>
+      <div id="phase-space-3d-controls" style="display:none; flex-shrink:0; padding:6px 16px 8px; gap:12px; align-items:center; font-size:11px; border-bottom: 1px solid rgba(255,255,255,0.06)">
+        <label style="display:flex;align-items:center;gap:5px;color:rgba(255,255,255,0.55)">X <select id="ps3-x"></select></label>
+        <label style="display:flex;align-items:center;gap:5px;color:rgba(255,255,255,0.55)">Y <select id="ps3-y"></select></label>
+        <label style="display:flex;align-items:center;gap:5px;color:rgba(255,255,255,0.55)">Z <select id="ps3-z"></select></label>
+        <button id="btn-3d-reset" class="icon-btn" title="Reset camera" style="font-size:11px;width:auto;padding:0 8px;margin-left:auto">⟳ Reset</button>
+      </div>
+      <div id="chart-3d-container" style="display:none; flex:1; position:relative; overflow:hidden; border-radius:0 0 22px 22px;"></div>
+      <canvas id="chart-canvas"></canvas>
+      <div id="chart-legend"></div>
+      <div id="chart-resize-corner"></div>
+    </div>
+
+    <!-- ── Floating panels (Task 3) — created at body level ─────────────────── -->
+    <div id="console-panel" class="panel floating" style="display:none; left:100px; top:150px; width:420px; height:300px;">
+      <div class="panel-header">
+        <div class="mac-dots"><span class="mac-dot mac-close" data-minimize-close="console-panel"></span><span class="mac-dot mac-min" data-minimize="console-panel" data-label="Console" data-icon="⌘"></span></div>
+        <h3>Console / REPL</h3>
+      </div>
+      <div id="console-container" class="console-container"></div>
+    </div>
+
+    <div id="fnlib-panel" class="panel floating" style="display:none; left:130px; top:180px; width:400px; height:440px;">
+      <div class="panel-header">
+        <div class="mac-dots"><span class="mac-dot mac-close" data-minimize-close="fnlib-panel"></span><span class="mac-dot mac-min" data-minimize="fnlib-panel" data-label="Functions" data-icon="ƒ"></span></div>
+        <h3>Function Library</h3>
+      </div>
+      <div id="fnlib-container" style="overflow-y:auto;flex:1;padding:8px 12px"></div>
+    </div>
+
+    <div id="analysis-panel" class="panel floating" style="display:none; left:160px; top:210px; width:420px; height:540px;">
+      <div class="panel-header">
+        <div class="mac-dots"><span class="mac-dot mac-close" data-minimize-close="analysis-panel"></span><span class="mac-dot mac-min" data-minimize="analysis-panel" data-label="Analysis" data-icon="📈"></span></div>
+        <h3>Analysis</h3>
+      </div>
+      <div id="analysis-container" style="overflow-y:auto;flex:1;padding:8px 12px"></div>
+    </div>
+
+    <!-- ── Right-click context menu (Task 5) ──────────────────────────────── -->
+    <div id="ctx-menu" style="display:none">
+      <div class="ctx-item" id="ctx-edit">✏ Edit node</div>
+      <div class="ctx-separator"></div>
+      <div class="ctx-item" id="ctx-deps">🔗 Show dependencies</div>
+      <div class="ctx-item" id="ctx-loops">🔁 Show loops</div>
+      <div class="ctx-separator"></div>
+      <div class="ctx-item" id="ctx-copy">📋 Copy node</div>
+      <div class="ctx-item" id="ctx-cut">✂ Cut node</div>
+      <div class="ctx-separator"></div>
+      <div class="ctx-item" id="ctx-add-gauge">📊 Add Gauge</div>
+      <div class="ctx-separator"></div>
+      <div class="ctx-item ctx-danger" id="ctx-delete">🗑 Delete node</div>
+    </div>
+
+    <!-- ── Model Info dialog (Task 8) ─────────────────────────────────────── -->
+    <div id="model-info-dialog" class="panel floating" style="display:none;left:200px;top:160px;width:360px;height:auto;min-height:260px;">
+      <div class="panel-header">
+        <h3>Model Info</h3>
+        <button id="btn-model-info-close" class="icon-btn" title="Close">✕</button>
+      </div>
+      <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;flex:1">
+        <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.05em">Title
+          <input id="mi-title" type="text" />
+        </label>
+        <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.05em">Author
+          <input id="mi-author" type="text" />
+        </label>
+        <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.05em">Version
+          <input id="mi-version" type="text" />
+        </label>
+        <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.05em">Tags (comma-separated)
+          <input id="mi-tags" type="text" />
+        </label>
+        <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.05em">Description
+          <textarea id="mi-description" rows="3" style="font-family:inherit"></textarea>
+        </label>
+        <button id="mi-save" style="align-self:flex-start">Save</button>
+      </div>
+    </div>
+
+    <!-- ── Quiz modal ──────────────────────────────────────────────────────────── -->
+    <div id="quiz-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.65);align-items:center;justify-content:center;backdrop-filter:blur(8px)">
+      <div style="background:rgba(18,20,35,0.92);backdrop-filter:blur(32px) saturate(200%);border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:28px;min-width:340px;max-width:500px;box-shadow:0 24px 80px rgba(0,0,0,0.6)">
+        <h2 style="font-size:16px;margin-bottom:12px;color:rgba(255,255,255,0.92)">Predict the behavior</h2>
+        <div id="quiz-question" style="font-size:13px;color:rgba(255,255,255,0.55);margin-bottom:16px"></div>
+        <div id="quiz-buttons" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+        <div id="quiz-feedback" style="margin-top:14px;font-size:13px;min-height:20px"></div>
+        <button id="quiz-continue" style="margin-top:14px;display:none">Continue →</button>
+      </div>
+    </div>
+
+    <!-- ── Status bar ────────────────────────────────────────────────────────── -->
+    <div id="statusbar">
+      <span id="status-msg">Ready.</span>
+      <span id="status-zoom" style="color:var(--muted);font-size:10px">100%</span>
+      <span id="status-time"></span>
+    </div>
+  </div>
+
+  <!-- ── Core (no DOM dependencies — load order matters) ──────────────────── -->
+  <script src="src/core/ExpressionScope.js"></script>
+  <script src="src/core/Topology.js"></script>
+  <script src="src/core/Integrators.js"></script>
+  <script src="src/core/STNode.js"></script>
+  <script src="src/core/STModel.js"></script>
+  <script src="src/core/Analysis.js"></script>
+
+  <!-- ── Data ─────────────────────────────────────────────────────────────── -->
+  <script src="src/data/Examples.js"></script>
+
+  <!-- ── UI ────────────────────────────────────────────────────────────────── -->
+  <script src="js/canvas.js"></script>
+  <script src="js/chart.js"></script>
+  <script src="src/ui/SliderPanel.js?v=2"></script>
+  <script src="src/ui/ErrorLogger.js"></script>
+  <script src="src/ui/ConsolePanel.js"></script>
+  <script src="src/ui/FunctionLibrary.js"></script>
+  <script src="src/ui/AnalysisPanel.js"></script>
+  <script src="src/ui/ModelDiff.js"></script>
+  <script src="src/ui/Minimap.js"></script>
+
+  <!-- ── Three.js for 3D Phase Space (must load before App.js) ───────────── -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="js/chart3d.js"></script>
+
+  <!-- ── Application controller ───────────────────────────────────────────── -->
+  <script src="src/App.js"></script>
+
+  <!-- ── GSAP for spring micro-interactions ──────────────────────────────── -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+
+  <!-- ── Cursor tracking glass highlight on floating panels ───────────────── -->
+  <script>
+  document.addEventListener('mousemove', e => {
+    document.querySelectorAll('.panel.floating').forEach(panel => {
+      const r = panel.getBoundingClientRect();
+      const x = ((e.clientX - r.left) / r.width  * 100).toFixed(1);
+      const y = ((e.clientY - r.top)  / r.height * 100).toFixed(1);
+      panel.style.setProperty('--mx', x + '%');
+      panel.style.setProperty('--my', y + '%');
+    });
+  });
+  </script>
+
+  <!-- ── Genie effect + floating chart window + sidebar toggle ───────────── -->
+  <script>
+  (function() {
+    var chartPanel = null;
+    var chartOpen = false;   // true = panel is open or opening
+    var isDragging = false;
+    var dragOffX = 0, dragOffY = 0;
+    var isResizing = false;
+    var resizeStartX = 0, resizeStartY = 0, resizeW0 = 0, resizeH0 = 0;
+    var isMinimized = false;
+
+    // ── Center chart on screen (called on first open) ─────────────────────
+    function centerChart() {
+      var W = parseInt(chartPanel.style.width)  || 520;
+      var H = parseInt(chartPanel.style.height) || 380;
+      chartPanel.style.left = Math.max(20, (window.innerWidth  - W) / 2) + 'px';
+      chartPanel.style.top  = Math.max(20, (window.innerHeight - H) / 2) + 'px';
+    }
+
+    // ── Shared easing constants ───────────────────────────────────────────
+    var E = {
+      openSpring:   'elastic.out(1, 0.42)',  // heavy panel entry — big spring
+      itemSpring:   'elastic.out(1.1, 0.52)',// lighter items — snappier overshoot
+      closePower:   'power4.in',             // fast, confident exit
+      settlePower:  'power3.out',            // smooth deceleration
+      breathe:      'power1.inOut',          // subtle scale breathe
+    };
+
+    // ── Genie open (from button) ──────────────────────────────────────────
+    function genieOpen(triggerEl) {
+      if (!chartPanel) return;
+      if (chartOpen) return;
+      chartOpen = true;
+
+      // Clean up tray item if chart was minimized
+      if (minimizedPanels['chart-panel']) {
+        var _t = getTray(), _item = minimizedPanels['chart-panel'];
+        if (_t && _t.contains(_item)) _t.removeChild(_item);
+        delete minimizedPanels['chart-panel'];
+      }
+      isMinimized = false;
+
+      // ALWAYS make the panel fully visible first — animation is purely decorative
+      if (!chartPanel._placed) { centerChart(); chartPanel._placed = true; }
+      chartPanel.style.display = 'flex';
+      chartPanel.style.visibility = '';
+      chartPanel.style.opacity = '';
+      // Ensure chart canvas redraws at correct size immediately
+      window.dispatchEvent(new Event('resize'));
+
+      // Animation: visual genie entrance (does not affect data visibility)
+      if (typeof gsap === 'undefined') return;
+      try {
+        if (typeof gsap !== 'undefined') gsap.killTweensOf(chartPanel);
+        var rect = triggerEl.getBoundingClientRect();
+        var panelRect = chartPanel.getBoundingClientRect();
+        var originX = panelRect.width > 0
+          ? ((rect.left + rect.width / 2) - panelRect.left) / panelRect.width * 100
+          : 50;
+        var ox = Math.max(5, Math.min(95, originX)).toFixed(0) + '% 0%';
+
+        var tl = gsap.timeline({ onComplete: function() {
+          gsap.set(chartPanel, { clearProps: 'scaleX,scaleY,transformOrigin' });
+        }});
+        tl.fromTo(chartPanel,
+          { scaleX: 0.02, scaleY: 0.02, transformOrigin: ox },
+          { scaleX: 1, scaleY: 0.08, duration: 0.22, ease: 'power3.out' }
+        );
+        tl.to(chartPanel, { scaleY: 1, duration: 1.6, ease: 'elastic.out(1, 0.42)' }, '-=0.04');
+      } catch(err) {
+        // Animation failed — panel is still fully visible, nothing lost
+        gsap.set(chartPanel, { clearProps: 'all' });
+      }
+    }
+
+    // ── Genie close (red dot) ─────────────────────────────────────────────
+    function genieClose() {
+      if (!chartPanel) return;
+      chartOpen = false;
+      isMinimized = false;
+      if (typeof gsap === 'undefined') { chartPanel.style.display = 'none'; return; }
+
+      var tl = gsap.timeline({ onComplete: function() {
+        chartPanel.style.display = 'none';
+        gsap.set(chartPanel, { clearProps: 'scaleX,scaleY,scale,opacity,y,transformOrigin' });
+      }});
+      tl.fromTo(chartPanel,
+        { scaleX: 1, scaleY: 1, opacity: 1, y: 0, transformOrigin: '50% 0%' },
+        { scale: 1.018, duration: 0.09, ease: E.breathe }
+      );
+      tl.to(chartPanel, { scaleY: 0.04, duration: 0.18, ease: E.closePower });
+      tl.to(chartPanel, { scaleX: 0.03, opacity: 0, y: -10, duration: 0.28, ease: E.closePower }, '-=0.06');
+    }
+
+    // ── Minimize chart into tray ──────────────────────────────────────────
+    function genieMinimize() {
+      if (!chartPanel || isMinimized) return;
+      isMinimized = true;
+      chartOpen = false;
+      minimizePanel('chart-panel', 'Time Series', '📈');
+    }
+
+    // chart-panel minimize/restore is handled by the universal system,
+    // but we need to override restore to also do the resize event
+    var _origRestore = null;
+    function genieRestoreChart() {
+      isMinimized = false;
+      chartOpen = true;
+      restorePanel('chart-panel');
+      setTimeout(function() { window.dispatchEvent(new Event('resize')); }, 600);
+    }
+    // Wire chart tray click via delegation (item is created dynamically)
+    document.addEventListener('click', function(e) {
+      var item = e.target.closest('.tray-item');
+      if (item && item.dataset.panelId === 'chart-panel') {
+        genieRestoreChart();
+      }
+    });
+
+    // ── Drag ──────────────────────────────────────────────────────────────
+    function initChartDrag() {
+      var header = document.getElementById('chart-win-header');
+      if (!header) return;
+      header.addEventListener('mousedown', function(e) {
+        if (e.target.classList.contains('mac-dot') ||
+            e.target.closest('.panel-header-actions') ||
+            e.target.closest('.chart-tabs') ||
+            e.target.closest('.settings-menu')) return;
+        isDragging = true;
+        var r = chartPanel.getBoundingClientRect();
+        dragOffX = e.clientX - r.left;
+        dragOffY = e.clientY - r.top;
+        e.preventDefault();
+      });
+      document.addEventListener('mousemove', function(e) {
+        if (isDragging) {
+          chartPanel.style.left = (e.clientX - dragOffX) + 'px';
+          chartPanel.style.top  = (e.clientY - dragOffY) + 'px';
+        }
+        if (isResizing) {
+          chartPanel.style.width  = Math.max(320, resizeW0 + e.clientX - resizeStartX) + 'px';
+          chartPanel.style.height = Math.max(240, resizeH0 + e.clientY - resizeStartY) + 'px';
+        }
+      });
+      document.addEventListener('mouseup', function() { isDragging = false; isResizing = false; });
+      var corner = document.getElementById('chart-resize-corner');
+      if (corner) {
+        corner.addEventListener('mousedown', function(e) {
+          isResizing = true;
+          resizeStartX = e.clientX; resizeStartY = e.clientY;
+          var r = chartPanel.getBoundingClientRect();
+          resizeW0 = r.width; resizeH0 = r.height;
+          e.preventDefault(); e.stopPropagation();
+        });
+      }
+    }
+
+
+    // ── Wire everything ───────────────────────────────────────────────────
+    function wireGenie() {
+      chartPanel = document.getElementById('chart-panel');
+      if (!chartPanel) return;
+
+      ['btn-run', 'btn-animate', 'btn-step'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('click', function() { genieOpen(el); });
+      });
+
+      var closeBtn = document.getElementById('btn-chart-genie-close');
+      if (closeBtn) closeBtn.addEventListener('click', genieClose);
+
+      var minBtn = document.getElementById('btn-chart-minimize');
+      if (minBtn) minBtn.addEventListener('click', genieMinimize);
+
+      initChartDrag();
+      initPanelMinimize();
+    }
+
+    // ── Universal panel minimize system — FLIP morphing ──────────────────
+    var tray = null;
+    var minimizedPanels = {};
+
+    function getTray() {
+      if (!tray) tray = document.getElementById('minimized-tray');
+      return tray;
+    }
+
+    // Helper: clone the visual appearance of the panel as a fixed-position ghost
+    // so we can animate it freely without affecting layout
+    function _makeGhost(panel, rect) {
+      var ghost = document.createElement('div');
+      ghost.style.cssText = [
+        'position:fixed',
+        'left:' + rect.left + 'px',
+        'top:' + rect.top + 'px',
+        'width:' + rect.width + 'px',
+        'height:' + rect.height + 'px',
+        'background:' + getComputedStyle(panel).background,
+        'border:' + getComputedStyle(panel).border,
+        'border-radius:' + getComputedStyle(panel).borderRadius,
+        'box-shadow:' + getComputedStyle(panel).boxShadow,
+        'backdrop-filter:' + getComputedStyle(panel).backdropFilter,
+        'overflow:hidden',
+        'z-index:9999',
+        'pointer-events:none',
+      ].join(';');
+      document.body.appendChild(ghost);
+      return ghost;
+    }
+
+    function minimizePanel(panelId, label, icon) {
+      var panel = document.getElementById(panelId);
+      if (!panel || minimizedPanels[panelId]) return;
+      var t = getTray();
+      if (!t) return;
+
+      // Create tray item (invisible, so we can measure it)
+      var item = document.createElement('div');
+      item.className = 'tray-item';
+      item.innerHTML = '<span class="tray-item-icon">' + icon + '</span><span class="tray-item-label">' + label + '</span>';
+      item.dataset.panelId = panelId;
+      item.style.opacity = '0';
+      item.style.pointerEvents = 'none';
+      t.appendChild(item);
+      minimizedPanels[panelId] = item;
+      item.addEventListener('click', function() { restorePanel(panelId); });
+
+      if (typeof gsap === 'undefined') {
+        panel.style.display = 'none';
+        item.style.opacity = '1';
+        item.style.pointerEvents = '';
+        _notifyDm(panelId);
+        return;
+      }
+
+      // FLIP: capture both rects before anything changes
+      var panelRect = panel.getBoundingClientRect();
+      var itemRect  = item.getBoundingClientRect();
+
+      // Spawn a ghost div that looks like the panel — animate THAT, not the real panel
+      var ghost = _makeGhost(panel, panelRect);
+
+      // Hide real panel immediately (it stays in layout so other panels don't shift)
+      panel.style.visibility = 'hidden';
+
+      // Animate ghost morphing into tray item position & size
+      gsap.to(ghost, {
+        left:   itemRect.left,
+        top:    itemRect.top,
+        width:  itemRect.width,
+        height: itemRect.height,
+        borderRadius: '11px',
+        opacity: 0.7,
+        duration: 0.48,
+        ease: 'power3.inOut',
+        onComplete: function() {
+          document.body.removeChild(ghost);
+          panel.style.visibility = '';
+          panel.style.display = 'none';
+          // Pop the tray item in
+          item.style.pointerEvents = '';
+          gsap.fromTo(item,
+            { opacity: 0, scale: 0.7, y: 6, transformOrigin: 'center bottom' },
+            { opacity: 1, scale: 1, y: 0, duration: 0.35, ease: 'back.out(2)',
+              clearProps: 'scale,y,opacity' }
+          );
+          _notifyDm(panelId);
+        }
+      });
+    }
+
+    function restorePanel(panelId) {
+      var panel = document.getElementById(panelId);
+      var item  = minimizedPanels[panelId];
+      if (!panel || !item) return;
+      delete minimizedPanels[panelId];
+      item.style.pointerEvents = 'none';
+      var t = getTray();
+
+      if (typeof gsap === 'undefined') {
+        panel.style.display = '';
+        if (t && t.contains(item)) t.removeChild(item);
+        return;
+      }
+
+      // FLIP: capture tray item rect before removing it
+      var itemRect = item.getBoundingClientRect();
+
+      // Show panel briefly (invisible) to measure its natural rect
+      panel.style.display = '';
+      panel.style.visibility = 'hidden';
+      var panelRect = panel.getBoundingClientRect();
+      panel.style.visibility = '';
+      panel.style.display = 'none';
+
+      // Remove tray item immediately — ghost will take its place visually
+      if (t && t.contains(item)) t.removeChild(item);
+
+      // Spawn ghost at tray item position, animate it to panel natural position
+      var ghost = document.createElement('div');
+      ghost.style.cssText = [
+        'position:fixed',
+        'left:' + itemRect.left + 'px',
+        'top:' + itemRect.top + 'px',
+        'width:' + itemRect.width + 'px',
+        'height:' + itemRect.height + 'px',
+        'background:' + getComputedStyle(panel).background,
+        'border:1px solid rgba(255,255,255,0.12)',
+        'border-radius:11px',
+        'box-shadow:' + getComputedStyle(panel).boxShadow,
+        'backdrop-filter:' + getComputedStyle(panel).backdropFilter,
+        'overflow:hidden',
+        'z-index:9999',
+        'pointer-events:none',
+        'opacity:0.7',
+      ].join(';');
+      document.body.appendChild(ghost);
+
+      gsap.to(ghost, {
+        left:        panelRect.left,
+        top:         panelRect.top,
+        width:       panelRect.width,
+        height:      panelRect.height,
+        borderRadius: getComputedStyle(panel).borderRadius,
+        opacity: 1,
+        duration: 0.42,
+        ease: 'power3.out',
+        onComplete: function() {
+          document.body.removeChild(ghost);
+          // Reveal real panel with a quick fade
+          panel.style.display = '';
+          gsap.fromTo(panel, { opacity: 0 }, { opacity: 1, duration: 0.18, ease: 'power2.out',
+            clearProps: 'opacity', onComplete: function() { _notifyDm(panelId); }
+          });
+        }
+      });
+    }
+
+    function closePanelFully(panelId) {
+      var panel = document.getElementById(panelId);
+      if (!panel) return;
+      if (typeof gsap !== 'undefined') {
+        var tl = gsap.timeline({ defaults: { overwrite: true }, onComplete: function() {
+          panel.style.display = 'none';
+          gsap.set(panel, { clearProps: 'scaleX,scaleY,scale,opacity,x,y,transformOrigin' });
+          _notifyDm(panelId);
+        }});
+        tl.fromTo(panel,
+          { scaleX: 1, scaleY: 1, opacity: 1, x: 0, y: 0, transformOrigin: '50% 40%' },
+          { scale: 1.018, duration: 0.07, ease: E.breathe }
+        );
+        tl.to(panel, { scaleY: 0.04, duration: 0.17, ease: E.closePower });
+        tl.to(panel, { scaleX: 0.04, opacity: 0, duration: 0.22, ease: E.closePower }, '-=0.05');
+      } else {
+        panel.style.display = 'none';
+        _notifyDm(panelId);
+      }
+    }
+
+    function _notifyDm(panelId) {
+      if (typeof window._syncDmActive === 'function') {
+        var dmMap = {
+          'node-editor':     'dm-nodeeditor',
+          'slider-panel':    'dm-parameters',
+          'data-table-panel':'dm-datatable',
+          'console-panel':   'dm-console',
+          'fnlib-panel':     'dm-fnlib',
+          'analysis-panel':  'dm-analysis',
+        };
+        var dmId = dmMap[panelId];
+        if (dmId) window._syncDmActive(document.getElementById(dmId), panelId);
+      }
+    }
+
+    function initPanelMinimize() {
+      // Wire yellow dots (minimize) and red dots (close)
+      document.querySelectorAll('[data-minimize]').forEach(function(dot) {
+        var id    = dot.dataset.minimize;
+        var label = dot.dataset.label || id;
+        var icon  = dot.dataset.icon  || '▪';
+        dot.addEventListener('click', function(e) {
+          e.stopPropagation();
+          minimizePanel(id, label, icon);
+        });
+      });
+      document.querySelectorAll('[data-minimize-close]').forEach(function(dot) {
+        var id = dot.dataset.minimizeClose;
+        dot.addEventListener('click', function(e) {
+          e.stopPropagation();
+          // If currently minimized, just remove tray item
+          if (minimizedPanels[id]) {
+            var t = getTray();
+            if (t && minimizedPanels[id]) t.removeChild(minimizedPanels[id]);
+            delete minimizedPanels[id];
+          } else {
+            closePanelFully(id);
+          }
+        });
+      });
+    }
+
+    // Expose for App.js
+    window._restorePanel = restorePanel;
+    window._closePanelFully = closePanelFully;
+    window._isPanelMinimized = function(id) { return !!minimizedPanels[id]; };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function() { wireGenie(); });
+    } else {
+      setTimeout(function() { wireGenie(); }, 120);
+    }
+  })();
+  </script>
+
+  <!-- ── GSAP bento hover + staggered entrance ────────────────────────────── -->
+  <script>
+  (function() {
+    function attachBentoHover(panel) {
+      panel.addEventListener('mouseenter', () => {
+        if (typeof gsap === 'undefined') return;
+        gsap.to(panel, {
+          y: -6, scale: 1.012,
+          boxShadow: 'inset 0 1.5px 0 rgba(255,255,255,0.26), 0 18px 48px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.30)',
+          duration: 0.7, ease: 'elastic.out(1, 0.52)', overwrite: true,
+        });
+      });
+      panel.addEventListener('mouseleave', () => {
+        if (typeof gsap === 'undefined') return;
+        gsap.to(panel, {
+          y: 0, scale: 1,
+          boxShadow: 'inset 0 1.5px 0 rgba(255,255,255,0.18), 0 10px 36px rgba(0,0,0,0.40), 0 2px 6px rgba(0,0,0,0.22)',
+          duration: 0.8, ease: 'elastic.out(1, 0.45)', overwrite: true,
+        });
+      });
+      // Subtle press feedback
+      panel.addEventListener('mousedown', () => {
+        if (typeof gsap === 'undefined') return;
+        gsap.to(panel, { scale: 0.985, y: -2, duration: 0.1, ease: 'power2.in', overwrite: true });
+      });
+      panel.addEventListener('mouseup', () => {
+        if (typeof gsap === 'undefined') return;
+        gsap.to(panel, { scale: 1.012, y: -6, duration: 0.5, ease: 'elastic.out(1, 0.5)', overwrite: true });
+      });
+    }
+
+    function initBento() {
+      const rp = document.getElementById('right-panel');
+      if (!rp) return;
+      const panels = Array.from(rp.querySelectorAll(':scope > .panel'));
+
+      // Staggered entrance on page load — cascade from top
+      if (typeof gsap !== 'undefined') {
+        gsap.fromTo(panels,
+          { opacity: 0, y: 24, scale: 0.94 },
+          { opacity: 1, y: 0, scale: 1,
+            duration: 0.7, ease: 'power3.out',
+            stagger: { each: 0.08, from: 'start' },
+            delay: 0.12,
+          }
+        );
+      }
+
+      panels.forEach(p => {
+        p.style.transition = 'box-shadow 0.4s cubic-bezier(0.25,1,0.5,1)';
+        attachBentoHover(p);
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initBento);
+    } else {
+      setTimeout(initBento, 100);
+    }
+  })();
+  </script>
+</body>
 </html>
